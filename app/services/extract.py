@@ -1,4 +1,4 @@
-import subprocess
+import asyncio
 import tempfile
 from pathlib import Path
 
@@ -9,11 +9,13 @@ async def extract_text(file_path: str, filename: str) -> dict:
     if ext == ".pdf":
         return await _extract_pdf(file_path)
     elif ext == ".docx":
-        return await _extract_docx(file_path)
+        return _extract_docx(file_path)
     elif ext == ".txt":
         return _extract_txt(file_path)
+    elif ext == ".tex":
+        return _extract_tex(file_path)
     else:
-        return {"success": False, "error": f"Unsupported file type: {ext}. Use PDF, DOCX, or TXT."}
+        return {"success": False, "error": f"Unsupported file type: {ext}. Use PDF, DOCX, TXT, or TEX."}
 
 
 async def _extract_pdf(file_path: str) -> dict:
@@ -72,4 +74,13 @@ def _extract_txt(file_path: str) -> dict:
         return {"success": False, "error": f"Text extraction failed: {str(e)}"}
 
 
-import asyncio
+def _extract_tex(file_path: str) -> dict:
+    try:
+        text = Path(file_path).read_text(encoding="utf-8", errors="replace").strip()
+        if not text:
+            return {"success": False, "error": "TeX file is empty."}
+        if "\\documentclass" not in text:
+            return {"success": False, "error": "File doesn't look like a valid .tex file (missing \\documentclass)."}
+        return {"success": True, "latex": text}
+    except Exception as e:
+        return {"success": False, "error": f"TeX extraction failed: {str(e)}"}

@@ -77,13 +77,13 @@ async def upload_resume(
     title: str = Form("Uploaded Resume"),
     template_id: int = Form(1),
 ):
-    allowed = {".pdf", ".docx", ".txt"}
+    allowed = {".pdf", ".docx", ".txt", ".tex"}
     ext = Path(file.filename).suffix.lower()
     if ext not in allowed:
         return templates.TemplateResponse("dashboard.html", {
             "request": request,
             "resumes": [],
-            "error": f"Unsupported file type: {ext}. Use PDF, DOCX, or TXT.",
+            "error": f"Unsupported file type: {ext}. Use PDF, DOCX, TXT, or TEX.",
         })
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
@@ -98,6 +98,16 @@ async def upload_resume(
                 "resumes": [],
                 "error": extract_result["error"],
             })
+
+        if ext == ".tex" and "latex" in extract_result:
+            async with get_db() as db:
+                cursor = await db.execute(
+                    "INSERT INTO resumes (title, latex_content) VALUES (?, ?)",
+                    (title, extract_result["latex"]),
+                )
+                await db.commit()
+                new_id = cursor.lastrowid
+            return RedirectResponse(f"/resume/{new_id}", status_code=303)
 
         async with get_db() as db:
             cursor = await db.execute(
