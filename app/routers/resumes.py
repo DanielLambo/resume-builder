@@ -67,7 +67,8 @@ async def serve_pdf(resume_id: int):
     if not pdf_path.exists():
         return JSONResponse({"error": "not found"}, status_code=404)
     return FileResponse(
-        pdf_path, media_type="application/pdf", filename=f"resume_{resume_id}.pdf",
+        pdf_path, media_type="application/pdf",
+        content_disposition_type="inline",
     )
 
 
