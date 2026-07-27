@@ -74,6 +74,21 @@ def _patch_packages(content: str) -> str:
     )
     content = re.sub(r"\\input\{glyphtounicode\}", "", content)
     content = re.sub(r"\\pdfgentounicode=1", "", content)
+    content = re.sub(
+        r"\\begin\{itemize\}[^}]*\}\s*\\end\{itemize\}",
+        "",
+        content,
+    )
+    content = re.sub(
+        r"\\resumeSubHeadingListStart\s*\n\s*\n?\s*\\resumeSubHeadingListEnd",
+        "",
+        content,
+    )
+    content = re.sub(
+        r"\\resumeItemListStart\s*\n\s*\n?\s*\\resumeItemListEnd",
+        "",
+        content,
+    )
     return content
 
 
