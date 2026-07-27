@@ -120,9 +120,12 @@ async def convert_resume(plain_text: str, template_latex: str) -> dict:
     if not OPENAI_API_KEY:
         return {"success": False, "error": "AI not configured."}
 
+    truncated_tpl = template_latex if len(template_latex) < 8000 else template_latex[:8000] + "\n%...[truncated]"
+    truncated_txt = plain_text if len(plain_text) < 6000 else plain_text[:6000] + "\n...[truncated]"
+
     messages = [
         {"role": "system", "content": CONVERT_PROMPT},
-        {"role": "user", "content": f"Here is the LaTeX template to follow:\n\n{template_latex}\n\n---\n\nHere is the plain text extracted from the resume:\n\n{plain_text}"},
+        {"role": "user", "content": f"Here is the LaTeX template to follow:\n\n{truncated_tpl}\n\n---\n\nHere is the plain text extracted from the resume:\n\n{truncated_txt}"},
     ]
 
     try:
@@ -174,12 +177,18 @@ async def ai_assist(latex_content: str, prompt: str, history: list | None = None
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     if history:
-        for msg in history[-20:]:
-            messages.append({"role": msg["role"], "content": msg["content"]})
+        recent = history[-8:]
+        for msg in recent:
+            content = msg["content"]
+            if len(content) > 500:
+                content = content[:500] + "...[trimmed]"
+            messages.append({"role": msg["role"], "content": content})
+
+    truncated = latex_content if len(latex_content) < 12000 else latex_content[:12000] + "\n%...[truncated]"
 
     messages.append({
         "role": "user",
-        "content": f"Here is the current LaTeX resume:\n\n{latex_content}\n\n---\n\nUser request: {prompt}",
+        "content": f"Here is the current LaTeX resume:\n\n{truncated}\n\n---\n\nUser request: {prompt}",
     })
 
     try:
@@ -215,6 +224,23 @@ async def ai_assist(latex_content: str, prompt: str, history: list | None = None
                     "success": False,
                     "error": "AI returned incomplete output. Please try again.",
                 }
+
+            if content.count("{") != content.count("}"):
+                open_b = content.count("{")
+                close_b = content.count("}")
+                diff = abs(open_b - close_b)
+                if diff <= 3:
+                    if open_b > close_b:
+                        content = content.rstrip() + "\n" + "}" * diff
+                    else:
+                        for _ in range(diff):
+                            idx = content.rfind("}")
+                            content = content[:idx] + content[idx+1:]
+                else:
+                    return {
+                        "success": False,
+                        "error": f"AI returned malformed LaTeX ({diff} unmatched braces). Please try again.",
+                    }
 
             reply = "Done — your resume has been updated."
             p = prompt.lower()
