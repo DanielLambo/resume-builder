@@ -116,6 +116,22 @@ You are given a LaTeX template to follow. Match its structure exactly — use it
 - If information is ambiguous, make your best guess — don't leave blanks"""
 
 
+def _strip_markdown_fences(text: str) -> str:
+    lines = text.split("\n")
+    # strip leading ``` or ```latex etc.
+    if lines and lines[0].strip().startswith("```"):
+        lines = lines[1:]
+    # strip trailing ```
+    while lines and lines[-1].strip() in ("```", "") and "\\end{document}" not in lines[-1]:
+        if lines[-1].strip() == "```":
+            lines.pop()
+        elif lines[-1].strip() == "" and lines and lines[-1].strip() != "```":
+            break
+        else:
+            break
+    return "\n".join(lines)
+
+
 async def convert_resume(plain_text: str, template_latex: str) -> dict:
     if not OPENAI_API_KEY:
         return {"success": False, "error": "AI not configured."}
@@ -148,11 +164,7 @@ async def convert_resume(plain_text: str, template_latex: str) -> dict:
 
             content = data["choices"][0]["message"]["content"].strip()
 
-            if content.startswith("```"):
-                lines = content.split("\n")[1:]
-                if lines and lines[-1].strip() == "```":
-                    lines = lines[:-1]
-                content = "\n".join(lines)
+            content = _strip_markdown_fences(content)
 
             if "\\documentclass" not in content:
                 return {"success": False, "error": "AI returned incomplete output. Please try again."}
@@ -212,12 +224,7 @@ async def ai_assist(latex_content: str, prompt: str, history: list | None = None
             content = data["choices"][0]["message"]["content"]
             content = content.strip()
 
-            if content.startswith("```"):
-                lines = content.split("\n")
-                lines = lines[1:]
-                if lines and lines[-1].strip() == "```":
-                    lines = lines[:-1]
-                content = "\n".join(lines)
+            content = _strip_markdown_fences(content)
 
             if "\\documentclass" not in content:
                 return {
