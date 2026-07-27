@@ -28,8 +28,8 @@
       <div class="upload-drop" id="upload-drop">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         <p class="upload-drop-text">Drop your resume here or <span class="upload-browse">browse</span></p>
-        <p class="upload-drop-hint">PDF, DOCX, or TXT — AI will convert it to LaTeX</p>
-        <input type="file" name="file" id="upload-input" accept=".pdf,.docx,.txt" hidden>
+        <p class="upload-drop-hint">PDF, DOCX, TXT, or TEX — .tex files load directly, others are AI-converted</p>
+        <input type="file" name="file" id="upload-input" accept=".pdf,.docx,.txt,.tex" hidden>
       </div>
       <div class="upload-options">
         <input class="input upload-title-input" type="text" name="title" placeholder="Resume title" value="Uploaded Resume">
@@ -41,6 +41,7 @@
         <button type="submit" class="btn btn-primary upload-submit" disabled>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/><path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.58 3.25 3.93"/></svg>
           Convert to LaTeX
+          <span class="upload-tex-label" style="display:none">Import .tex</span>
         </button>
       </div>
     </form>
@@ -119,10 +120,12 @@
     input.addEventListener("change", function() {
       if (input.files.length > 0) {
         var f = input.files[0];
+        var isTex = f.name.toLowerCase().endsWith(".tex");
         drop.classList.add("has-file");
         drop.querySelector(".upload-drop-text").textContent = f.name;
         drop.querySelector(".upload-drop-hint").textContent = (f.size / 1024).toFixed(1) + " KB";
         submit.disabled = false;
+        submit.textContent = isTex ? "Import .tex" : "Convert to LaTeX";
         if (titleInput && titleInput.value === "Uploaded Resume") {
           titleInput.value = f.name.replace(/\.[^.]+$/, "");
         }
