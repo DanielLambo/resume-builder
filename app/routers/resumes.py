@@ -48,6 +48,10 @@ async def compile_resume(resume_id: int, latex_content: str = Form(None)):
             return JSONResponse({"success": False, "error": "Resume not found"}, status_code=404)
         content = row["latex_content"]
 
+    content = content.strip()
+    if content.endswith("```"):
+        content = content[:-3].rstrip()
+
     result = await compile_latex(resume_id, content)
 
     if result["success"]:
