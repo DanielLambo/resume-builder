@@ -112,9 +112,7 @@
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (d.success) {
-          var ts = Date.now();
-          var url = "/resume/" + resumeId + "/pdf?t=" + ts;
-          document.getElementById("pdf-viewer").src = url;
+          var url = "/resume/" + resumeId + "/pdf?t=" + Date.now();
           pill.className = "status-pill visible saved";
           var pg = d.pages ? " (" + d.pages + " page" + (d.pages > 1 ? "s" : "") + ")" : "";
           pill.textContent = "Compiled" + pg;
@@ -124,8 +122,7 @@
           if (pc) pc.textContent = d.pages ? d.pages + " page" + (d.pages > 1 ? "s" : "") : "";
           var ph = document.getElementById("pdf-placeholder");
           if (ph) ph.style.display = "none";
-          var fv = document.getElementById("pdf-viewer");
-          if (fv) fv.style.display = "block";
+          renderPDF(url);
         } else {
           pill.className = "status-pill visible error";
           pill.textContent = "Error";
@@ -158,6 +155,34 @@
     var d = document.createElement("div");
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  /* ── PDF.js rendering ────────────────────────────────────── */
+  function renderPDF(url) {
+    var container = document.getElementById("pdf-pages");
+    if (!container) return;
+    container.innerHTML = "";
+
+    var loadingTask = pdfjsLib.getDocument(url);
+    loadingTask.promise.then(function (pdf) {
+      var scale = 1.5;
+      for (var i = 1; i <= pdf.numPages; i++) {
+        (function (pageNum) {
+          pdf.getPage(pageNum).then(function (page) {
+            var viewport = page.getViewport({ scale: scale });
+            var canvas = document.createElement("canvas");
+            canvas.className = "pdf-page";
+            var ctx = canvas.getContext("2d");
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            container.appendChild(canvas);
+            page.render({ canvasContext: ctx, viewport: viewport });
+          });
+        })(i);
+      }
+    }, function (err) {
+      showToast("Failed to load PDF", "error");
+    });
   }
 
   /* ── Split pane drag ─────────────────────────────────────── */
