@@ -2,7 +2,7 @@ import httpx
 import os
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "REDACTED_ROTATED_GROQ_KEY")
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.groq.com/openai")
 MODEL = os.environ.get("RESUMATE_MODEL", "llama-3.3-70b-versatile")
 
 SYSTEM_PROMPT = r"""You are a world-class resume strategist and LaTeX editor. You have 15+ years in technical recruiting at FAANG companies, YC startups, and Fortune 500 firms. You've personally reviewed 100,000+ resumes and know exactly what makes a hiring manager stop scrolling vs. hit delete.
