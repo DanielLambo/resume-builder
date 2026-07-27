@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Templates — Resumate{% endblock %}
+{% block content %}
+<div class="gallery">
+  <div class="page-header">
+    <div>
+      <h1>Templates</h1>
+      <p class="page-sub">Pick a starting point. Customize everything in the editor.</p>
+    </div>
+  </div>
+
+  <div class="template-grid">
+    {% for tpl in templates %}
+    <div class="template-card" style="animation-delay:{{ loop.index0 * 0.05 }}s">
+      <div class="template-preview">
+        <div class="template-doc">
+          <div class="td-line td-title"></div>
+          <div class="td-line td-subtitle"></div>
+          <div class="td-spacer"></div>
+          <div class="td-line td-heading"></div>
+          <div class="td-line td-body"></div>
+          <div class="td-line td-body"></div>
+          <div class="td-line td-body short"></div>
+          <div class="td-spacer"></div>
+          <div class="td-line td-heading"></div>
+          <div class="td-line td-body"></div>
+          <div class="td-line td-body short"></div>
+        </div>
+      </div>
+      <div class="template-info">
+        <h3>{{ tpl.name }}</h3>
+        <p>{{ tpl.description }}</p>
+      </div>
+      <form method="post" action="/resume/new" class="template-form">
+        <input type="hidden" name="template_id" value="{{ tpl.id }}">
+        <input type="text" name="title" placeholder="Resume title..." class="input" required>
+        <button type="submit" class="btn btn-primary btn-block">Use Template</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
