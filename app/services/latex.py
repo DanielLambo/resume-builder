@@ -61,6 +61,22 @@ def _count_pages(log_text: str) -> int | None:
     return max(int(n) for n in nums) if nums else None
 
 
+def _patch_packages(content: str) -> str:
+    content = re.sub(
+        r"\\usepackage\[empty\]\{fullpage\}",
+        r"\\usepackage[margin=1in]{geometry}",
+        content,
+    )
+    content = re.sub(
+        r"\\usepackage\{fullpage\}",
+        r"\\usepackage[margin=1in]{geometry}",
+        content,
+    )
+    content = re.sub(r"\\input\{glyphtounicode\}", "", content)
+    content = re.sub(r"\\pdfgentounicode=1", "", content)
+    return content
+
+
 async def compile_latex(resume_id: int, latex_content: str) -> dict:
     pdflatex = shutil.which("pdflatex")
     if not pdflatex:
@@ -75,6 +91,8 @@ async def compile_latex(resume_id: int, latex_content: str) -> dict:
         }
 
     jobname = f"resume_{resume_id}"
+
+    latex_content = _patch_packages(latex_content)
 
     with tempfile.TemporaryDirectory(prefix="resumate_") as tmpdir:
         src = Path(tmpdir) / f"{jobname}.tex"
