@@ -301,13 +301,24 @@ a { color: inherit; text-decoration: none; }
 .editor-pane .CodeMirror-matchingbracket { color: var(--accent) !important; text-decoration: underline; }
 
 /* PDF */
-.pdf-container { flex: 1; overflow: auto; background: var(--bg-surface); display: flex; min-height: 0; }
-.pdf-frame { width: 100%; height: 100%; border: none; }
+.pdf-container {
+  flex: 1; overflow: auto; background: #e8eaed; display: flex;
+  flex-direction: column; align-items: center; min-height: 0; padding: 1rem 0;
+}
 .pdf-placeholder {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 0.75rem; color: var(--text-muted); width: 100%; height: 100%;
 }
 .pdf-placeholder p { font-size: 0.85rem; }
+.pdf-pages {
+  display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
+  width: 100%; padding: 0 1rem;
+}
+.pdf-page {
+  background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.15); border-radius: 2px;
+  max-width: 100%;
+}
+.pdf-page canvas { display: block; width: 100%; height: auto; }
 
 /* Error panel */
 .error-panel {
