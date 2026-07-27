@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request, Form, Query
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
@@ -62,7 +62,16 @@ async def compile_resume(resume_id: int, latex_content: str = Form(None)):
             )
             await db.commit()
 
-    return JSONResponse(result)
+    response = {
+        "success": result["success"],
+        "pages": result.get("pages"),
+        "errors": result.get("errors", []),
+    }
+    if not result["success"]:
+        response["error"] = result.get("error", "")
+        response["hint"] = result.get("hint", "")
+
+    return JSONResponse(response)
 
 
 @router.get("/{resume_id}/pdf")
@@ -117,6 +126,18 @@ async def clear_chat(resume_id: int):
         )
         await db.commit()
     return JSONResponse({"ok": True})
+
+
+@router.get("/{resume_id}/synctex")
+async def get_synctex(resume_id: int):
+    synctex_path = COMPILED_DIR / f"{resume_id}.synctex.json"
+    if not synctex_path.exists():
+        return JSONResponse({"pages": {}, "blocks": {}})
+    try:
+        data = json.loads(synctex_path.read_text(encoding="utf-8"))
+        return JSONResponse(data)
+    except Exception:
+        return JSONResponse({"pages": {}, "blocks": {}})
 
 
 @router.get("/{resume_id}/delete")

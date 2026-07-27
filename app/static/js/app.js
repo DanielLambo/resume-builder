@@ -111,6 +111,8 @@
       })
       .then(function (r) { return r.json(); })
       .then(function (d) {
+        clearErrorMarks();
+        clearErrorLines();
         if (d.success) {
           var url = "/resume/" + resumeId + "/pdf?t=" + Date.now();
           pill.className = "status-pill visible saved";
@@ -122,8 +124,13 @@
           if (pc) pc.textContent = d.pages ? d.pages + " page" + (d.pages > 1 ? "s" : "") : "";
           var ph = document.getElementById("pdf-placeholder");
           if (ph) ph.style.display = "none";
+          var ep = document.getElementById("error-panel");
+          if (ep) ep.remove();
           setTimeout(function () { try { renderPDF(url); } catch (e) { console.error(e); } }, 50);
         } else {
+          if (d.errors && d.errors.length) {
+            markErrorLines(d.errors);
+          }
           pill.className = "status-pill visible error";
           pill.textContent = "Error";
           showToast("Compilation failed", "error");
@@ -158,6 +165,49 @@
   }
 
   /* ── PDF.js rendering ────────────────────────────────────── */
+  var synctexData = null;
+  var errorMarks = [];
+
+  function clearErrorMarks() {
+    for (var i = 0; i < errorMarks.length; i++) {
+      errorMarks[i].clear();
+    }
+    errorMarks = [];
+  }
+
+  function markErrorLines(errors) {
+    clearErrorLines();
+    if (!errors || !errors.length) return;
+    for (var i = 0; i < errors.length; i++) {
+      var e = errors[i];
+      if (e.line && e.line > 0) {
+        var lineIdx = Math.min(e.line - 1, editor.lastLine());
+        var lineContent = editor.getLine(lineIdx);
+        if (lineContent && lineContent.length > 0) {
+          var mark = editor.markText(
+            { line: lineIdx, ch: 0 },
+            { line: lineIdx, ch: lineContent.length },
+            { className: "cm-error-squiggly", attributes: { title: e.message } }
+          );
+          errorMarks.push(mark);
+        }
+        editor.setGutterMarker(lineIdx, "CodeMirror-linenumber", (function(msg) {
+          var span = document.createElement("div");
+          span.className = "cm-error-gutter";
+          span.title = msg;
+          span.textContent = "!";
+          return span;
+        })(e.message));
+      }
+    }
+  }
+
+  function clearErrorLines() {
+    for (var i = 0; i <= editor.lastLine(); i++) {
+      editor.setGutterMarker(i, "CodeMirror-linenumber", null);
+    }
+  }
+
   function renderPDF(url) {
     var container = document.getElementById("pdf-pages");
     if (!container) return;
@@ -176,14 +226,48 @@
             var viewport = page.getViewport({ scale: scale });
             var canvas = document.createElement("canvas");
             canvas.className = "pdf-page";
+            canvas.setAttribute("data-page", pageNum);
             var ctx = canvas.getContext("2d");
             canvas.height = viewport.height;
             canvas.width = viewport.width;
             container.appendChild(canvas);
+
+            canvas.addEventListener("click", function (e) {
+              if (!synctexData || !synctexData.pages) return;
+              var rect = canvas.getBoundingClientRect();
+              var cssX = e.clientX - rect.left;
+              var cssY = e.clientY - rect.top;
+              var pdfX = cssX * (viewport.width / rect.width);
+              var pdfY = (rect.height - cssY) * (viewport.height / rect.height);
+              var hits = synctexData.pages[String(pageNum)];
+              if (!hits || !hits.length) return;
+              var best = null;
+              var bestDist = Infinity;
+              for (var j = 0; j < hits.length; j++) {
+                var h = hits[j];
+                var d = Math.abs(pdfX - h.x) + Math.abs(pdfY - h.y);
+                if (d < bestDist) {
+                  bestDist = d;
+                  best = h;
+                }
+              }
+              if (best && best.line) {
+                var lineIdx = Math.max(0, best.line - 1);
+                editor.setCursor(lineIdx, 0);
+                editor.scrollIntoView({ line: lineIdx, ch: 0 }, 100);
+                editor.focus();
+              }
+            });
+
             page.render({ canvasContext: ctx, viewport: viewport });
           });
         })(i);
       }
+
+      fetch("/resume/" + resumeId + "/synctex")
+        .then(function (r) { return r.json(); })
+        .then(function (d) { synctexData = d; })
+        .catch(function () { synctexData = null; });
     }).catch(function (err) {
       console.error("PDF render error:", err);
       showToast("Failed to render PDF", "error");
