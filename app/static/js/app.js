@@ -122,7 +122,7 @@
           if (pc) pc.textContent = d.pages ? d.pages + " page" + (d.pages > 1 ? "s" : "") : "";
           var ph = document.getElementById("pdf-placeholder");
           if (ph) ph.style.display = "none";
-          renderPDF(url);
+          setTimeout(function () { try { renderPDF(url); } catch (e) { console.error(e); } }, 50);
         } else {
           pill.className = "status-pill visible error";
           pill.textContent = "Error";
@@ -163,8 +163,12 @@
     if (!container) return;
     container.innerHTML = "";
 
-    var loadingTask = pdfjsLib.getDocument(url);
-    loadingTask.promise.then(function (pdf) {
+    if (typeof pdfjsLib === "undefined") {
+      showToast("PDF viewer not loaded yet", "error");
+      return;
+    }
+
+    pdfjsLib.getDocument(url).promise.then(function (pdf) {
       var scale = 1.5;
       for (var i = 1; i <= pdf.numPages; i++) {
         (function (pageNum) {
@@ -180,8 +184,9 @@
           });
         })(i);
       }
-    }, function (err) {
-      showToast("Failed to load PDF", "error");
+    }).catch(function (err) {
+      console.error("PDF render error:", err);
+      showToast("Failed to render PDF", "error");
     });
   }
 
