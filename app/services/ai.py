@@ -196,7 +196,7 @@ async def ai_assist(latex_content: str, prompt: str, history: list | None = None
                 content = content[:500] + "...[trimmed]"
             messages.append({"role": msg["role"], "content": content})
 
-    truncated = latex_content if len(latex_content) < 12000 else latex_content[:12000] + "\n%...[truncated]"
+    truncated = latex_content if len(latex_content) < 8000 else latex_content[:8000] + "\n%...[truncated]"
 
     messages.append({
         "role": "user",
