@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Resumate{% endblock %}
+{% block content %}
+<div class="dashboard">
+  <div class="page-header">
+    <div>
+      <h1>Your Resumes</h1>
+      <p class="page-sub">All your resumes in one place.</p>
+    </div>
+    <div class="header-actions">
+      <label class="btn upload-btn" for="upload-input">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload Resume
+      </label>
+      <a href="/templates" class="btn btn-primary">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Resume
+      </a>
+    </div>
+  </div>
+
+  {% if error %}
+  <div class="upload-error">{{ error }}</div>
+  {% endif %}
+
+  <div class="upload-panel" id="upload-panel">
+    <form method="POST" action="/upload" enctype="multipart/form-data" class="upload-form">
+      <div class="upload-drop" id="upload-drop">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <p class="upload-drop-text">Drop your resume here or <span class="upload-browse">browse</span></p>
+        <p class="upload-drop-hint">PDF, DOCX, or TXT — AI will convert it to LaTeX</p>
+        <input type="file" name="file" id="upload-input" accept=".pdf,.docx,.txt" hidden>
+      </div>
+      <div class="upload-options">
+        <input class="input upload-title-input" type="text" name="title" placeholder="Resume title" value="Uploaded Resume">
+        <select class="input upload-tpl-select" name="template_id">
+          {% for t in templates %}
+          <option value="{{ t.id }}">{{ t.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary upload-submit" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/><path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.58 3.25 3.93"/></svg>
+          Convert to LaTeX
+        </button>
+      </div>
+    </form>
+  </div>
+
+  {% if resumes %}
+  <div class="resume-grid">
+    {% for r in resumes %}
+    <div class="resume-card" style="animation-delay:{{ loop.index0 * 0.04 }}s">
+      <div class="resume-card-top">
+        <div class="resume-card-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="resume-card-info">
+          <h3>{{ r.title }}</h3>
+          <span class="resume-card-date">{{ r.updated_at[:10] }}</span>
+        </div>
+      </div>
+      <div class="resume-card-actions">
+        <a href="/resume/{{ r.id }}" class="btn btn-sm btn-primary">Open</a>
+        <a href="/resume/{{ r.id }}/pdf" class="btn btn-sm" target="_blank">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          PDF
+        </a>
+        <span class="flex-spacer"></span>
+        <a href="/resume/{{ r.id }}/delete"
+           class="btn btn-sm btn-ghost btn-danger-text"
+           hx-get="/resume/{{ r.id }}/delete"
+           hx-confirm="Delete \"{{ r.title }}\"?"
+           hx-target="closest .resume-card"
+           hx-swap="outerHTML swap:0.3s">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.25"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    </div>
+    <h2>No resumes yet</h2>
+    <p>Create your first resume from a template, or upload an existing one to convert.</p>
+    <div class="empty-actions">
+      <a href="/templates" class="btn btn-primary">Create from Template</a>
+      <label class="btn" for="upload-input">Upload Existing</label>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(function() {
+  var input = document.getElementById("upload-input");
+  var drop = document.getElementById("upload-drop");
+  var submit = document.querySelector(".upload-submit");
+  var titleInput = document.querySelector(".upload-title-input");
+  var panel = document.getElementById("upload-panel");
+  var uploadBtn = document.querySelector(".upload-btn");
+  var emptyUpload = document.querySelector(".empty-actions .btn:not(.btn-primary)");
+
+  function togglePanel(e) {
+    if (e) e.preventDefault();
+    panel.classList.toggle("visible");
+  }
+
+  if (uploadBtn) uploadBtn.addEventListener("click", togglePanel);
+  if (emptyUpload) emptyUpload.addEventListener("click", function(e) {
+    e.preventDefault();
+    panel.classList.add("visible");
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+
+  if (input) {
+    input.addEventListener("change", function() {
+      if (input.files.length > 0) {
+        var f = input.files[0];
+        drop.classList.add("has-file");
+        drop.querySelector(".upload-drop-text").textContent = f.name;
+        drop.querySelector(".upload-drop-hint").textContent = (f.size / 1024).toFixed(1) + " KB";
+        submit.disabled = false;
+        if (titleInput && titleInput.value === "Uploaded Resume") {
+          titleInput.value = f.name.replace(/\.[^.]+$/, "");
+        }
+      }
+    });
+  }
+
+  if (drop) {
+    drop.addEventListener("dragover", function(e) { e.preventDefault(); drop.classList.add("drag-over"); });
+    drop.addEventListener("dragleave", function() { drop.classList.remove("drag-over"); });
+    drop.addEventListener("drop", function(e) {
+      e.preventDefault(); drop.classList.remove("drag-over");
+      if (e.dataTransfer.files.length > 0) {
+        input.files = e.dataTransfer.files;
+        input.dispatchEvent(new Event("change"));
+      }
+    });
+    drop.addEventListener("click", function() { input.click(); });
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Resumate{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav class="topbar">
+    <a href="/" class="logo">
+      <span class="logo-mark">R</span>
+      <span class="logo-text">Resumate</span>
+    </a>
+    <div class="nav-links">
+      <a href="/">Dashboard</a>
+      <a href="/templates">Templates</a>
+    </div>
+  </nav>
+  <div id="toasts" class="toast-container"></div>
+  <main class="{% block main_class %}container container-padded{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/js/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
