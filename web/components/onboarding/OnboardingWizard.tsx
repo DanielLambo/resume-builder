@@ -1,7 +1,5 @@
 "use client";
 
-import confetti from "canvas-confetti";
-import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -17,18 +15,6 @@ import {
   ONBOARDING_STORAGE_KEY,
 } from "@/lib/onboarding/schema";
 import { useOnboardingState } from "@/lib/onboarding/useOnboardingState";
-
-const variants = {
-  enter: (direction: number) => ({
-    x: direction > 0 ? 48 : -48,
-    opacity: 0,
-  }),
-  center: { x: 0, opacity: 1 },
-  exit: (direction: number) => ({
-    x: direction > 0 ? -48 : 48,
-    opacity: 0,
-  }),
-};
 
 export function OnboardingWizard() {
   const router = useRouter();
@@ -49,12 +35,17 @@ export function OnboardingWizard() {
       } catch {
         /* ignore */
       }
-      confetti({
-        particleCount: 90,
-        spread: 70,
-        origin: { y: 0.7 },
-        colors: ["#C44B3B", "#2F3A33", "#E8E4DC", "#1A1A1A"],
-      });
+      try {
+        const { default: confetti } = await import("canvas-confetti");
+        confetti({
+          particleCount: 90,
+          spread: 70,
+          origin: { y: 0.7 },
+          colors: ["#C44B3B", "#2F3A33", "#E8E4DC", "#1A1A1A"],
+        });
+      } catch {
+        /* confetti is optional polish */
+      }
       toast.success("Welcome to Typesetter");
       router.replace("/dashboard");
       router.refresh();
@@ -75,49 +66,39 @@ export function OnboardingWizard() {
       onBack={state.back}
       onSkip={state.next}
     >
-      <AnimatePresence mode="wait" custom={state.direction}>
-        <motion.div
-          key={state.step}
-          custom={state.direction}
-          variants={variants}
-          initial="enter"
-          animate="center"
-          exit="exit"
-          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-        >
-          {state.step === 1 ? (
-            <Step1Personal
-              data={state.data}
-              onChange={state.patch}
-              onContinue={state.next}
-              canContinue={state.step1Valid}
-            />
-          ) : null}
-          {state.step === 2 ? (
-            <Step2Referral
-              data={state.data}
-              onChange={state.patch}
-              onContinue={state.next}
-              canContinue={state.step2Valid}
-            />
-          ) : null}
-          {state.step === 3 ? (
-            <Step3Goals
-              data={state.data}
-              onChange={state.patch}
-              onContinue={state.next}
-            />
-          ) : null}
-          {state.step === 4 ? (
-            <Step4Summary
-              data={state.data}
-              submitting={submitting}
-              onEdit={state.goTo}
-              onComplete={complete}
-            />
-          ) : null}
-        </motion.div>
-      </AnimatePresence>
+      <div key={state.step}>
+        {state.step === 1 ? (
+          <Step1Personal
+            data={state.data}
+            onChange={state.patch}
+            onContinue={state.next}
+            canContinue={state.step1Valid}
+          />
+        ) : null}
+        {state.step === 2 ? (
+          <Step2Referral
+            data={state.data}
+            onChange={state.patch}
+            onContinue={state.next}
+            canContinue={state.step2Valid}
+          />
+        ) : null}
+        {state.step === 3 ? (
+          <Step3Goals
+            data={state.data}
+            onChange={state.patch}
+            onContinue={state.next}
+          />
+        ) : null}
+        {state.step === 4 ? (
+          <Step4Summary
+            data={state.data}
+            submitting={submitting}
+            onEdit={state.goTo}
+            onComplete={complete}
+          />
+        ) : null}
+      </div>
     </OnboardingLayout>
   );
 }

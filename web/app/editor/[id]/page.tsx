@@ -6,6 +6,7 @@ import {
   getLatexFromDataJson,
   getTemplateIdFromDataJson,
 } from "@/lib/resume-template";
+import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 60;
@@ -25,7 +26,7 @@ export default async function EditorPage({ params }: EditorPageProps) {
     redirect(`/login?next=/editor/${id}`);
   }
 
-  if (user.user_metadata?.onboarding_completed !== true) {
+  if (await shouldForceOnboarding(user)) {
     redirect("/onboarding");
   }
 
