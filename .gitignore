@@ -6,3 +6,5 @@ storage/
 *.pdf
 *.log
 .venv/
+.pytest_cache/
+tests/_tmp/

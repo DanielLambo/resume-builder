@@ -1,5 +1,5 @@
 import asyncio
-import gzip  # noqa: F401 — used in load_synctex
+import gzip
 import json
 import os
 import shutil
@@ -7,12 +7,7 @@ import tempfile
 import re
 from pathlib import Path
 
-STORAGE_DIR = Path(__file__).parent.parent / "storage"
-RESUMES_DIR = STORAGE_DIR / "resumes"
-COMPILED_DIR = STORAGE_DIR / "compiled"
-
-RESUMES_DIR.mkdir(parents=True, exist_ok=True)
-COMPILED_DIR.mkdir(parents=True, exist_ok=True)
+from app.paths import COMPILED_DIR
 
 
 def _flatten_multiline_commands(lines: list[str]) -> list[str]:
@@ -671,11 +666,14 @@ def parse_synctex_text(text: str) -> dict:
 
     Handles the real SyncTeX format:
       Input:LINE:FILE     — file index mapping
-      x<file>,<line>:<x>,<y>  — character positions in scaled points (sp)
+      x|g|k|h|$\ldots<form>,<line>:<x>,<y>  — positions in scaled points (sp)
+
+    Coordinates are PDF points with origin at the TOP-LEFT (y grows downward).
     """
-    pages = {}
-    files = {}
+    pages: dict[int, list] = {}
+    files: dict[int, str] = {}
     current_page = 1
+    main_file_ids: set[int] = set()
 
     for line in text.split("\n"):
         line = line.strip()
@@ -686,7 +684,12 @@ def parse_synctex_text(text: str) -> dict:
             rest = line[len("Input:"):]
             parts = rest.split(":", 1)
             if len(parts) == 2 and parts[0].isdigit():
-                files[int(parts[0])] = parts[1]
+                fid = int(parts[0])
+                fpath = parts[1]
+                files[fid] = fpath
+                # Prefer the job's .tex (not .cls/.sty)
+                if fpath.endswith(".tex") and "/texmf" not in fpath.replace("\\", "/"):
+                    main_file_ids.add(fid)
         elif line.startswith("Page:"):
             try:
                 current_page = int(line.split(":")[1])
@@ -694,14 +697,19 @@ def parse_synctex_text(text: str) -> dict:
                 pass
         elif line.startswith("Content:"):
             pass
-        elif len(line) > 1 and line[0] == "x":
+        elif len(line) > 1 and line[0] in "xgkh$":
             try:
-                after_x = line[1:]
-                file_line, coords = after_x.split(":", 1)
+                after = line[1:]
+                file_line, coords = after.split(":", 1)
                 file_id_str, line_str = file_line.split(",", 1)
                 file_id = int(file_id_str)
                 line_num = int(line_str)
-                x_sp, y_sp = coords.split(",", 1)
+                # Skip package / class sources — only map the resume .tex
+                if main_file_ids and file_id not in main_file_ids:
+                    continue
+                x_sp, y_sp = coords.split(",", 1)[:2]
+                # Some records append more fields after y — take first two
+                y_sp = y_sp.split(",")[0]
                 x = float(x_sp) / 65536.0
                 y = float(y_sp) / 65536.0
 
@@ -713,7 +721,8 @@ def parse_synctex_text(text: str) -> dict:
             except (ValueError, IndexError):
                 pass
 
-    return {"pages": pages}
+    # JSON object keys must be strings for the frontend
+    return {"pages": {str(k): v for k, v in pages.items()}}
 
 
 def load_synctex(tmpdir: Path, jobname: str) -> dict:
@@ -721,7 +730,6 @@ def load_synctex(tmpdir: Path, jobname: str) -> dict:
     gz_path = tmpdir / f"{jobname}.synctex.gz"
     if gz_path.exists():
         try:
-            import gzip
             with gzip.open(gz_path, "rt", encoding="utf-8", errors="replace") as f:
                 return parse_synctex_text(f.read())
         except Exception:
@@ -731,7 +739,12 @@ def load_synctex(tmpdir: Path, jobname: str) -> dict:
     if json_path.exists():
         try:
             data = json.loads(json_path.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) and "pages" in data else {"pages": {}}
+            if isinstance(data, dict) and "pages" in data:
+                # Normalize keys to strings
+                pages = data["pages"]
+                data["pages"] = {str(k): v for k, v in pages.items()}
+                return data
+            return {"pages": {}}
         except Exception:
             pass
 

@@ -5,20 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Resumate{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css">
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   {% block head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <nav class="topbar">
     <a href="/" class="logo">
       <span class="logo-mark">R</span>
       <span class="logo-text">Resumate</span>
+      <span class="logo-ver">2.0</span>
     </a>
     <div class="nav-links">
-      <a href="/">Dashboard</a>
-      <a href="/templates">Templates</a>
+      <a href="/" class="{% if request.url.path == '/' %}is-active{% endif %}">Dashboard</a>
+      <a href="/templates" class="{% if request.url.path.startswith('/templates') %}is-active{% endif %}">Templates</a>
     </div>
   </nav>
   <div id="toasts" class="toast-container"></div>

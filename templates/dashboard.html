@@ -4,18 +4,21 @@
 <div class="dashboard">
   <div class="page-header">
     <div>
-      <h1>Your Resumes</h1>
-      <p class="page-sub">All your resumes in one place.</p>
+      <h1>Resumes</h1>
+      <p class="page-sub">Local LaTeX resumes with live preview and AI edits.</p>
     </div>
     <div class="header-actions">
-      <label class="btn upload-btn" for="upload-input">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Upload Resume
-      </label>
-      <a href="/templates" class="btn btn-primary">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        New Resume
-      </a>
+      <label class="btn upload-btn" for="upload-input">Upload</label>
+      <a href="/templates" class="btn">Templates</a>
+      {% if default_template_id %}
+      <form method="post" action="/resume/new" class="inline-form">
+        <input type="hidden" name="template_id" value="{{ default_template_id }}">
+        <input type="hidden" name="title" value="My Resume">
+        <button type="submit" class="btn btn-primary">New resume</button>
+      </form>
+      {% else %}
+      <a href="/templates" class="btn btn-primary">New resume</a>
+      {% endif %}
     </div>
   </div>
 
@@ -26,22 +29,18 @@
   <div class="upload-panel" id="upload-panel">
     <form method="POST" action="/upload" enctype="multipart/form-data" class="upload-form">
       <div class="upload-drop" id="upload-drop">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        <p class="upload-drop-text">Drop your resume here or <span class="upload-browse">browse</span></p>
-        <p class="upload-drop-hint">PDF, DOCX, TXT, or TEX — .tex files load directly, others are AI-converted</p>
+        <p class="upload-drop-text">Drop a file here or <span class="upload-browse">browse</span></p>
+        <p class="upload-drop-hint">PDF, DOCX, TXT, or TEX</p>
         <input type="file" name="file" id="upload-input" accept=".pdf,.docx,.txt,.tex" hidden>
       </div>
       <div class="upload-options">
-        <input class="input upload-title-input" type="text" name="title" placeholder="Resume title" value="Uploaded Resume">
+        <input class="input upload-title-input" type="text" name="title" placeholder="Title" value="Uploaded Resume">
         <select class="input upload-tpl-select" name="template_id">
           {% for t in templates %}
-          <option value="{{ t.id }}">{{ t.name }}</option>
+          <option value="{{ t.id }}"{% if default_template_id and t.id == default_template_id %} selected{% endif %}>{{ t.name }}</option>
           {% endfor %}
         </select>
-        <button type="submit" class="btn btn-primary upload-submit" disabled>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/><path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.58 3.25 3.93"/></svg>
-          Convert to LaTeX
-        </button>
+        <button type="submit" class="btn btn-primary upload-submit" disabled>Import</button>
       </div>
     </form>
   </div>
@@ -49,30 +48,29 @@
   {% if resumes %}
   <div class="resume-grid">
     {% for r in resumes %}
-    <div class="resume-card" style="animation-delay:{{ loop.index0 * 0.04 }}s">
-      <div class="resume-card-top">
+    <div class="resume-card" style="animation-delay:{{ loop.index0 * 0.03 }}s">
+      <a href="/resume/{{ r.id }}" class="resume-card-main">
         <div class="resume-card-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         </div>
         <div class="resume-card-info">
           <h3>{{ r.title }}</h3>
-          <span class="resume-card-date">{{ r.updated_at[:10] }}</span>
+          <span class="resume-card-date">{{ r.updated_at[:10] }}{% if r.has_pdf %} · PDF ready{% endif %}</span>
         </div>
-      </div>
+      </a>
       <div class="resume-card-actions">
         <a href="/resume/{{ r.id }}" class="btn btn-sm btn-primary">Open</a>
-        <a href="/resume/{{ r.id }}/pdf" class="btn btn-sm" target="_blank">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          PDF
-        </a>
+        {% if r.has_pdf %}
+        <a href="/resume/{{ r.id }}/pdf?download=1" class="btn btn-sm" download>PDF</a>
+        {% endif %}
         <span class="flex-spacer"></span>
         <a href="/resume/{{ r.id }}/delete"
            class="btn btn-sm btn-ghost btn-danger-text"
            hx-get="/resume/{{ r.id }}/delete"
-           hx-confirm="Delete \"{{ r.title }}\"?"
+           hx-confirm="Delete “{{ r.title }}”?"
            hx-target="closest .resume-card"
-           hx-swap="outerHTML swap:0.3s">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+           hx-swap="outerHTML swap:0.2s">
+          Delete
         </a>
       </div>
     </div>
@@ -80,14 +78,17 @@
   </div>
   {% else %}
   <div class="empty-state">
-    <div class="empty-icon">
-      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.25"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-    </div>
-    <h2>No resumes yet</h2>
-    <p>Create your first resume from a template, or upload an existing one to convert.</p>
+    <h2>Start with Jake’s Resume</h2>
+    <p>The ATS-friendly template most SWE resumes use. Or upload one you already have.</p>
     <div class="empty-actions">
-      <a href="/templates" class="btn btn-primary">Create from Template</a>
-      <label class="btn" for="upload-input">Upload Existing</label>
+      {% if default_template_id %}
+      <form method="post" action="/resume/new" class="inline-form">
+        <input type="hidden" name="template_id" value="{{ default_template_id }}">
+        <input type="hidden" name="title" value="My Resume">
+        <button type="submit" class="btn btn-primary">Create resume</button>
+      </form>
+      {% endif %}
+      <label class="btn" for="upload-input">Upload existing</label>
     </div>
   </div>
   {% endif %}
@@ -103,18 +104,19 @@
   var form = document.querySelector(".upload-form");
   var panel = document.getElementById("upload-panel");
   var uploadBtn = document.querySelector(".upload-btn");
-  var emptyUpload = document.querySelector(".empty-actions .btn:not(.btn-primary)");
 
-  function togglePanel(e) {
+  function showPanel(e) {
     if (e) e.preventDefault();
-    panel.classList.toggle("visible");
-  }
-
-  if (uploadBtn) uploadBtn.addEventListener("click", togglePanel);
-  if (emptyUpload) emptyUpload.addEventListener("click", function(e) {
-    e.preventDefault();
     panel.classList.add("visible");
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  if (uploadBtn) uploadBtn.addEventListener("click", function(e) {
+    e.preventDefault();
+    panel.classList.toggle("visible");
+  });
+  document.querySelectorAll(".empty-actions label.btn").forEach(function(el) {
+    el.addEventListener("click", showPanel);
   });
 
   if (input) {
@@ -126,19 +128,21 @@
         drop.querySelector(".upload-drop-text").textContent = f.name;
         drop.querySelector(".upload-drop-hint").textContent = (f.size / 1024).toFixed(1) + " KB";
         submit.disabled = false;
-        submit.textContent = isTex ? "Import .tex" : "Convert to LaTeX";
+        submit.textContent = isTex ? "Import .tex" : "Convert";
         if (tplSelect) tplSelect.style.display = isTex ? "none" : "";
-        if (titleInput && titleInput.value === "Uploaded Resume") {
+        if (titleInput && (titleInput.value === "Uploaded Resume" || !titleInput.dataset.touched)) {
           titleInput.value = f.name.replace(/\.[^.]+$/, "");
         }
+        panel.classList.add("visible");
       }
     });
   }
+  if (titleInput) titleInput.addEventListener("input", function() { titleInput.dataset.touched = "1"; });
 
   if (form) {
     form.addEventListener("submit", function() {
       submit.disabled = true;
-      submit.innerHTML = '<span class="spinner"></span> Uploading...';
+      submit.innerHTML = '<span class="spinner"></span> Working…';
     });
   }
 
