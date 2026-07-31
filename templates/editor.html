@@ -16,15 +16,18 @@
 
 {% block content %}
 <div class="editor-topbar">
-  <a href="/" class="back-btn" title="Dashboard">
+  <a href="/" class="back-btn" title="Back to resumes">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
   </a>
   <div class="editor-title-wrap">
     <span class="dirty-dot" id="dirty-dot" title="Unsaved changes" hidden></span>
-    <div class="editor-title" title="{{ resume.title }}">{{ resume.title }}</div>
+    <input class="editor-title" id="resume-title" type="text"
+           value="{{ resume.title }}" maxlength="120"
+           title="Click to rename" aria-label="Resume title">
   </div>
   <span id="status-pill" class="status-pill" aria-live="polite"></span>
   <div class="editor-actions">
+    <button type="button" class="btn btn-sm btn-ghost" id="focus-toggle" title="Focus mode (hide AI)">Focus</button>
     <button type="button" class="btn btn-sm btn-ghost" onclick="resumateSave()" title="Save (⌘S)">Save</button>
     <a id="download-pdf-btn" class="btn btn-sm{% if not resume.has_pdf %} is-hidden{% endif %}"
        href="/resume/{{ resume.id }}/pdf?download=1" download title="Download PDF">Download</a>
@@ -54,21 +57,26 @@
       </div>
 
       <div class="ai-quick-actions">
-        <button type="button" class="ai-quick-btn" data-prompt="Polish wording only: tighten verbs, cut filler, fix grammar. Keep every fact, tool, and metric exactly as written. Do not invent impact numbers or add buzzwords.">Polish</button>
-        <button type="button" class="ai-quick-btn" data-prompt="Make this ATS-cleaner: standard section headings, clearer keywords that already match the experience, no tables/columns. Do not invent skills or inflate scope.">ATS</button>
-        <button type="button" class="ai-quick-btn" data-prompt="Improve quantification only where numbers already exist. Where a metric is missing, use an obvious placeholder like [X%] or [N users] — never invent precise fake stats.">Metrics</button>
-        <button type="button" class="ai-quick-btn" data-prompt="Rewrite the summary as 2–3 short factual lines. No 'passionate', 'results-driven', or LinkedIn fluff. State role focus and what they build.">Summary</button>
+        <button type="button" class="ai-quick-btn" data-prompt="polish">Polish</button>
+        <button type="button" class="ai-quick-btn" data-prompt="rewrite">Rewrite</button>
+        <button type="button" class="ai-quick-btn" data-prompt="summary">Summary</button>
+        <button type="button" class="ai-quick-btn" data-prompt="one page">One page</button>
+        <button type="button" class="ai-quick-btn" data-prompt="ats">ATS</button>
+        <button type="button" class="ai-quick-btn" data-prompt="metrics">Metrics</button>
       </div>
 
       <div class="ai-thread" id="ai-thread">
         {% if not resume.chat_history %}
         <div class="ai-empty-state">
-          <div class="ai-empty-text">Describe an edit, or use a shortcut above.</div>
+          <div class="ai-empty-text">Describe an edit. Structure and LaTeX commands stay intact.</div>
+          <div class="ai-empty-hint">Shortcuts above, or type a specific request</div>
         </div>
         {% endif %}
         {% for msg in resume.chat_history %}
         <div class="ai-msg ai-msg-{{ msg.role }}">
-          <div class="ai-msg-role">{{ "You" if msg.role == "user" else "AI" }}</div>
+          <div class="ai-msg-head">
+            <div class="ai-msg-role">{{ "You" if msg.role == "user" else "AI" }}</div>
+          </div>
           <div class="ai-msg-text">{{ msg.content }}</div>
         </div>
         {% endfor %}
@@ -76,7 +84,7 @@
 
       <div class="ai-bar">
         <input id="ai-target-role" class="ai-role-input" type="text" placeholder="Target role (optional)" />
-        <textarea id="ai-input" class="ai-input" rows="1" placeholder="e.g. Shorten every bullet by half"></textarea>
+        <textarea id="ai-input" class="ai-input" rows="1" placeholder="e.g. Shorten every bullet"></textarea>
         <button type="button" id="ai-send" class="ai-send">Send</button>
       </div>
     </div>

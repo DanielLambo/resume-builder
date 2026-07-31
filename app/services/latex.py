@@ -80,9 +80,12 @@ def latex_to_compact(latex: str) -> str:
             continue
 
         # Name header: \huge \scshape Name, {\LARGE\bfseries Name}
-        if any(cmd in stripped for cmd in ("\\huge", "\\scshape", "\\LARGE", "\\Large", "\\large", "\\normalsize")):
+        if any(
+            cmd in stripped
+            for cmd in ("\\huge", "\\scshape", "\\LARGE", "\\Large", "\\large", "\\normalsize", "\\bfseries")
+        ):
             name_text = re.sub(
-                r"\\(?:huge|scshape|LARGE|Large|large|normalsize|vspace|textbf|textit)\s*\{?[^}]*\}?\s*",
+                r"\\(?:huge|scshape|LARGE|Large|large|normalsize|vspace|textbf|textit|bfseries)\s*\{?[^}]*\}?\s*",
                 "", stripped,
             )
             name_text = re.sub(r"\\+\s*\[.*?\]", "", name_text)
@@ -312,19 +315,22 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
     """Rebuild a LaTeX section block from compact lines, using the command
     style detected in the original block. Returns LaTeX lines.
     """
+    # Normalize CRLF from uploads / Windows editors so indent detection stays clean.
+    bl = [ln.replace("\r", "") for ln in block["lines"]]
     # Flatten so \resumeSubheading\n{...}{...} is detectable
-    orig = "\n".join(_flatten_multiline_commands(block["lines"]))
+    orig = "\n".join(_flatten_multiline_commands(bl))
 
     has_resume_item = "\\resumeItem{" in orig
-    has_resume_sub = "\\resumeSubheading{" in orig
+    has_resume_sub = "\\resumeSubheading{" in orig or re.search(r"\\resumeSubheading\s*$", orig, re.M)
     has_role = "\\role{" in orig
     has_entrygap = "\\entrygap" in orig
+    has_item_list = "\\resumeItemListStart" in orig
+    has_sub_list = "\\resumeSubHeadingListStart" in orig
 
     sub_multiline = any(
-        re.fullmatch(r"\\resumeSubheading\s*", l.strip()) for l in block["lines"]
+        re.fullmatch(r"\\resumeSubheading\s*", l.strip()) for l in bl
     )
 
-    bl = block["lines"]
     blank_before_heading = any(
         bl[i].strip() == ""
         and re.fullmatch(r"\\(?:resumeSubheading|role)\s*", bl[i + 1].strip())
@@ -340,6 +346,8 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
             m = re.search(r"\\resumeSubheading\{(.+?)\}\{(.+?)\}", orig)
             if m:
                 sub_args = 2
+        if sub_args == 0 and sub_multiline:
+            sub_args = 4
     role_args = 0
     if has_role:
         m = re.search(r"\\role\{(.+?)\}\{(.+?)\}\{(.+?)\}\{(.+?)\}", orig)
@@ -356,20 +364,42 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
             item_env = env
             break
 
+    # Jake-style \resumeItem expands to \item — must live inside a list.
+    if has_resume_item and not has_item_list and not item_env:
+        has_item_list = True
+
     bullet_cmd = "\\resumeItem" if has_resume_item else "\\item"
     resume_item_args = 2 if re.search(r"\\resumeItem\{[^}]*\}\{", orig) else 1
 
-    item_indent = ""
-    m = re.search(r"^(\s*)\\(?:item|resumeItem)\b", orig, re.M)
+    item_indent = "        "
+    m = re.search(r"^([ \t]*)\\(?:item|resumeItem)\b", orig, re.M)
     if m:
         item_indent = m.group(1)
 
+    item_list_indent = "      "
+    m = re.search(r"^([ \t]*)\\resumeItemListStart", orig, re.M)
+    if m:
+        item_list_indent = m.group(1)
+
+    sub_list_indent = "  "
+    m = re.search(r"^([ \t]*)\\resumeSubHeadingListStart", orig, re.M)
+    if m:
+        sub_list_indent = m.group(1)
+
+    sub_indent = "    "
+    m = re.search(r"^([ \t]*)\\resumeSubheading\b", orig, re.M)
+    if m:
+        sub_indent = m.group(1)
+
     out_lines = []
     # Keep the section header line verbatim
-    if block["kind"] == "section" and block["lines"]:
-        out_lines.append(block["lines"][0])
+    if block["kind"] == "section" and bl:
+        out_lines.append(bl[0])
     elif block["kind"] == "header":
         return block["lines"]
+
+    if has_sub_list:
+        out_lines.append(f"{sub_list_indent}\\resumeSubHeadingListStart")
 
     items = []
     heading_group = []  # pending @-prefixed heading fields
@@ -392,14 +422,16 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
             company, loc = fields.get("COMPANY", ""), fields.get("LOC", "")
             role, dates = fields.get("ROLE", ""), fields.get("DATES", "")
             if sub_multiline:
-                out_lines.append("\\resumeSubheading")
-                out_lines.append(f"{{{company}}}{{{loc}}}")
-                out_lines.append(f"{{{role}}}{{{dates}}}")
+                out_lines.append(f"{sub_indent}\\resumeSubheading")
+                out_lines.append(f"{sub_indent}  {{{company}}}{{{loc}}}")
+                out_lines.append(f"{sub_indent}  {{{role}}}{{{dates}}}")
             else:
-                out_lines.append(f"\\resumeSubheading{{{company}}}{{{loc}}}{{{role}}}{{{dates}}}")
+                out_lines.append(
+                    f"{sub_indent}\\resumeSubheading{{{company}}}{{{loc}}}{{{role}}}{{{dates}}}"
+                )
         elif has_resume_sub:
             out_lines.append(
-                f"\\resumeSubheading{{{fields.get('COMPANY', '')}}}{{{fields.get('DATES', '')}}}"
+                f"{sub_indent}\\resumeSubheading{{{fields.get('COMPANY', '')}}}{{{fields.get('DATES', '')}}}"
             )
         elif has_role and role_args == 4:
             out_lines.append(
@@ -430,7 +462,11 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
                 rendered.append(f"{item_indent}\\resumeItem{{{content}}}")
             else:
                 rendered.append(f"{item_indent}\\item {content}")
-        if item_env:
+        if has_item_list:
+            out_lines.append(f"{item_list_indent}\\resumeItemListStart")
+            out_lines.extend(rendered)
+            out_lines.append(f"{item_list_indent}\\resumeItemListEnd")
+        elif item_env:
             out_lines.append(f"\\begin{{{item_env}}}")
             out_lines.extend(rendered)
             out_lines.append(f"\\end{{{item_env}}}")
@@ -448,7 +484,14 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
         if stripped.startswith("@") and HEADING_FIELD_RE.match(stripped):
             flush_items()
             fm = HEADING_FIELD_RE.match(stripped)
-            heading_group.append((fm.group(1), fm.group(2)))
+            field, value = fm.group(1), fm.group(2)
+            # New entry starts when the same lead field repeats (@TITLE…@TITLE or @COMPANY…@COMPANY).
+            # Do NOT flush on @COMPANY after @TITLE — that's the 3-arg \role style.
+            if field == "TITLE" and any(f == "TITLE" for f, _ in heading_group):
+                flush_heading()
+            elif field == "COMPANY" and any(f == "COMPANY" for f, _ in heading_group):
+                flush_heading()
+            heading_group.append((field, value))
             continue
 
         if stripped.startswith("- "):
@@ -475,6 +518,9 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
     if items:
         flush_items()
 
+    if has_sub_list:
+        out_lines.append(f"{sub_list_indent}\\resumeSubHeadingListEnd")
+
     # Collapse consecutive blank lines
     result = []
     for line in out_lines:
@@ -484,7 +530,7 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
 
     # Preserve the block's trailing blank-line separation
     trailing_blanks = 0
-    for ln in reversed(block["lines"]):
+    for ln in reversed(bl):
         if ln.strip() == "":
             trailing_blanks += 1
         else:
@@ -751,7 +797,26 @@ def load_synctex(tmpdir: Path, jobname: str) -> dict:
     return {"pages": {}}
 
 
+_compile_locks: dict[int, asyncio.Lock] = {}
+_locks_guard = asyncio.Lock()
+
+
+async def _lock_for(resume_id: int) -> asyncio.Lock:
+    async with _locks_guard:
+        lock = _compile_locks.get(resume_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _compile_locks[resume_id] = lock
+        return lock
+
+
 async def compile_latex(resume_id: int, latex_content: str) -> dict:
+    lock = await _lock_for(resume_id)
+    async with lock:
+        return await _compile_latex_unlocked(resume_id, latex_content)
+
+
+async def _compile_latex_unlocked(resume_id: int, latex_content: str) -> dict:
     pdflatex = shutil.which("pdflatex")
     if not pdflatex:
         mac_tex = "/Library/TeX/texbin/pdflatex"

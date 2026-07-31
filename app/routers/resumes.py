@@ -1,14 +1,32 @@
 import json
+import re
+
 from fastapi import APIRouter, Request, Form
-from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from pathlib import Path
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, Response
 from ..database import get_db
 from ..services.latex import compile_latex, COMPILED_DIR
 from ..services.ai import ai_assist
+from ..templating import templates
 
 router = APIRouter(prefix="/resume", tags=["resumes"])
-templates = Jinja2Templates(directory=Path(__file__).parent.parent.parent / "templates")
+
+
+def _parse_chat_history(raw) -> list:
+    try:
+        data = json.loads(raw or "[]")
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _strip_accidental_fences(content: str) -> str:
+    """Remove whole-document markdown fences without touching real LaTeX."""
+    s = content.strip()
+    if s.startswith("```"):
+        s = re.sub(r"^```(?:latex|tex)?\s*\n?", "", s, count=1, flags=re.I)
+        if s.endswith("```"):
+            s = s[:-3].rstrip()
+    return s
 
 
 @router.get("/{resume_id}")
@@ -19,7 +37,7 @@ async def editor(request: Request, resume_id: int):
     if not resume:
         return RedirectResponse("/", status_code=303)
     r = dict(resume)
-    r["chat_history"] = json.loads(r.get("chat_history") or "[]")
+    r["chat_history"] = _parse_chat_history(r.get("chat_history"))
     r["has_pdf"] = (COMPILED_DIR / f"{resume_id}.pdf").exists()
     return templates.TemplateResponse("editor.html", {"request": request, "resume": r})
 
@@ -27,31 +45,42 @@ async def editor(request: Request, resume_id: int):
 @router.post("/{resume_id}/save")
 async def save_resume(resume_id: int, latex_content: str = Form(...)):
     async with get_db() as db:
-        await db.execute(
+        cursor = await db.execute(
             "UPDATE resumes SET latex_content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (latex_content, resume_id),
         )
         await db.commit()
+        if cursor.rowcount == 0:
+            return JSONResponse({"ok": False, "error": "Resume not found"}, status_code=404)
     return JSONResponse({"ok": True})
+
+
+@router.post("/{resume_id}/title")
+async def rename_resume(resume_id: int, title: str = Form(...)):
+    cleaned = (title or "").strip()[:120] or "Untitled Resume"
+    async with get_db() as db:
+        cursor = await db.execute(
+            "UPDATE resumes SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (cleaned, resume_id),
+        )
+        await db.commit()
+        if cursor.rowcount == 0:
+            return JSONResponse({"ok": False, "error": "Resume not found"}, status_code=404)
+    return JSONResponse({"ok": True, "title": cleaned})
 
 
 @router.post("/{resume_id}/compile")
 async def compile_resume(resume_id: int, latex_content: str = Form(None)):
-    if latex_content:
-        content = latex_content
-    else:
-        async with get_db() as db:
-            cursor = await db.execute(
-                "SELECT latex_content FROM resumes WHERE id = ?", (resume_id,)
-            )
-            row = await cursor.fetchone()
-        if not row:
-            return JSONResponse({"success": False, "error": "Resume not found"}, status_code=404)
-        content = row["latex_content"]
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT latex_content FROM resumes WHERE id = ?", (resume_id,)
+        )
+        row = await cursor.fetchone()
+    if not row:
+        return JSONResponse({"success": False, "error": "Resume not found"}, status_code=404)
 
-    content = content.strip()
-    if content.endswith("```"):
-        content = content[:-3].rstrip()
+    content = latex_content if latex_content else row["latex_content"]
+    content = _strip_accidental_fences(content)
 
     result = await compile_latex(resume_id, content)
 
@@ -99,7 +128,7 @@ async def assist_ai(resume_id: int, prompt: str = Form(...)):
     if not row:
         return JSONResponse({"success": False, "error": "Resume not found"}, status_code=404)
 
-    history = json.loads(row["chat_history"] or "[]")
+    history = _parse_chat_history(row["chat_history"])
     result = await ai_assist(row["latex_content"], prompt, history)
 
     if result["success"]:
@@ -124,10 +153,12 @@ async def assist_ai(resume_id: int, prompt: str = Form(...)):
 @router.post("/{resume_id}/clear-chat")
 async def clear_chat(resume_id: int):
     async with get_db() as db:
-        await db.execute(
+        cursor = await db.execute(
             "UPDATE resumes SET chat_history = '[]' WHERE id = ?", (resume_id,)
         )
         await db.commit()
+        if cursor.rowcount == 0:
+            return JSONResponse({"ok": False, "error": "Resume not found"}, status_code=404)
     return JSONResponse({"ok": True})
 
 
@@ -135,20 +166,34 @@ async def clear_chat(resume_id: int):
 async def get_synctex(resume_id: int):
     synctex_path = COMPILED_DIR / f"{resume_id}.synctex.json"
     if not synctex_path.exists():
-        return JSONResponse({"pages": {}, "blocks": {}})
+        return JSONResponse({"pages": {}})
     try:
         data = json.loads(synctex_path.read_text(encoding="utf-8"))
-        return JSONResponse(data)
+        if not isinstance(data, dict):
+            return JSONResponse({"pages": {}})
+        pages = data.get("pages") or {}
+        return JSONResponse({"pages": {str(k): v for k, v in pages.items()}})
     except Exception:
-        return JSONResponse({"pages": {}, "blocks": {}})
+        return JSONResponse({"pages": {}})
 
 
-@router.get("/{resume_id}/delete")
-async def delete_resume(resume_id: int):
+@router.post("/{resume_id}/delete")
+async def delete_resume(request: Request, resume_id: int):
     async with get_db() as db:
         await db.execute("DELETE FROM resumes WHERE id = ?", (resume_id,))
         await db.commit()
     for suffix in (".pdf", ".synctex.json"):
         path = COMPILED_DIR / f"{resume_id}{suffix}"
         path.unlink(missing_ok=True)
+    if request.headers.get("hx-request", "").lower() == "true":
+        return Response(status_code=200)
     return RedirectResponse("/", status_code=303)
+
+
+@router.get("/{resume_id}/delete")
+async def delete_resume_get_blocked(resume_id: int):
+    """GET delete is blocked (CSRF). Use POST."""
+    return JSONResponse(
+        {"ok": False, "error": "Use POST /resume/{id}/delete to delete."},
+        status_code=405,
+    )

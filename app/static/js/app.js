@@ -123,6 +123,59 @@
   }
   window.resumateSave = save;
 
+  /* ── Title rename ────────────────────────────────────────── */
+  var titleInput = document.getElementById("resume-title");
+  var titleTimer = null;
+  if (titleInput) {
+    var lastTitle = titleInput.value;
+    function saveTitle() {
+      var t = titleInput.value.trim() || "Untitled Resume";
+      if (t === lastTitle) return;
+      var fd = new FormData();
+      fd.append("title", t);
+      fetch("/resume/" + resumeId + "/title", { method: "POST", body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.ok) {
+            lastTitle = d.title || t;
+            titleInput.value = lastTitle;
+            document.title = lastTitle + " — Resumate";
+            setStatus("Renamed", "saved", 1200);
+          }
+        })
+        .catch(function () {
+          showToast("Failed to rename", "error");
+        });
+    }
+    titleInput.addEventListener("input", function () {
+      clearTimeout(titleTimer);
+      titleTimer = setTimeout(saveTitle, 700);
+    });
+    titleInput.addEventListener("blur", saveTitle);
+    titleInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        titleInput.blur();
+      }
+    });
+  }
+
+  /* ── Focus mode ──────────────────────────────────────────── */
+  var focusBtn = document.getElementById("focus-toggle");
+  var LS_FOCUS = "resumate-focus";
+  function applyFocus(on) {
+    document.body.classList.toggle("focus-mode", !!on);
+    if (focusBtn) focusBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    localStorage.setItem(LS_FOCUS, on ? "1" : "0");
+    editor.refresh();
+  }
+  if (localStorage.getItem(LS_FOCUS) === "1") applyFocus(true);
+  if (focusBtn) {
+    focusBtn.addEventListener("click", function () {
+      applyFocus(!document.body.classList.contains("focus-mode"));
+    });
+  }
+
   /* ── Compile ─────────────────────────────────────────────── */
   var compiling = false;
   var pdfRenderToken = 0;
@@ -130,6 +183,16 @@
   function setPreviewLoading(on) {
     var el = document.getElementById("pdf-container");
     if (el) el.classList.toggle("is-loading", !!on);
+  }
+
+  function flashPreview() {
+    var pane = document.getElementById("preview-pane");
+    if (!pane) return;
+    pane.classList.remove("is-fresh");
+    // force reflow so the animation can replay
+    void pane.offsetWidth;
+    pane.classList.add("is-fresh");
+    setTimeout(function () { pane.classList.remove("is-fresh"); }, 900);
   }
 
   function compile(opts) {
@@ -158,7 +221,7 @@
         clearErrorLines();
         if (d.success) {
           var url = "/resume/" + resumeId + "/pdf?t=" + Date.now();
-          setStatus(d.pages ? "Ready · " + d.pages + "p" : "Ready", "saved", 2200);
+          setStatus(d.pages ? "Ready · " + d.pages + "p" : "Ready", "saved", 2400);
           var pc = document.getElementById("page-count");
           if (pc) pc.textContent = d.pages ? d.pages + (d.pages === 1 ? " page" : " pages") : "";
           var ph = document.getElementById("pdf-placeholder");
@@ -167,11 +230,12 @@
           if (ep) ep.remove();
           var dl = document.getElementById("download-pdf-btn");
           if (dl) dl.classList.remove("is-hidden");
+          flashPreview();
           renderPDF(url);
         } else {
           setPreviewLoading(false);
           if (d.errors && d.errors.length) markErrorLines(d.errors);
-          setStatus("Compile error", "error", 5000);
+          setStatus("compile failed", "error", 5000);
           if (!opts.quiet) showToast("Compilation failed", "error");
           var pane = document.getElementById("preview-pane");
           var ep2 = document.getElementById("error-panel");
@@ -257,7 +321,7 @@
     );
     setTimeout(function () {
       if (syncFlash) { syncFlash.clear(); syncFlash = null; }
-    }, 1000);
+    }, 1800);
   }
 
   function renderPDF(url) {
@@ -368,7 +432,7 @@
   function applyAiHeight(px) {
     if (!aiPanel) return px;
     var paneH = edPane.getBoundingClientRect().height;
-    var minH = 120;
+    var minH = 220;
     var maxH = Math.max(minH, paneH - 140);
     px = Math.max(minH, Math.min(maxH, Math.round(px)));
     aiPanel.style.height = px + "px";
@@ -381,8 +445,9 @@
     var savedPct = parseFloat(localStorage.getItem(LS_SPLIT) || "");
     if (!isNaN(savedPct)) applySplitPct(savedPct);
     var savedAi = parseFloat(localStorage.getItem(LS_AI) || "");
-    if (!isNaN(savedAi)) applyAiHeight(savedAi);
-    else applyAiHeight(200);
+    // Old saves often crushed the thread to ~20px — bump tiny values to the default.
+    if (!isNaN(savedAi) && savedAi >= 220) applyAiHeight(savedAi);
+    else applyAiHeight(260);
   })();
 
   function beginResize(target, handle, cursor) {
@@ -449,6 +514,10 @@
       e.preventDefault();
       if (aiInput) aiInput.focus();
     }
+    if (mod && e.shiftKey && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      applyFocus(!document.body.classList.contains("focus-mode"));
+    }
   });
 
   (function autoRenderExisting() {
@@ -490,8 +559,9 @@
     clearEmptyState();
     var div = document.createElement("div");
     div.className = "ai-msg ai-msg-" + role;
-    div.innerHTML = '<div class="ai-msg-role">' + (role === "user" ? "You" : "AI") +
-      '</div><div class="ai-msg-text">' + esc(text) + "</div>";
+    div.innerHTML = '<div class="ai-msg-head"><div class="ai-msg-role">' +
+      (role === "user" ? "You" : "AI") +
+      '</div></div><div class="ai-msg-text">' + esc(text) + "</div>";
     aiThread.appendChild(div);
     aiThread.scrollTop = aiThread.scrollHeight;
     updateCount();
@@ -536,9 +606,10 @@
   function attachRevertButton(snapshot) {
     if (!aiThread || snapshot == null) return;
     var last = aiThread.lastElementChild;
-    if (!last) return;
-    var textEl = last.querySelector(".ai-msg-text");
-    if (!textEl) return;
+    if (!last || !last.classList.contains("ai-msg-assistant")) return;
+    if (last.querySelector(".ai-revert-btn")) return;
+    var head = last.querySelector(".ai-msg-head");
+    if (!head) return;
     var btn = document.createElement("button");
     btn.type = "button";
     btn.className = "ai-revert-btn";
@@ -556,7 +627,10 @@
       btn.remove();
       compile({ quiet: true });
     });
-    textEl.appendChild(btn);
+    head.appendChild(btn);
+    requestAnimationFrame(function () {
+      last.scrollIntoView({ block: "nearest" });
+    });
   }
 
   function sendAI() {
@@ -573,7 +647,7 @@
 
     var thinking = document.createElement("div");
     thinking.className = "ai-msg ai-msg-assistant ai-msg-thinking";
-    thinking.innerHTML = '<div class="ai-msg-role">AI</div><div class="ai-msg-text"><span class="spinner"></span> Editing…</div>';
+    thinking.innerHTML = '<div class="ai-msg-head"><div class="ai-msg-role">AI</div></div><div class="ai-msg-text"><span class="spinner"></span> Editing…</div>';
     clearEmptyState();
     aiThread.appendChild(thinking);
     aiThread.scrollTop = aiThread.scrollHeight;
@@ -612,7 +686,7 @@
     fetch("/resume/" + resumeId + "/clear-chat", { method: "POST" })
       .then(function () {
         if (aiThread) {
-          aiThread.innerHTML = '<div class="ai-empty-state"><div class="ai-empty-text">Describe an edit, or use a shortcut above.</div></div>';
+          aiThread.innerHTML = '<div class="ai-empty-state"><div class="ai-empty-text">Describe an edit. Structure and LaTeX commands stay intact.</div><div class="ai-empty-hint">Shortcuts above, or type a specific request</div></div>';
         }
         updateCount();
       });
