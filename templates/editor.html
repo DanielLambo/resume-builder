@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ resume.title }} — Resumate{% endblock %}
+{% block title %}Editor — Resumate{% endblock %}
 {% block body_class %}is-editor{% endblock %}
 {% block main_class %}editor-wrap{% endblock %}
 
@@ -22,69 +22,98 @@
   <div class="editor-title-wrap">
     <span class="dirty-dot" id="dirty-dot" title="Unsaved changes" hidden></span>
     <input class="editor-title" id="resume-title" type="text"
-           value="{{ resume.title }}" maxlength="120"
-           title="Click to rename" aria-label="Resume title">
+           value="" maxlength="120"
+           title="Click to rename" aria-label="Resume title" placeholder="Untitled Resume">
   </div>
   <span id="status-pill" class="status-pill" aria-live="polite"></span>
   <div class="editor-actions">
-    <button type="button" class="btn btn-sm btn-ghost" id="focus-toggle" title="Focus mode (hide AI)">Focus</button>
-    <button type="button" class="btn btn-sm btn-ghost" onclick="resumateSave()" title="Save (⌘S)">Save</button>
-    <a id="download-pdf-btn" class="btn btn-sm{% if not resume.has_pdf %} is-hidden{% endif %}"
-       href="/resume/{{ resume.id }}/pdf?download=1" download title="Download PDF">Download</a>
+    <div class="mode-toggle" role="group" aria-label="Editor mode">
+      <button type="button" class="btn btn-sm btn-ghost mode-btn is-active" id="mode-vibe" data-mode="vibe" title="Edit in plain English (⌘⇧E)">Vibe</button>
+      <button type="button" class="btn btn-sm btn-ghost mode-btn" id="mode-code" data-mode="code" title="Edit LaTeX source (⌘⇧E)">Code</button>
+    </div>
+    <button type="button" class="btn btn-sm btn-ghost" id="versions-btn" title="Version history">History</button>
+    <button type="button" id="download-tex-btn" class="btn btn-sm btn-ghost" title="Download .tex source">.tex</button>
+    <button type="button" id="download-pdf-btn" class="btn btn-sm is-hidden" title="Download PDF">PDF</button>
     <button id="compile-btn" type="button" class="btn btn-sm btn-primary" onclick="resumateCompile()" title="Compile (⌘⏎)">
-      Compile
+      Compile <kbd class="kbd">⌘⏎</kbd>
     </button>
   </div>
 </div>
+<div id="compile-progress" class="compile-progress" hidden>
+  <div class="compile-progress-bar"></div>
+  <span id="compile-progress-label" class="compile-progress-label">Working…</span>
+</div>
 
-<div class="editor-split">
+<div class="editor-split" id="editor-split">
   <div class="editor-pane" id="editor-pane">
-    <div class="pane-header">
-      <span class="pane-label">Source</span>
-      <span class="pane-label" id="cursor-pos">Ln 1, Col 1</span>
+    <div class="editor-drop-overlay" id="editor-drop-overlay" hidden>
+      <div class="editor-drop-card">
+        <strong>Drop LaTeX source</strong>
+        <span>Replace the current document with this .tex file</span>
+      </div>
     </div>
-    <textarea id="latex-editor" data-resume-id="{{ resume.id }}">{{ resume.latex_content }}</textarea>
+    <div class="source-region" id="source-region">
+      <div class="pane-header">
+        <span class="pane-label" id="pane-mode-label">Source</span>
+        <span class="pane-meta">
+          <span class="pane-hint" id="drop-hint">Drop .tex to replace</span>
+          <span class="pane-label" id="cursor-pos">1:1</span>
+        </span>
+      </div>
+      <textarea id="latex-editor"></textarea>
+    </div>
 
     <div class="ai-divider" id="ai-divider" title="Drag to resize" role="separator" aria-orientation="horizontal">
       <div class="divider-grip"><span></span><span></span><span></span></div>
     </div>
 
     <div class="ai-panel" id="ai-panel">
-      <div class="ai-label">
-        AI
-        <span class="ai-badge" id="ai-msg-count"></span>
-        <button type="button" class="ai-clear-link" onclick="clearChat()" title="Clear chat">Clear</button>
+      <div class="ai-toolbar">
+        <div class="ai-toolbar-title">
+          <span class="ai-title">Ask AI</span>
+          <span class="ai-badge" id="ai-msg-count"></span>
+        </div>
+        <div class="ai-toolbar-actions">
+          <button type="button" class="source-peek-btn" id="source-peek-btn" hidden>Show source</button>
+          <button type="button" class="ai-tool-btn" id="ats-check-btn" title="Score this resume for ATS">ATS</button>
+          <button type="button" class="ai-tool-btn" id="ai-context-toggle" aria-expanded="false" title="Target role &amp; job description">Context</button>
+          <button type="button" class="ai-tool-btn ai-tool-danger" onclick="clearChat()" title="Clear chat">Clear</button>
+        </div>
       </div>
 
-      <div class="ai-quick-actions">
-        <button type="button" class="ai-quick-btn" data-prompt="polish">Polish</button>
-        <button type="button" class="ai-quick-btn" data-prompt="rewrite">Rewrite</button>
-        <button type="button" class="ai-quick-btn" data-prompt="summary">Summary</button>
-        <button type="button" class="ai-quick-btn" data-prompt="one page">One page</button>
-        <button type="button" class="ai-quick-btn" data-prompt="ats">ATS</button>
-        <button type="button" class="ai-quick-btn" data-prompt="metrics">Metrics</button>
+      <div class="ai-context" id="ai-context" hidden>
+        <input id="ai-target-role" class="ai-role-input" type="text" placeholder="Target role (optional)" autocomplete="off" />
+        <textarea id="ai-jd" class="ai-jd-input" rows="3" placeholder="Paste a job description to tailor toward…"></textarea>
       </div>
 
-      <div class="ai-thread" id="ai-thread">
-        {% if not resume.chat_history %}
+      <div class="ai-scope" id="ai-scope" hidden>
+        <span class="ai-scope-label">Scoped to</span>
+        <span class="ai-scope-chip" id="ai-scope-chip"></span>
+        <button type="button" class="ai-scope-clear" id="ai-scope-clear" title="Clear scope">×</button>
+      </div>
+
+      <div class="ai-quick-actions" id="ai-quick-actions">
+        <button type="button" class="ai-quick-btn" data-action="bullets" title="Paste job notes → resume bullets">Bullets</button>
+        <button type="button" class="ai-quick-btn" data-action="polish" title="Tighten wording, keep meaning">Polish</button>
+        <button type="button" class="ai-quick-btn" data-action="humanize" title="Sound more natural">Humanize</button>
+        <button type="button" class="ai-quick-btn" data-action="verbs" title="Stronger action verbs">Verbs</button>
+        <button type="button" class="ai-quick-btn" data-action="metrics" title="Add honest numbers where possible">Metrics</button>
+        <button type="button" class="ai-quick-btn" data-action="summary" title="Rewrite the summary">Summary</button>
+        <button type="button" class="ai-quick-btn" data-action="onepage" title="Fit to one page">One page</button>
+        <button type="button" class="ai-quick-btn" data-action="tailor" data-needs-jd="1" title="Align to the pasted JD">Tailor</button>
+      </div>
+
+      <div class="ai-insights" id="ai-insights" hidden></div>
+
+      <div class="ai-thread is-empty" id="ai-thread">
         <div class="ai-empty-state">
-          <div class="ai-empty-text">Describe an edit. Structure and LaTeX commands stay intact.</div>
-          <div class="ai-empty-hint">Shortcuts above, or type a specific request</div>
+          <div class="ai-empty-text">Ask for a clean edit, or paste a job description and tailor.</div>
+          <div class="ai-empty-hint">Tailor · bullets from notes · click the PDF to target a section</div>
         </div>
-        {% endif %}
-        {% for msg in resume.chat_history %}
-        <div class="ai-msg ai-msg-{{ msg.role }}">
-          <div class="ai-msg-head">
-            <div class="ai-msg-role">{{ "You" if msg.role == "user" else "AI" }}</div>
-          </div>
-          <div class="ai-msg-text">{{ msg.content }}</div>
-        </div>
-        {% endfor %}
       </div>
 
       <div class="ai-bar">
-        <input id="ai-target-role" class="ai-role-input" type="text" placeholder="Target role (optional)" />
-        <textarea id="ai-input" class="ai-input" rows="1" placeholder="e.g. Shorten every bullet"></textarea>
+        <textarea id="ai-input" class="ai-input" rows="2" placeholder="Describe an edit, or paste a job description to tailor…"></textarea>
         <button type="button" id="ai-send" class="ai-send">Send</button>
       </div>
     </div>
@@ -98,14 +127,31 @@
   <div class="preview-pane" id="preview-pane">
     <div class="pane-header">
       <span class="pane-label">Preview</span>
+      <label class="live-toggle" title="Recompile a few seconds after you stop typing">
+        <input type="checkbox" id="live-compile" checked>
+        Live
+      </label>
       <span class="pane-label" id="page-count"></span>
     </div>
     <div class="pdf-container" id="pdf-container">
       <div class="pdf-placeholder" id="pdf-placeholder">
-        <p>Press <kbd class="kbd">⌘⏎</kbd> to compile</p>
+        <div class="pdf-empty-icon" aria-hidden="true"></div>
+        <p>Compile to preview</p>
+        <p class="pdf-empty-hint"><kbd class="kbd">⌘⏎</kbd> · Live recompiles as you edit</p>
       </div>
       <div class="pdf-pages" id="pdf-pages"></div>
     </div>
   </div>
+</div>
+
+<div class="versions-drawer" id="versions-drawer" hidden>
+  <div class="versions-head">
+    <div>
+      <strong>History</strong>
+      <span class="versions-sub"> · this browser only</span>
+    </div>
+    <button type="button" class="btn btn-sm btn-ghost" id="versions-close">Close</button>
+  </div>
+  <div class="versions-list" id="versions-list"></div>
 </div>
 {% endblock %}

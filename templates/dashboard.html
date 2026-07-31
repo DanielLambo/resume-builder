@@ -1,44 +1,68 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — Resumate{% endblock %}
+{% block title %}Resumate{% endblock %}
+{% block body_class %}is-home{% endblock %}
 {% block content %}
 <div class="dashboard">
-  <div class="page-header">
-    <div>
-      <h1>Resumate</h1>
-      <p class="page-sub">Local-first LaTeX resumes with live PDF preview and AI that preserves your source.</p>
-      <p class="trust-row">Runs on your machine · Private by default · Instant compile</p>
+  <section class="home-hero">
+    <div class="home-hero-copy">
+      <p class="home-eyebrow">Clean edits · tailored for each job</p>
+      <h1 class="home-brand">Resumate</h1>
+      <p class="home-lead">Edit your resume cleanly, in plain English. Most jobs want a tailored version now. Spin one without starting over.</p>
+      <div class="home-ctas">
+        {% if default_template_id is not none %}
+        <form class="inline-form" data-create-template>
+          <input type="hidden" name="template_id" value="{{ default_template_id }}">
+          <input type="hidden" name="title" value="My Resume">
+          <button type="submit" class="btn btn-primary btn-lg">Start editing</button>
+        </form>
+        {% else %}
+        <a href="/templates" class="btn btn-primary btn-lg">Browse templates</a>
+        {% endif %}
+        <button type="button" class="btn btn-lg" id="home-upload-btn">Upload yours</button>
+        <a href="/templates" class="btn btn-ghost btn-lg home-templates-link">Templates</a>
+      </div>
+      <p class="home-trust">Stays in this browser. Only AI edits and PDF compile leave your device.</p>
     </div>
-    <div class="header-actions">
-      <label class="btn upload-btn" for="upload-input">Upload</label>
-      <a href="/templates" class="btn">Templates</a>
-      {% if default_template_id %}
-      <form method="post" action="/resume/new" class="inline-form">
-        <input type="hidden" name="template_id" value="{{ default_template_id }}">
-        <input type="hidden" name="title" value="My Resume">
-        <button type="submit" class="btn btn-primary">New resume</button>
-      </form>
-      {% else %}
-      <a href="/templates" class="btn btn-primary">New resume</a>
-      {% endif %}
+    <div class="home-hero-visual" aria-hidden="true">
+      <div class="home-doc">
+        <div class="home-doc-bar"></div>
+        <div class="home-doc-name"></div>
+        <div class="home-doc-meta"></div>
+        <div class="home-doc-rule"></div>
+        <div class="home-doc-line"></div>
+        <div class="home-doc-line short"></div>
+        <div class="home-doc-rule faint"></div>
+        <div class="home-doc-line"></div>
+        <div class="home-doc-line"></div>
+        <div class="home-doc-line short"></div>
+        <div class="home-doc-line"></div>
+        <div class="home-doc-glow"></div>
+      </div>
     </div>
-  </div>
+  </section>
 
   {% if error %}
   <div class="upload-error">{{ error }}</div>
   {% endif %}
 
   <div class="upload-panel" id="upload-panel">
-    <form method="POST" action="/upload" enctype="multipart/form-data" class="upload-form">
-      <div class="upload-drop" id="upload-drop">
-        <p class="upload-drop-text">Drop a file here or <span class="upload-browse">browse</span></p>
-        <p class="upload-drop-hint">PDF, DOCX, TXT, or TEX</p>
+    <form class="upload-form" action="#">
+      <div class="upload-drop" id="upload-drop" tabindex="0" role="button" aria-label="Upload resume file">
+        <div class="upload-drop-icon" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 16V6"/><path d="M8 10l4-4 4 4"/><path d="M4 18h16"/>
+          </svg>
+        </div>
+        <p class="upload-drop-text">Drop resume here, or <span class="upload-browse">browse</span></p>
+        <p class="upload-drop-hint">PDF · DOCX · TXT · TEX · max 10 MB</p>
+        <p class="upload-drop-error" id="upload-drop-error" hidden></p>
         <input type="file" name="file" id="upload-input" accept=".pdf,.docx,.txt,.tex" hidden>
       </div>
       <div class="upload-options">
         <input class="input upload-title-input" type="text" name="title" placeholder="Title" value="Uploaded Resume">
         <select class="input upload-tpl-select" name="template_id">
           {% for t in templates %}
-          <option value="{{ t.id }}"{% if default_template_id and t.id == default_template_id %} selected{% endif %}>{{ t.name }}</option>
+          <option value="{{ t.id }}"{% if default_template_id is not none and t.id == default_template_id %} selected{% endif %}>{{ t.name }}</option>
           {% endfor %}
         </select>
         <button type="submit" class="btn btn-primary upload-submit" disabled>Import</button>
@@ -46,119 +70,51 @@
     </form>
   </div>
 
-  {% if resumes %}
-  <div class="resume-grid">
-    {% for r in resumes %}
-    <div class="resume-card" style="animation-delay:{{ loop.index0 * 0.03 }}s">
-      <a href="/resume/{{ r.id }}" class="resume-card-main">
-        <div class="resume-card-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        </div>
-        <div class="resume-card-info">
-          <h3>{{ r.title }}</h3>
-          <span class="resume-card-date">{{ r.updated_at[:10] }}{% if r.has_pdf %} · PDF ready{% endif %}</span>
-        </div>
-      </a>
-      <div class="resume-card-actions">
-        <a href="/resume/{{ r.id }}" class="btn btn-sm btn-primary">Open</a>
-        {% if r.has_pdf %}
-        <a href="/resume/{{ r.id }}/pdf?download=1" class="btn btn-sm" download>PDF</a>
+  <section class="home-library" id="home-library" hidden>
+    <div class="home-library-head">
+      <h2>Your resumes</h2>
+      <div class="header-actions">
+        <button type="button" class="btn upload-btn" id="home-upload-btn-2">Upload</button>
+        {% if default_template_id is not none %}
+        <form class="inline-form" data-create-template>
+          <input type="hidden" name="template_id" value="{{ default_template_id }}">
+          <input type="hidden" name="title" value="My Resume">
+          <button type="submit" class="btn btn-primary">New</button>
+        </form>
         {% endif %}
-        <span class="flex-spacer"></span>
-        <button type="button"
-           class="btn btn-sm btn-ghost btn-danger-text"
-           hx-post="/resume/{{ r.id }}/delete"
-           hx-confirm="Delete “{{ r.title }}”?"
-           hx-target="closest .resume-card"
-           hx-swap="delete">
-          Delete
-        </button>
       </div>
     </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="empty-state">
-    <h2>Create your first resume</h2>
-    <p>Start from Jake’s ATS-friendly template, or upload a PDF, DOCX, or TEX file you already have.</p>
-    <div class="empty-actions">
-      {% if default_template_id %}
-      <form method="post" action="/resume/new" class="inline-form">
+    <div class="resume-grid" id="resume-library-list"></div>
+  </section>
+
+  <section class="home-empty" id="home-empty" hidden>
+    <h2>Nothing in this browser yet</h2>
+    <p>Start from a template or upload what you have. Keep a tailored copy for each application.</p>
+    <div class="home-empty-actions">
+      {% if default_template_id is not none %}
+      <form class="inline-form" data-create-template>
         <input type="hidden" name="template_id" value="{{ default_template_id }}">
         <input type="hidden" name="title" value="My Resume">
-        <button type="submit" class="btn btn-primary">Create resume</button>
+        <button type="submit" class="btn btn-primary">Start editing</button>
       </form>
       {% endif %}
-      <label class="btn" for="upload-input">Upload existing</label>
+      <button type="button" class="btn" id="home-empty-upload">Upload existing</button>
     </div>
-  </div>
-  {% endif %}
+  </section>
 </div>
+{% endblock %}
 
+{% block scripts %}
+<script src="/static/js/upload.js?v={{ asset_ver }}"></script>
+<script src="/static/js/library.js?v={{ asset_ver }}"></script>
 <script>
-(function() {
-  var input = document.getElementById("upload-input");
-  var drop = document.getElementById("upload-drop");
-  var submit = document.querySelector(".upload-submit");
-  var titleInput = document.querySelector(".upload-title-input");
-  var tplSelect = document.querySelector(".upload-tpl-select");
-  var form = document.querySelector(".upload-form");
-  var panel = document.getElementById("upload-panel");
-  var uploadBtn = document.querySelector(".upload-btn");
-
-  function showPanel(e) {
-    if (e) e.preventDefault();
-    panel.classList.add("visible");
-    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }
-
-  if (uploadBtn) uploadBtn.addEventListener("click", function(e) {
-    e.preventDefault();
-    panel.classList.toggle("visible");
-  });
-  document.querySelectorAll(".empty-actions label.btn").forEach(function(el) {
-    el.addEventListener("click", showPanel);
-  });
-
-  if (input) {
-    input.addEventListener("change", function() {
-      if (input.files.length > 0) {
-        var f = input.files[0];
-        var isTex = f.name.toLowerCase().endsWith(".tex");
-        drop.classList.add("has-file");
-        drop.querySelector(".upload-drop-text").textContent = f.name;
-        drop.querySelector(".upload-drop-hint").textContent = (f.size / 1024).toFixed(1) + " KB";
-        submit.disabled = false;
-        submit.textContent = isTex ? "Import .tex" : "Convert";
-        if (tplSelect) tplSelect.style.display = isTex ? "none" : "";
-        if (titleInput && (titleInput.value === "Uploaded Resume" || !titleInput.dataset.touched)) {
-          titleInput.value = f.name.replace(/\.[^.]+$/, "");
-        }
-        panel.classList.add("visible");
-      }
+  (function () {
+    var b = document.getElementById("home-upload-btn-2");
+    var panel = document.getElementById("upload-panel");
+    if (b && panel) b.addEventListener("click", function () {
+      panel.classList.add("visible");
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
-  }
-  if (titleInput) titleInput.addEventListener("input", function() { titleInput.dataset.touched = "1"; });
-
-  if (form) {
-    form.addEventListener("submit", function() {
-      submit.disabled = true;
-      submit.innerHTML = '<span class="spinner"></span> Working…';
-    });
-  }
-
-  if (drop) {
-    drop.addEventListener("dragover", function(e) { e.preventDefault(); drop.classList.add("drag-over"); });
-    drop.addEventListener("dragleave", function() { drop.classList.remove("drag-over"); });
-    drop.addEventListener("drop", function(e) {
-      e.preventDefault(); drop.classList.remove("drag-over");
-      if (e.dataTransfer.files.length > 0) {
-        input.files = e.dataTransfer.files;
-        input.dispatchEvent(new Event("change"));
-      }
-    });
-    drop.addEventListener("click", function() { input.click(); });
-  }
-})();
+  })();
 </script>
 {% endblock %}

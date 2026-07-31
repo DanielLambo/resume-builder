@@ -1,0 +1,128 @@
+% New Grad — education + projects first (r/EngineeringResumes / Jake-layout conventions).
+% Same command set as Jake's Resume so AI compact edits keep list wrappers intact.
+%-------------------------
+% Based on Jake Gutierrez / sb2nov-style macros (MIT)
+%------------------------
+
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\input{glyphtounicode}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1.0in}
+
+\urlstyle{same}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+\pdfgentounicode=1
+
+\newcommand{\resumeItem}[1]{
+  \item\small{
+    {#1 \vspace{-2pt}}
+  }
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+\begin{document}
+
+\begin{center}
+    \textbf{\Huge \scshape Your Name} \\ \vspace{1pt}
+    \small (555) 555-0100 $|$ \href{mailto:you@email.com}{\underline{you@email.com}} $|$
+    \href{https://linkedin.com/in/you}{\underline{linkedin.com/in/you}} $|$
+    \href{https://github.com/you}{\underline{github.com/you}}
+\end{center}
+
+\section{Education}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {State University}{City, ST}
+      {B.S.\ Computer Science}{Aug. 2022 -- May 2026}
+      \resumeItemListStart
+        \resumeItem{GPA: 3.75/4.00; Dean's List (6 semesters)}
+        \resumeItem{Coursework: Algorithms, Operating Systems, Databases, Networks, ML}
+      \resumeItemListEnd
+  \resumeSubHeadingListEnd
+
+\section{Projects}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {Distributed Cache}{Jan. 2025 -- Mar. 2025}
+      {Go $\cdot$ Redis $\cdot$ Docker}{\href{https://github.com/you/cache}{\underline{GitHub}}}
+      \resumeItemListStart
+        \resumeItem{Built a Redis-compatible cache with LRU eviction and TTL; 12K ops/sec in benchmarks}
+        \resumeItem{Added Prometheus metrics and a docker-compose demo used in course demos}
+      \resumeItemListEnd
+    \resumeSubheading
+      {Course Planner}{Sep. 2024 -- Dec. 2024}
+      {TypeScript $\cdot$ React $\cdot$ Postgres}{\href{https://github.com/you/planner}{\underline{GitHub}}}
+      \resumeItemListStart
+        \resumeItem{Web app that recommends schedules from degree requirements for 200+ sample majors}
+        \resumeItem{Wrote integration tests and CI; deployed on a free-tier host for classmates}
+      \resumeItemListEnd
+  \resumeSubHeadingListEnd
+
+\section{Experience}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {Software Engineering Intern}{May 2025 -- Aug. 2025}
+      {Company Name}{City, ST}
+      \resumeItemListStart
+        \resumeItem{Shipped a feature API used by 3 client apps; added pagination and auth checks}
+        \resumeItem{Wrote unit tests that caught 2 production bugs before release}
+      \resumeItemListEnd
+    \resumeSubheading
+      {Teaching Assistant, Data Structures}{Jan. 2024 -- May 2024}
+      {State University}{City, ST}
+      \resumeItemListStart
+        \resumeItem{Held weekly labs for 35 students; graded projects and office hours}
+      \resumeItemListEnd
+  \resumeSubHeadingListEnd
+
+\section{Technical Skills}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+     \textbf{Languages}{: Python, Java, TypeScript, SQL, C++} \\
+     \textbf{Frameworks}{: React, Node.js, FastAPI, Flask} \\
+     \textbf{Developer Tools}{: Git, Docker, Linux, VS Code, GitHub Actions}
+    }}
+ \end{itemize}
+
+\end{document}

@@ -145,28 +145,27 @@ async def test_ai_requires_api_key(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ai_endpoint_saves(app_client, monkeypatch):
+async def test_ai_endpoint_stateless(app_client, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
-    resp = await app_client.post(
-        "/resume/new",
-        data={"template_id": "1", "title": "API Test"},
-        follow_redirects=False,
-    )
-    assert resp.status_code == 303
-    resume_id = int(resp.headers["location"].rsplit("/", 1)[-1])
-
-    await app_client.post(f"/resume/{resume_id}/save", data={"latex_content": SAMPLE_LATEX})
-
     sections = "SECTION Summary\nEndpoint-level polish applied.\n"
-    with (
-        patch.object(ai_mod, "_chat_completion", new=AsyncMock(return_value=_completion(sections))),
-        patch.object(ai_mod, "_compiles_ok", new=AsyncMock(return_value=(True, ""))),
+    with patch(
+        "app.routers.api.ai_assist",
+        new=AsyncMock(
+            return_value={
+                "success": True,
+                "latex_content": SAMPLE_LATEX + "\n% Endpoint-level polish applied.\n",
+                "ai_reply": "Done.",
+            }
+        ),
     ):
-        resp = await app_client.post(f"/resume/{resume_id}/ai", data={"prompt": "Polish summary"})
+        resp = await app_client.post(
+            "/api/ai",
+            data={"latex_content": SAMPLE_LATEX, "prompt": "Polish summary", "history": "[]"},
+        )
 
     data = resp.json()
     assert data["success"] is True
-    assert data.get("saved") is True
+    assert "saved" not in data
     assert "Endpoint-level polish applied." in data["latex_content"]
 
 
@@ -213,3 +212,102 @@ async def test_ai_assist_simple_rename_path(monkeypatch):
     assert result["success"] is True
     assert "Alabama A \\& M" in result["latex_content"]
     assert "Southwestern University" not in result["latex_content"]
+
+
+def test_normalize_jd_tailor():
+    out = ai_mod._normalize_prompt(
+        "[Job description]\nNeed Go and Postgres\n[/Job description]\ntailor"
+    )
+    assert "TARGET JOB DESCRIPTION" in out
+    assert "Go and Postgres" in out
+
+
+def test_humanize_alias():
+    out = ai_mod._normalize_prompt("humanize")
+    assert "De-cringe" in out or "human" in out.lower()
+
+
+@pytest.mark.asyncio
+async def test_ai_spacing_request_tightens_layout(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    # Should not call the model — deterministic layout pass
+    with (
+        patch.object(ai_mod, "_chat_completion", new=AsyncMock(side_effect=AssertionError("no LLM"))),
+        patch.object(ai_mod, "_compiles_ok", new=AsyncMock(return_value=(True, ""))),
+    ):
+        result = await ai_mod.ai_assist(
+            SAMPLE_LATEX, "everything is far apart make sections closer to each other"
+        )
+    assert result["success"] is True
+    assert "closer" in result["ai_reply"].lower() or "whitespace" in result["ai_reply"].lower()
+    # Section gap shrunk from 0.7em
+    assert "\\vspace{0.7em}" not in result["latex_content"]
+    assert "Built payment APIs" in result["latex_content"]
+
+
+def test_tighten_section_spacing_scales_vspace():
+    from app.services.latex import tighten_section_spacing
+
+    src = SAMPLE_LATEX
+    out = tighten_section_spacing(src, factor=0.55)
+    assert out != src
+    assert "\\vspace{0.7em}" not in out
+    assert "Jane Doe" in out
+
+
+def test_enrich_material_prompt_wraps_notes():
+    notes = (
+        "I built payment webhooks in Go, reduced chargeback rate, mentored two interns, "
+        "and rewrote the ledger reconciler that processes about 50k events a day.\n"
+        "Also owned pager for billing.\n"
+        "Migrated Redis cache keys without downtime."
+    )
+    out = ai_mod._normalize_prompt(notes)
+    assert "CANDIDATE WORK NOTES" in out
+    assert "Material → bullets" in out
+    assert "payment webhooks" in out
+
+
+@pytest.mark.asyncio
+async def test_ai_material_to_bullets(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    notes = (
+        "Turn these work notes into bullets for Acme:\n\n"
+        "I owned billing APIs in Go. Cut p99 from 800ms to 120ms by rewriting the "
+        "query layer. Built a backfill that moved 2M ledger rows. Mentored two "
+        "junior engineers on on-call. Shipped invoice PDF generation used by finance."
+    )
+    sections = (
+        "SECTION Experience\n"
+        "@TITLE Software Engineer\n"
+        "@COMPANY Acme Corp\n"
+        "@DETAILS Remote \\quad Jan 2024 -- Present\n"
+        "- Owned Go billing APIs; cut p99 from 800ms to 120ms via query rewrite.\n"
+        "- Built ledger backfill moving 2M rows without downtime.\n"
+        "- Shipped invoice PDF generation used by finance.\n"
+        "- Mentored two junior engineers on the billing on-call rotation.\n"
+        "@TITLE Intern\n"
+        "@COMPANY Beta Labs\n"
+        "@DETAILS City, ST \\quad May 2023 -- Aug 2023\n"
+        "- Shipped internal tooling used by 12 engineers.\n"
+    )
+    captured = {}
+
+    async def capture(messages, temperature, max_tokens):
+        captured["user"] = messages[-1]["content"]
+        captured["max_tokens"] = max_tokens
+        return _completion(sections)
+
+    with (
+        patch.object(ai_mod, "_chat_completion", new=capture),
+        patch.object(ai_mod, "_compiles_ok", new=AsyncMock(return_value=(True, ""))),
+    ):
+        result = await ai_mod.ai_assist(SAMPLE_LATEX, notes)
+
+    assert result["success"] is True
+    assert "CANDIDATE WORK NOTES" in captured["user"] or "work notes" in captured["user"].lower()
+    assert captured["max_tokens"] >= 8192
+    assert "ledger backfill" in result["latex_content"]
+    assert "invoice PDF" in result["latex_content"]
+    assert "Beta Labs" in result["latex_content"]
+    assert "Turned your notes into resume bullets" in result["ai_reply"]

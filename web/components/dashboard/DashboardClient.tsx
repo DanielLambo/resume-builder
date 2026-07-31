@@ -1,0 +1,238 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+
+import {
+  createResumeAction,
+  deleteResumeAction,
+  duplicateResumeAction,
+  getResumePdfSignedUrlAction,
+} from "@/app/actions/resumes";
+import type { ResumeRow } from "@/lib/database.types";
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
+function ResumeCardSkeleton() {
+  return (
+    <div className="animate-pulse border border-studio-border bg-studio-paper p-4">
+      <div className="mb-3 h-24 bg-studio-canvas" />
+      <div className="mb-2 h-4 w-2/3 bg-studio-canvas" />
+      <div className="h-3 w-1/3 bg-studio-canvas" />
+    </div>
+  );
+}
+
+export function DashboardClient({
+  initialResumes,
+}: {
+  initialResumes: ResumeRow[];
+}) {
+  const router = useRouter();
+  const [resumes, setResumes] = useState(initialResumes);
+  const [pending, startTransition] = useTransition();
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  function createNew() {
+    startTransition(async () => {
+      const toastId = toast.loading("Creating resume…");
+      const result = await createResumeAction("My Resume");
+      if (!result.ok || !result.id) {
+        toast.error(result.ok ? "Missing resume id" : result.error, { id: toastId });
+        return;
+      }
+      toast.success("Resume created", { id: toastId });
+      router.push(`/editor/${result.id}`);
+    });
+  }
+
+  function onDuplicate(id: string) {
+    setBusyId(id);
+    startTransition(async () => {
+      const result = await duplicateResumeAction(id);
+      setBusyId(null);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.message ?? "Duplicated");
+      router.refresh();
+      if (result.id) {
+        const source = resumes.find((r) => r.id === id);
+        if (!source) return;
+        const copy: ResumeRow = {
+          ...source,
+          id: result.id,
+          title: `${source.title} (copy)`,
+          updated_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        };
+        setResumes((prev) => [copy, ...prev]);
+      }
+    });
+  }
+
+  function onDelete(id: string) {
+    if (!confirm("Delete this resume permanently?")) return;
+    setBusyId(id);
+    startTransition(async () => {
+      const result = await deleteResumeAction(id);
+      setBusyId(null);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      setResumes((prev) => prev.filter((r) => r.id !== id));
+      toast.success(result.message ?? "Deleted");
+      router.refresh();
+    });
+  }
+
+  function onDownload(id: string) {
+    setBusyId(id);
+    startTransition(async () => {
+      const result = await getResumePdfSignedUrlAction(id);
+      setBusyId(null);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      if (!result.url) {
+        toast.error("No PDF URL returned.");
+        return;
+      }
+      window.open(result.url, "_blank", "noopener,noreferrer");
+      toast.success("PDF download ready");
+    });
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <div className="mb-8 flex flex-col gap-4 border-b border-studio-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="font-mono text-xs tracking-wide text-studio-muted">
+            TYPESETTER / LIBRARY
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-studio-ink">
+            Your resumes
+          </h1>
+          <p className="mt-1 max-w-xl text-sm text-studio-muted">
+            Edit cleanly in the studio. Duplicate a sheet for each application.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={createNew}
+          disabled={pending}
+          className="inline-flex items-center justify-center bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white hover:bg-studio-vermilion-hover disabled:opacity-60"
+        >
+          {pending && !busyId ? "Creating…" : "Create New Resume"}
+        </button>
+      </div>
+
+      {resumes.length === 0 ? (
+        <div className="grid place-items-center gap-3 border border-studio-border bg-studio-paper px-6 py-16 text-center shadow-paper-sheet">
+          <h2 className="text-lg font-semibold text-studio-ink">Nothing on the desk yet</h2>
+          <p className="max-w-md text-sm text-studio-muted">
+            Create a resume to open the typesetter. Everything syncs to your account.
+          </p>
+          <button
+            type="button"
+            onClick={createNew}
+            className="mt-2 bg-studio-vermilion px-4 py-2 text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
+          >
+            Create New Resume
+          </button>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {resumes.map((resume) => {
+            const busy = busyId === resume.id;
+            return (
+              <article
+                key={resume.id}
+                className="flex flex-col overflow-hidden border border-studio-border bg-studio-paper shadow-paper-sheet"
+              >
+                <div className="relative h-28 border-b border-studio-border bg-studio-canvas p-4">
+                  <div className="h-full border border-studio-border bg-studio-paper p-3 shadow-sm">
+                    <div className="mb-2 h-2 w-1/2 bg-studio-ink/20" />
+                    <div className="mb-1.5 h-1.5 w-full bg-studio-border" />
+                    <div className="mb-1.5 h-1.5 w-5/6 bg-studio-border" />
+                    <div className="h-1.5 w-2/3 bg-studio-border" />
+                  </div>
+                </div>
+                <div className="flex flex-1 flex-col gap-3 p-4">
+                  <div>
+                    <h2 className="truncate text-base font-semibold text-studio-ink">
+                      {resume.title}
+                    </h2>
+                    <p className="font-mono text-[0.65rem] text-studio-muted">
+                      Updated {formatDate(resume.updated_at)}
+                    </p>
+                  </div>
+                  <div className="mt-auto grid grid-cols-2 gap-2">
+                    <Link
+                      href={`/editor/${resume.id}`}
+                      className="col-span-2 bg-studio-vermilion px-3 py-2 text-center text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
+                    >
+                      Edit in Vibe Coder
+                    </Link>
+                    <button
+                      type="button"
+                      disabled={busy || pending}
+                      onClick={() => onDuplicate(resume.id)}
+                      className="border border-studio-border px-3 py-2 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-50"
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || pending}
+                      onClick={() => onDownload(resume.id)}
+                      className="border border-studio-border px-3 py-2 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-50"
+                    >
+                      Download PDF
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || pending}
+                      onClick={() => onDelete(resume.id)}
+                      className="col-span-2 border border-studio-border px-3 py-2 text-xs font-medium text-studio-vermilion hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function DashboardSkeleton() {
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <div className="mb-8 h-10 w-48 animate-pulse bg-studio-canvas" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ResumeCardSkeleton />
+        <ResumeCardSkeleton />
+        <ResumeCardSkeleton />
+      </div>
+    </div>
+  );
+}
