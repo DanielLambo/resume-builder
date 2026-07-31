@@ -1,0 +1,89 @@
+% Modern SWE — mid-level product/platform engineer (single column, ATS-friendly).
+% Structure mirrors r/EngineeringResumes guidance: summary optional but short,
+% quantified bullets, projects optional when experience is strong.
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=0.55in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{parskip}
+
+\definecolor{accent}{HTML}{0f766e}
+\definecolor{muted}{HTML}{475569}
+
+\newcommand{\resumesection}[1]{%
+  \par\vspace{0.65em}%
+  {\large\bfseries\color{accent}#1}\par
+  \vspace{-0.35em}%
+  \textcolor{accent}{\rule{\textwidth}{0.55pt}}\par
+  \vspace{0.3em}%
+}
+
+\newcommand{\role}[3]{%
+  \noindent\textbf{#1}\hfill\textit{#2}\\
+  \textcolor{muted}{\small #3}\par\vspace{0.12em}
+}
+
+\newenvironment{resumeitemize}{%
+  \begin{list}{\textbullet}{%
+    \setlength{\leftmargin}{1.1em}%
+    \setlength{\itemsep}{0.12em}%
+    \setlength{\parsep}{0pt}%
+    \setlength{\topsep}{0.15em}%
+    \setlength{\partopsep}{0pt}%
+  }%
+}{\end{list}}
+
+\newcommand{\entrygap}{\vspace{0.45em}}
+\pagestyle{empty}
+
+\begin{document}
+\begin{center}
+  {\LARGE\bfseries Your Name}\\[0.3em]
+  {\small
+    \href{mailto:you@email.com}{you@email.com}
+    $\cdot$ \href{https://linkedin.com/in/you}{linkedin.com/in/you}
+    $\cdot$ \href{https://github.com/you}{github.com/you}
+    $\cdot$ City, ST
+  }
+\end{center}
+
+\resumesection{Summary}
+Software engineer focused on APIs, data stores, and reliability for product teams.
+
+\resumesection{Experience}
+\role{Software Engineer}{Acme Corp}{Remote \quad Jan 2023 -- Present}
+\begin{resumeitemize}
+  \item Built billing APIs in Go serving 40K req/day at 99.95\% availability.
+  \item Cut p99 checkout latency from 800ms to 180ms by rewriting the query layer.
+  \item Owned on-call for payments; reduced Sev-1 count 35\% via better alerts and runbooks.
+\end{resumeitemize}
+\entrygap
+\role{Software Engineer}{Beta Labs}{City, ST \quad Jun 2021 -- Dec 2022}
+\begin{resumeitemize}
+  \item Shipped auth and permissions used by 8 product squads; removed a weekly support queue.
+  \item Migrated a legacy MySQL service to Postgres with zero customer-visible downtime.
+  \item Mentored 2 interns; introduced PR templates that raised first-pass review rate.
+\end{resumeitemize}
+\entrygap
+\role{Engineering Intern}{Startup Co}{City, ST \quad May 2020 -- Aug 2020}
+\begin{resumeitemize}
+  \item Implemented webhook ingestion with retries; handled 2M events/week in staging load tests.
+\end{resumeitemize}
+
+\resumesection{Projects}
+\role{OpenAPI Toolkit}{\href{https://github.com/you/project}{github.com/you/project}}{2024}
+\begin{resumeitemize}
+  \item CLI that validates OpenAPI specs and generates typed clients; 300+ GitHub stars.
+\end{resumeitemize}
+
+\resumesection{Education}
+\role{B.S.\ Computer Science}{State University}{City, ST \quad May 2021}
+
+\resumesection{Skills}
+\noindent\textbf{Languages:} Go, Python, TypeScript, SQL\\
+\textbf{Systems:} PostgreSQL, Redis, Kafka, gRPC, REST\\
+\textbf{Infra:} Docker, Kubernetes, AWS, Terraform, CI/CD, observability
+\end{document}
