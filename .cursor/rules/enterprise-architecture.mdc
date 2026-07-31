@@ -1,0 +1,27 @@
+---
+description: Enterprise code quality, security, and performance standards for Next.js, Groq, and LaTeX rendering.
+globs: **/*.{ts,tsx,js,jsx,json}
+alwaysApply: true
+---
+
+# Enterprise Architecture & Code Quality Standards
+
+## 1. Security & Data Protection
+- **No Secrets in Client Bundles:** Never expose private API keys in `NEXT_PUBLIC_` env vars.
+- **Auth Token Storage:** Store auth tokens exclusively in `httpOnly`, `Secure`, `SameSite=Lax` cookies—never in `localStorage` or `sessionStorage`.
+- **LaTeX Sanitization:** Strip or escape dangerous TeX commands (`\write18`, `\immediate`, `\openout`, `\input`) before sending strings to any PDF engine.
+- **Input Validation:** Enforce strict Zod schemas on all API routes, Server Actions, and Groq JSON responses.
+
+## 2. Groq AI & API Resilience
+- **Structured Output Only:** Always use Groq's JSON mode (`response_format: { type: "json_object" }`). Never parse loose raw text with regex.
+- **Rate Limit & Timeout Handling:** Wrap all external AI fetches in exponential backoff logic. Catch HTTP `429` errors gracefully.
+- **Cost Minimization:** Ensure user inputs are normalized and cached when appropriate to avoid redundant LLM invocations.
+
+## 3. TypeScript & React Standards
+- **Zero `any` Policy:** Explicitly define strict TypeScript interfaces or Zod-inferred types for all data models.
+- **Server vs Client Component Separation:** Default to React Server Components (RSC). Mark components with `'use client'` only when state, hooks, or event listeners are required.
+- **Error Boundaries:** Every major page section must be wrapped in a React Error Boundary with fallback UI to prevent whole-page crashes.
+
+## 4. Performance & UX
+- **Perceived Latency:** Use optimistic UI updates and loading skeletons for all compilation steps.
+- **Bundle Optimization:** Dynamically import heavy rendering libraries to keep the initial JS bundle under 100KB.

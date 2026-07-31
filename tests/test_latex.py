@@ -103,8 +103,8 @@ def test_patch_packages_fullpage_and_glyph():
 
 
 def test_strip_fences_helper():
-    from app.routers.resumes import _strip_accidental_fences
+    from app.routers.api import _strip_fences
 
     body = "\\documentclass{article}\n\\begin{document}x\\end{document}"
-    assert _strip_accidental_fences("```latex\n" + body + "\n```") == body
-    assert _strip_accidental_fences(body) == body
+    assert _strip_fences("```latex\n" + body + "\n```") == body
+    assert _strip_fences(body) == body

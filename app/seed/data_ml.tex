@@ -1,0 +1,91 @@
+% Data & ML — applied ML / data engineer layout (single column, ATS-friendly).
+% Emphasizes projects, evaluation metrics, and clear skills taxonomy.
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=0.55in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{parskip}
+
+\definecolor{accent}{HTML}{1e3a5f}
+\definecolor{muted}{HTML}{4a5568}
+
+\newcommand{\resumesection}[1]{%
+  \par\vspace{0.65em}%
+  {\large\bfseries\color{accent}#1}\par
+  \vspace{-0.35em}%
+  \textcolor{accent}{\rule{\textwidth}{0.55pt}}\par
+  \vspace{0.3em}%
+}
+
+\newcommand{\role}[3]{%
+  \noindent\textbf{#1}\hfill\textit{#2}\\
+  \textcolor{muted}{\small #3}\par\vspace{0.12em}
+}
+
+\newenvironment{resumeitemize}{%
+  \begin{list}{\textbullet}{%
+    \setlength{\leftmargin}{1.1em}%
+    \setlength{\itemsep}{0.12em}%
+    \setlength{\parsep}{0pt}%
+    \setlength{\topsep}{0.15em}%
+    \setlength{\partopsep}{0pt}%
+  }%
+}{\end{list}}
+
+\newcommand{\entrygap}{\vspace{0.45em}}
+\pagestyle{empty}
+
+\begin{document}
+\begin{center}
+  {\LARGE\bfseries Your Name}\\[0.3em]
+  {\small
+    \href{mailto:you@email.com}{you@email.com}
+    $\cdot$ \href{https://linkedin.com/in/you}{linkedin.com/in/you}
+    $\cdot$ \href{https://github.com/you}{github.com/you}
+    $\cdot$ City, ST
+  }
+\end{center}
+
+\resumesection{Summary}
+ML engineer: training pipelines, evaluation, and shipping models into production services.
+
+\resumesection{Experience}
+\role{Machine Learning Engineer}{Company Name}{City, ST \quad Feb 2023 -- Present}
+\begin{resumeitemize}
+  \item Shipped a ranking model that lifted CTR 6.2\% in an A/B test on 2M weekly users.
+  \item Built feature pipelines in Python/Spark; cut training data prep from 8h to 45m.
+\end{resumeitemize}
+\entrygap
+\role{Data Science Intern}{Lab or Company}{City, ST \quad May 2022 -- Aug 2022}
+\begin{resumeitemize}
+  \item Trained a ticket-routing classifier; raised F1 from 0.71 to 0.84 vs baseline.
+\end{resumeitemize}
+
+\resumesection{Projects}
+\role{Fraud Detection Benchmark}{\href{https://github.com/you/fraud}{github.com/you/fraud}}{2024}
+\begin{resumeitemize}
+  \item Compared XGBoost vs.\ logistic baselines; +9 AUC points with calibration curves.
+\end{resumeitemize}
+\entrygap
+\role{RAG Support Bot}{\href{https://github.com/you/rag}{github.com/you/rag}}{2024}
+\begin{resumeitemize}
+  \item Retrieval-augmented QA over product docs; measured faithfulness on 100 questions.
+\end{resumeitemize}
+
+\resumesection{Education}
+\role{M.S.\ Computer Science}{University Name}{City, ST \quad May 2023}
+\begin{resumeitemize}
+  \item Focus: machine learning; GPA 3.8/4.0
+\end{resumeitemize}
+\entrygap
+\role{B.S.\ Mathematics}{University Name}{City, ST \quad May 2021}
+
+\resumesection{Skills}
+\noindent\textbf{Languages:} Python, SQL, R\\
+\textbf{ML:} PyTorch, scikit-learn, XGBoost, pandas, NumPy\\
+\textbf{Data / MLOps:} Spark, Airflow, experiment tracking, evaluation harnesses\\
+\textbf{Infra:} Docker, cloud GPUs, Git, CI
+\end{document}
