@@ -1,0 +1,219 @@
+import { z } from "zod";
+
+import { isMockAiEnabled, mockVibeEdit } from "@/lib/mock-ai";
+import {
+  VibeEditModelOutputSchema,
+  type GroqVibeEditResult,
+  type VibeEditModelOutput,
+} from "@/lib/vibe-types";
+
+export {
+  VibeEditModelOutputSchema,
+  type GroqVibeEditResult,
+  type VibeEditModelOutput,
+} from "@/lib/vibe-types";
+
+const GroqUsageSchema = z.object({
+  prompt_tokens: z.number().optional(),
+  completion_tokens: z.number().optional(),
+  total_tokens: z.number().int().nonnegative(),
+});
+
+const GroqChoiceSchema = z.object({
+  message: z.object({
+    content: z.string(),
+    role: z.string().optional(),
+  }),
+  finish_reason: z.string().nullable().optional(),
+});
+
+const GroqChatCompletionSchema = z.object({
+  choices: z.array(GroqChoiceSchema).min(1),
+  usage: GroqUsageSchema,
+});
+
+function groqConfig(): { apiKey: string; baseUrl: string; model: string } {
+  const apiKey = process.env.GROQ_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("Missing GROQ_API_KEY");
+  }
+  return {
+    apiKey,
+    baseUrl: (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai").replace(/\/$/, ""),
+    model: process.env.RESUMATE_MODEL ?? "llama-3.3-70b-versatile",
+  };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function looksLikeLatex(dataJson: Record<string, unknown>): string | null {
+  const latex = dataJson.latex;
+  if (typeof latex !== "string" || !latex.trim()) {
+    return "data_json.latex missing or empty";
+  }
+  if (!/\\documentclass/.test(latex)) {
+    return "LaTeX missing \\documentclass";
+  }
+  if (!/\\begin\{document\}/.test(latex) || !/\\end\{document\}/.test(latex)) {
+    return "LaTeX missing document environment";
+  }
+  if (/\\write18|\\immediate\\s*\\write|\\openout/.test(latex)) {
+    return "LaTeX contains blocked shell escapes";
+  }
+  return null;
+}
+
+async function callGroqOnce(input: {
+  prompt: string;
+  dataJson: Record<string, unknown>;
+  healHint?: string;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}): Promise<GroqVibeEditResult> {
+  const system = [
+    "You are Resumate's vibe editor.",
+    "Return JSON only matching:",
+    '{"data_json": object, "reply": string}',
+    "data_json MUST include a full compilable LaTeX string in the `latex` field.",
+    "Update data_json based on the user prompt. Keep facts honest. Do not invent employers or metrics.",
+  ].join(" ");
+
+  const userPayload: Record<string, unknown> = {
+    prompt: input.prompt,
+    data_json: input.dataJson,
+  };
+  if (input.healHint) {
+    userPayload.compiler_error = input.healHint;
+    userPayload.instruction =
+      "Previous output failed validation/compile. Fix the LaTeX and return valid JSON only.";
+  }
+
+  const response = await fetch(`${input.baseUrl}/v1/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: input.model,
+      temperature: 0.2,
+      max_tokens: 4096,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: JSON.stringify(userPayload) },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Groq API error (HTTP ${response.status})`);
+  }
+
+  const raw: unknown = await response.json();
+  const completion = GroqChatCompletionSchema.parse(raw);
+  const content = completion.choices[0]?.message.content;
+  if (!content) {
+    throw new Error("Groq returned an empty message");
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(content) as unknown;
+  } catch {
+    throw new Error("INVALID_JSON: Groq returned non-JSON content");
+  }
+
+  let output: VibeEditModelOutput;
+  try {
+    output = VibeEditModelOutputSchema.parse(parsedJson);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "schema mismatch";
+    throw new Error(`INVALID_JSON: ${detail}`);
+  }
+  const latexError = looksLikeLatex(output.data_json);
+  if (latexError) {
+    throw new Error(`LATEX_INVALID: ${latexError}`);
+  }
+
+  return {
+    output,
+    totalTokens: completion.usage.total_tokens,
+  };
+}
+
+/**
+ * Call Groq in JSON mode with exponential backoff on 429 / 5xx,
+ * plus up to 2 self-heal retries when JSON/LaTeX validation fails.
+ */
+export async function invokeGroqVibeEdit(input: {
+  prompt: string;
+  dataJson: Record<string, unknown>;
+  maxRetries?: number;
+  maxHealRetries?: number;
+  onHeal?: (attempt: number, reason: string) => void;
+}): Promise<GroqVibeEditResult> {
+  if (isMockAiEnabled()) {
+    return mockVibeEdit(input);
+  }
+
+  const { apiKey, baseUrl, model } = groqConfig();
+  const maxRetries = input.maxRetries ?? 3;
+  const maxHealRetries = input.maxHealRetries ?? 2;
+
+  let healHint: string | undefined;
+  let healed = false;
+  let transportAttempt = 0;
+
+  for (let heal = 0; heal <= maxHealRetries; heal += 1) {
+    try {
+      while (true) {
+        try {
+          const result = await callGroqOnce({
+            prompt: input.prompt,
+            dataJson: input.dataJson,
+            healHint,
+            apiKey,
+            baseUrl,
+            model,
+          });
+          return { ...result, healed };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const isTransport =
+            /HTTP 429|HTTP 5\d\d|fetch failed|network/i.test(message) &&
+            !message.startsWith("INVALID_JSON") &&
+            !message.startsWith("LATEX_INVALID");
+
+          if (isTransport && transportAttempt < maxRetries) {
+            await sleep(Math.min(4000, 300 * 2 ** transportAttempt));
+            transportAttempt += 1;
+            continue;
+          }
+          throw err;
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const healable =
+        message.startsWith("INVALID_JSON") ||
+        message.startsWith("LATEX_INVALID") ||
+        message.includes("Zod") ||
+        message.includes("non-JSON");
+
+      if (!healable || heal >= maxHealRetries) {
+        throw err;
+      }
+
+      healed = true;
+      healHint = message;
+      input.onHeal?.(heal + 1, message);
+      await sleep(200);
+    }
+  }
+
+  throw new Error("Self-heal exhausted");
+}

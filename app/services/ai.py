@@ -3,20 +3,15 @@ import httpx
 import os
 import re
 import secrets
-from pathlib import Path
 
-from dotenv import load_dotenv
-
-from app.paths import COMPILED_DIR
 from app.services.latex import (
     apply_compact_sections,
     extract_custom_commands,
     latex_to_compact,
     split_document,
     compile_latex,
+    tighten_section_spacing,
 )
-
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 # Groq (OpenAI-compatible chat completions API)
 GROQ_BASE_URL = os.environ.get(
@@ -113,12 +108,161 @@ _PROMPT_ALIASES = {
         "Summary to 1 line, keep employers/titles/dates/tools/real numbers. "
         "Human voice only. Return ALL content sections you touch."
     ),
+    "humanize": (
+        "De-cringe / humanize the voice. Kill ChatGPT cadence, banned buzzwords, "
+        "and ', resulting in N%' templates. Keep every employer, title, date, tool, and real number. "
+        "Sound like a sharp engineer wrote it. Return every section you change."
+    ),
+    "action verbs": (
+        "Boost verbs only: rewrite bullets to start with strong past-tense action verbs "
+        "(Shipped, Cut, Built, Owned, Led). Do not invent metrics. Keep facts. "
+        "Return every Experience/Projects section you change."
+    ),
+    "tailor": (
+        "Tailor this resume to the TARGET JOB DESCRIPTION below. "
+        "Integrate missing keywords ONLY where the candidate already has related evidence — "
+        "never invent employers, products, or metrics. Prefer reordering emphasis and "
+        "rephrasing bullets over stuffing. Keep one-page density. Return every section you change."
+    ),
 }
 
 _PROMPT_ALIASES["rewrite"] = _PROMPT_ALIASES["polish"]
+_PROMPT_ALIASES["de-cringe"] = _PROMPT_ALIASES["humanize"]
+_PROMPT_ALIASES["humanise"] = _PROMPT_ALIASES["humanize"]
+_PROMPT_ALIASES["action verb"] = _PROMPT_ALIASES["action verbs"]
+_PROMPT_ALIASES["verbs"] = _PROMPT_ALIASES["action verbs"]
 _PROMPT_ALIASES["make this one page"] = _PROMPT_ALIASES["one page"]
 _PROMPT_ALIASES["1 page"] = _PROMPT_ALIASES["one page"]
 _PROMPT_ALIASES["fit to one page"] = _PROMPT_ALIASES["one page"]
+_PROMPT_ALIASES["match jd"] = _PROMPT_ALIASES["tailor"]
+_PROMPT_ALIASES["job match"] = _PROMPT_ALIASES["tailor"]
+_PROMPT_ALIASES["bullets"] = (
+    "Turn the candidate's work notes into resume bullets for the matching Experience entry. "
+    "Replace that role's bullets only. Keep employer, title, and dates. "
+    "If Experience has multiple jobs, return the FULL Experience section with other jobs unchanged."
+)
+_PROMPT_ALIASES["bulletize"] = _PROMPT_ALIASES["bullets"]
+_PROMPT_ALIASES["make bullets"] = _PROMPT_ALIASES["bullets"]
+
+_SPACING_REQUEST_RE = re.compile(
+    r"\b("
+    r"closer|tighter|too (?:much|far)|far apart|less space|more dense|denser|"
+    r"reduce (?:the )?spac(?:e|ing)|tighten (?:the )?(?:layout|spac(?:e|ing)|sections?)|"
+    r"sections? closer|compact (?:the )?spac(?:e|ing)|squeeze|cramped|whitespace|"
+    r"gap(?:s)? (?:between|too)|too much (?:white ?)?space"
+    r")\b",
+    re.I,
+)
+
+
+def _is_spacing_request(prompt: str) -> bool:
+    _, _, _, body = _strip_prompt_wrappers(prompt)
+    return bool(_SPACING_REQUEST_RE.search(body or prompt or ""))
+
+
+_MATERIAL_INTENT_RE = re.compile(
+    r"\b("
+    r"bulletize|make bullets?|turn (?:this|these|the following) into|"
+    r"convert (?:this|these|the following)|add (?:these|this) (?:to|as)|"
+    r"for my (?:job|role|position|work)|what i (?:did|do)|"
+    r"here(?:'s| is) what|my responsibilities|job duties|work notes"
+    r")\b",
+    re.I,
+)
+
+_MATERIAL_INSTRUCTIONS = """## Material → bullets (priority task)
+The block labeled CANDIDATE WORK NOTES is first-party source material from the candidate.
+Facts, tools, systems, products, and numbers inside it are ALLOWED — using them is not inventing.
+
+### Do this
+1. Find the matching Experience entry (employer/title/city if mentioned; else the scoped/most recent role).
+2. Replace THAT entry's bullets with 4–8 sharp resume bullets derived from the notes.
+3. Keep that entry's heading fields (@TITLE/@COMPANY/@DETAILS or @COMPANY/@LOC/@ROLE/@DATES) unless the notes clearly correct them.
+4. If Experience has multiple jobs, return the FULL `SECTION Experience` with every other job preserved exactly (same @fields and `-` bullets).
+5. Drop first-person ("I/we"), duty openers ("Responsible for…"), and fluff. One claim per bullet, verb-led, ~one printed line.
+6. Do not invent metrics absent from the notes. Keep qualitative impact when no number exists.
+7. Past tense for prior roles; present tense for a current role.
+
+### Output
+Return `SECTION Experience` (and only other sections if truly needed). Compact only — no LaTeX."""
+
+
+def _strip_prompt_wrappers(prompt: str) -> tuple[str, str, str, str]:
+    """Return (prefix, jd_text, scope_line, body) from a UI-wrapped prompt."""
+    raw = (prompt or "").strip()
+    prefix = ""
+    m = re.match(r"^(\[Target role:[^\]]*\]\s*)", raw, flags=re.I)
+    if m:
+        prefix = m.group(1)
+        raw = raw[m.end():].strip()
+
+    jd_text = ""
+    jd_match = re.match(
+        r"^\[Job description\]\s*(.*?)\s*\[/Job description\]\s*(.*)$",
+        raw,
+        flags=re.I | re.S,
+    )
+    if jd_match:
+        jd_text = jd_match.group(1).strip()
+        raw = jd_match.group(2).strip()
+
+    scope_line = ""
+    scope_match = re.match(
+        r"^(Edit ONLY the .+? section\.\s*Do not change other sections\.)\s*",
+        raw,
+        flags=re.I | re.S,
+    )
+    if scope_match:
+        scope_line = scope_match.group(1).strip()
+        raw = raw[scope_match.end():].strip()
+
+    return prefix, jd_text, scope_line, raw
+
+
+def _is_material_dump(prompt: str) -> bool:
+    """True when the user pasted work notes to turn into job bullets."""
+    _, _, _, body = _strip_prompt_wrappers(prompt)
+    if not body:
+        return False
+    # Explicit bulletize aliases with trailing notes
+    key = re.sub(r"[.!]+$", "", body.lower()).strip()
+    if key in {"bullets", "bulletize", "make bullets"}:
+        return False  # bare alias — no notes yet
+    if _MATERIAL_INTENT_RE.search(body) and len(body) >= 100:
+        return True
+    if len(body) >= 280:
+        return True
+    if body.count("\n") >= 3 and len(body) >= 160:
+        return True
+    # First-person work diary without a short command
+    if re.search(r"\b(i |i'm |i’ve |i've |my |we )\b", body, re.I) and len(body) >= 180:
+        return True
+    return False
+
+
+def _enrich_material_prompt(prompt: str) -> str:
+    """Wrap pasted work notes with explicit bullet-conversion instructions."""
+    prefix, jd_text, scope_line, body = _strip_prompt_wrappers(prompt)
+    # Peel a short instruction line if the user wrote one above the notes
+    instruction = ""
+    notes = body
+    first, _, rest = body.partition("\n")
+    if rest and len(first) < 160 and (
+        _MATERIAL_INTENT_RE.search(first)
+        or re.search(r"\b(experience|job|role|bullets?)\b", first, re.I)
+    ):
+        instruction = first.strip()
+        notes = rest.strip()
+
+    parts = [prefix.strip(), scope_line, _MATERIAL_INSTRUCTIONS]
+    if instruction:
+        parts.append(f"User instruction: {instruction}")
+    parts.append("CANDIDATE WORK NOTES:\n" + notes[:12000])
+    if jd_text:
+        parts.append(
+            "TARGET JOB DESCRIPTION (optional keyword emphasis only):\n" + jd_text[:4500]
+        )
+    return "\n\n".join(p for p in parts if p)
 
 
 def _api_key() -> str:
@@ -131,14 +275,32 @@ def _api_key() -> str:
 def _normalize_prompt(prompt: str) -> str:
     """Expand short/common phrases into clear edit instructions."""
     raw = (prompt or "").strip()
-    body = re.sub(r"^\[Target role:[^\]]*\]\s*", "", raw, flags=re.I).strip()
+    if _is_material_dump(raw):
+        return _enrich_material_prompt(raw)
+
+    prefix, jd_text, scope_line, body = _strip_prompt_wrappers(raw)
     key = re.sub(r"[.!]+$", "", body.lower()).strip()
     alias = _PROMPT_ALIASES.get(key)
     if alias:
-        m = re.match(r"^(\[Target role:[^\]]*\]\s*)", raw, flags=re.I)
-        return (m.group(1) if m else "") + alias
+        out = "".join(p for p in (prefix, (scope_line + "\n\n") if scope_line else "", alias) if p)
+        if jd_text:
+            out += (
+                "\n\nTARGET JOB DESCRIPTION (use for keywords/emphasis only):\n"
+                + jd_text[:4500]
+            )
+        return out
+    if jd_text:
+        extra = f"\n\nExtra user request: {body}" if body and body.lower() != "tailor" else ""
+        scoped = (scope_line + "\n\n") if scope_line else ""
+        return (
+            prefix
+            + scoped
+            + _PROMPT_ALIASES["tailor"]
+            + "\n\nTARGET JOB DESCRIPTION (use for keywords/emphasis only):\n"
+            + jd_text[:4500]
+            + extra
+        )
     return raw
-
 
 def _find_banned_voice(text: str) -> list[str]:
     """Return unique banned-phrase hits in AI output or resulting body."""
@@ -366,8 +528,16 @@ def _finish_error() -> dict:
 
 def _reply_for_prompt(prompt: str) -> str:
     p = prompt.lower()
+    if "candidate work notes" in p or "material → bullets" in p or "bulletize" in p:
+        return "Turned your notes into resume bullets for that role."
     if "one page" in p or "1 page" in p or ("fit" in p and "page" in p):
         return "Compressed to one page. Voice tightened; facts kept."
+    if "humanize" in p or "de-cringe" in p or "humanise" in p:
+        return "Humanized the voice — less AI, same facts."
+    if "action verb" in p or ("boost" in p and "verb" in p):
+        return "Boosted action verbs. Metrics unchanged."
+    if "job description" in p or "tailor" in p:
+        return "Tailored emphasis to the job description without inventing experience."
     if "polish" in p or "rewrite" in p or "elite" in p or "quality" in p:
         return "Rewrote for sharper human voice. Facts and numbers kept."
     if "ats" in p:
@@ -376,7 +546,9 @@ def _reply_for_prompt(prompt: str) -> str:
         return "Reframed existing numbers into verb-led claims."
     if "summary" in p:
         return "Summary is now one factual line."
-    if "tailor" in p or "target" in p:
+    if "section" in p and "only" in p:
+        return "Updated the selected section."
+    if "target" in p:
         return "Reordered emphasis for the target role."
     if "roast" in p or "critique" in p or "feedback" in p:
         return "Called out weak spots and fixed the top ones."
@@ -394,26 +566,19 @@ def _looks_like_latex(content: str) -> bool:
 
 
 async def _compiles_ok(latex: str) -> tuple[bool, str]:
-    """Return (ok, error). Skip-soft if pdflatex is missing.
-
-    Uses a random high id so validation never clobbers a real resume PDF.
-    """
-    vid = 900_000 + secrets.randbelow(90_000)
+    """Return (ok, error). Soft-skip if pdflatex is missing."""
+    vid = f"validate-{secrets.token_hex(4)}"
     try:
-        try:
-            result = await compile_latex(vid, latex)
-        except Exception:
-            return True, ""
-        err = (result.get("error") or "").strip()
-        if not result.get("success") and "pdflatex not found" in err.lower():
-            return True, ""
-        if result.get("success"):
-            return True, ""
-        first = err.split("\n")[0][:240]
-        return False, first or "LaTeX compile failed"
-    finally:
-        for suffix in (".pdf", ".synctex.json"):
-            (COMPILED_DIR / f"{vid}{suffix}").unlink(missing_ok=True)
+        result = await compile_latex(vid, latex)
+    except Exception:
+        return True, ""
+    err = (result.get("error") or "").strip()
+    if not result.get("success") and "pdflatex not found" in err.lower():
+        return True, ""
+    if result.get("success"):
+        return True, ""
+    first = err.split("\n")[0][:240]
+    return False, first or "LaTeX compile failed"
 
 
 def _apply_compact_edit(latex_content: str, content: str) -> dict:
@@ -592,7 +757,22 @@ async def ai_assist(latex_content: str, prompt: str, history: list | None = None
         if ok:
             return simple
 
+    # Spacing/layout requests can't go through compact text — apply deterministically.
+    if _is_spacing_request(raw_prompt) and not _is_material_dump(raw_prompt):
+        tightened = tighten_section_spacing(latex_content, factor=0.55)
+        if tightened != latex_content:
+            ok, _err = await _compiles_ok(tightened)
+            if ok:
+                return {
+                    "success": True,
+                    "latex_content": tightened,
+                    "user_message": raw_prompt,
+                    "ai_reply": "Pulled sections and entries closer — less vertical whitespace.",
+                }
+            # If compile fails, fall through to the model with clearer instructions.
+
     prompt = _normalize_prompt(raw_prompt)
+    material_mode = _is_material_dump(raw_prompt) or "CANDIDATE WORK NOTES:" in prompt
 
     preamble, _ = split_document(latex_content)
     custom_cmds = extract_custom_commands(preamble) if preamble else []
@@ -618,16 +798,31 @@ async def ai_assist(latex_content: str, prompt: str, history: list | None = None
                 content = content[:300] + "...[trimmed]"
             messages.append({"role": msg.get("role", "user"), "content": content})
 
-    user_content = (
-        "Edit the resume below for maximum credible quality. "
-        "Return ONLY changed compact SECTION blocks (or NO_CHANGES). Do not output LaTeX.\n\n"
-        f"Current resume (compact):\n\n{compact}\n\n"
-        f"---\n\nUser request: {prompt}"
-    )
+    if material_mode:
+        user_content = (
+            "Convert the candidate's work notes into Experience bullets.\n"
+            "OVERRIDE: tools/facts in CANDIDATE WORK NOTES are allowed source material — "
+            "do not refuse them as invention. Preserve other jobs unchanged.\n"
+            "Return ONLY compact SECTION blocks (usually just Experience). No LaTeX.\n\n"
+            f"Current resume (compact):\n\n{compact}\n\n"
+            f"---\n\n{prompt}"
+        )
+        max_tokens = 8192
+        temperature = 0.15
+    else:
+        user_content = (
+            "Edit the resume below for maximum credible quality. "
+            "Return ONLY changed compact SECTION blocks (or NO_CHANGES). Do not output LaTeX.\n\n"
+            f"Current resume (compact):\n\n{compact}\n\n"
+            f"---\n\nUser request: {prompt}"
+        )
+        max_tokens = 4096
+        temperature = 0.2
+
     messages.append({"role": "user", "content": user_content})
 
     try:
-        data = await _chat_completion(messages, 0.2, 4096)
+        data = await _chat_completion(messages, temperature, max_tokens)
         choice = data["choices"][0]
         finish = choice.get("finish_reason")
         content = _strip_markdown_fences(choice["message"]["content"])

@@ -1,5 +1,8 @@
-"""Default template is Jake's Resume for new users."""
+"""Default template catalog — Jake first, no personal templates."""
 import pytest
+
+from app.catalog import default_template_id, list_templates
+from app.seed_templates import JAKE_NAME, build_seed_templates
 
 
 @pytest.mark.asyncio
@@ -8,26 +11,10 @@ async def test_jake_is_default_template(app_client):
     assert resp.status_code == 200
     assert b"Jake" in resp.content
     assert b"Default" in resp.content
-
-
-@pytest.mark.asyncio
-async def test_new_resume_defaults_to_jake(app_client):
-    # No template_id → should use Jake
-    resp = await app_client.post(
-        "/resume/new",
-        data={"title": "Fresh Start"},
-        follow_redirects=False,
-    )
-    assert resp.status_code == 303
-    loc = resp.headers["location"]
-    assert loc.startswith("/resume/")
-    resume_id = int(loc.rsplit("/", 1)[-1])
-
-    editor = await app_client.get(f"/resume/{resume_id}")
-    assert editor.status_code == 200
-    # Jake's template content markers
-    assert b"Jake Ryan" in editor.content or b"resumeSubheading" in editor.content
-    assert b"resumeSubHeadingListStart" in editor.content
+    assert b"Daniel" not in resp.content
+    assert b"Harvard Classic" in resp.content
+    assert b"Modern SWE" in resp.content
+    assert b"New Grad" in resp.content
 
 
 @pytest.mark.asyncio
@@ -37,3 +24,20 @@ async def test_dashboard_selects_jake_for_upload(app_client):
     body = resp.text
     assert "Jake" in body
     assert "selected" in body
+    assert "Daniel" not in body
+    assert "this browser" in body.lower() or "browser" in body.lower()
+
+
+def test_seed_catalog_has_no_daniel():
+    names = [t["name"] for t in build_seed_templates()]
+    assert names[0] == JAKE_NAME
+    assert all("Daniel" not in n for n in names)
+    assert "Harvard Classic" in names
+    assert "Blank" in names
+
+
+def test_catalog_default_is_jake():
+    templates = list_templates()
+    assert templates
+    assert default_template_id() == next(t["id"] for t in templates if t["is_default"])
+    assert next(t for t in templates if t["is_default"])["name"] == JAKE_NAME
