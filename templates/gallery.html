@@ -5,7 +5,7 @@
   <div class="page-header">
     <div>
       <h1>Templates</h1>
-      <p class="page-sub">Pick a starting point. Customize everything in the editor.</p>
+      <p class="page-sub">Choose a starting layout. Everything is editable once you’re in the editor.</p>
     </div>
   </div>
 
@@ -34,7 +34,7 @@
       <form method="post" action="/resume/new" class="template-form">
         <input type="hidden" name="template_id" value="{{ tpl.id }}">
         <input type="text" name="title" placeholder="Resume title..." class="input" value="{% if default_template_id and tpl.id == default_template_id %}My Resume{% endif %}" required>
-        <button type="submit" class="btn btn-primary btn-block">{% if default_template_id and tpl.id == default_template_id %}Use Default{% else %}Use Template{% endif %}</button>
+        <button type="submit" class="btn btn-primary btn-block">{% if default_template_id and tpl.id == default_template_id %}Use default{% else %}Use template{% endif %}</button>
       </form>
     </div>
     {% endfor %}

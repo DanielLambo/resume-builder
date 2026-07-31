@@ -13,7 +13,7 @@ def _isolate_storage(monkeypatch, tmp_path):
     compiled.mkdir()
     db_path = storage / "resume_builder.db"
 
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
     monkeypatch.setattr("app.paths.STORAGE_DIR", storage)
     monkeypatch.setattr("app.paths.COMPILED_DIR", compiled)
     monkeypatch.setattr("app.paths.DB_PATH", db_path)

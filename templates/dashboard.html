@@ -4,8 +4,9 @@
 <div class="dashboard">
   <div class="page-header">
     <div>
-      <h1>Resumes</h1>
-      <p class="page-sub">Local LaTeX resumes with live preview and AI edits.</p>
+      <h1>Resumate</h1>
+      <p class="page-sub">Local-first LaTeX resumes with live PDF preview and AI that preserves your source.</p>
+      <p class="trust-row">Runs on your machine · Private by default · Instant compile</p>
     </div>
     <div class="header-actions">
       <label class="btn upload-btn" for="upload-input">Upload</label>
@@ -64,22 +65,22 @@
         <a href="/resume/{{ r.id }}/pdf?download=1" class="btn btn-sm" download>PDF</a>
         {% endif %}
         <span class="flex-spacer"></span>
-        <a href="/resume/{{ r.id }}/delete"
+        <button type="button"
            class="btn btn-sm btn-ghost btn-danger-text"
-           hx-get="/resume/{{ r.id }}/delete"
+           hx-post="/resume/{{ r.id }}/delete"
            hx-confirm="Delete “{{ r.title }}”?"
            hx-target="closest .resume-card"
-           hx-swap="outerHTML swap:0.2s">
+           hx-swap="delete">
           Delete
-        </a>
+        </button>
       </div>
     </div>
     {% endfor %}
   </div>
   {% else %}
   <div class="empty-state">
-    <h2>Start with Jake’s Resume</h2>
-    <p>The ATS-friendly template most SWE resumes use. Or upload one you already have.</p>
+    <h2>Create your first resume</h2>
+    <p>Start from Jake’s ATS-friendly template, or upload a PDF, DOCX, or TEX file you already have.</p>
     <div class="empty-actions">
       {% if default_template_id %}
       <form method="post" action="/resume/new" class="inline-form">
