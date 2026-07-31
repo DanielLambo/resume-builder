@@ -84,3 +84,27 @@ def test_parse_synctex_top_origin_and_string_keys():
     assert abs(hits[0]["y"] - 55.0) < 0.01
     assert hits[1]["line"] == 50
     assert all(h["line"] != 999 for h in hits)
+
+
+def test_patch_packages_fullpage_and_glyph():
+    from app.services.latex import _patch_packages
+
+    src = (
+        "\\usepackage[empty]{fullpage}\n"
+        "\\input{glyphtounicode}\n"
+        "\\pdfgentounicode=1\n"
+        "body"
+    )
+    out = _patch_packages(src)
+    assert "geometry" in out
+    assert "fullpage" not in out
+    assert "glyphtounicode" not in out
+    assert "pdfgentounicode" not in out
+
+
+def test_strip_fences_helper():
+    from app.routers.api import _strip_fences
+
+    body = "\\documentclass{article}\n\\begin{document}x\\end{document}"
+    assert _strip_fences("```latex\n" + body + "\n```") == body
+    assert _strip_fences(body) == body

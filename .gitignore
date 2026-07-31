@@ -8,3 +8,12 @@ storage/
 .venv/
 .pytest_cache/
 tests/_tmp/
+node_modules/
+services/**/dist/
+services/**/node_modules/
+web/node_modules/
+web/.next/
+web/.env.local
+web/playwright-report/
+web/test-results/
+.vercel

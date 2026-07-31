@@ -1,4 +1,4 @@
-"""Fixtures and helpers for Resumate tests."""
+"""Fixtures for Resumate tests — no shared user resume DB."""
 from __future__ import annotations
 
 import pytest
@@ -8,20 +8,10 @@ import pytest_asyncio
 @pytest.fixture(autouse=True)
 def _isolate_storage(monkeypatch, tmp_path):
     storage = tmp_path / "storage"
-    compiled = storage / "compiled"
     storage.mkdir()
-    compiled.mkdir()
-    db_path = storage / "resume_builder.db"
-
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
     monkeypatch.setattr("app.paths.STORAGE_DIR", storage)
-    monkeypatch.setattr("app.paths.COMPILED_DIR", compiled)
-    monkeypatch.setattr("app.paths.DB_PATH", db_path)
-    monkeypatch.setattr("app.database.DB_PATH", db_path)
-    monkeypatch.setattr("app.services.latex.COMPILED_DIR", compiled)
-    monkeypatch.setattr("app.routers.resumes.COMPILED_DIR", compiled)
-
-    yield {"storage": storage, "compiled": compiled, "db": db_path}
+    yield {"storage": storage, "compiled": storage / "compiled"}
 
 
 SAMPLE_LATEX = r"""\documentclass[11pt,letterpaper]{article}
@@ -101,10 +91,8 @@ Backend engineer focused on APIs and reliability.
 async def app_client(_isolate_storage):
     from httpx import ASGITransport, AsyncClient
 
-    from app.database import init_db
     from app.main import app
 
-    await init_db()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
