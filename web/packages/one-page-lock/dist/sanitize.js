@@ -1,0 +1,33 @@
+/**
+ * Strip or neutralize dangerous TeX before any PDF engine sees it.
+ * Complements -no-shell-escape; does not claim to be a full TeX sandbox.
+ */
+const DANGEROUS_PATTERNS = [
+    { pattern: /\\write18\b/gi, label: "\\write18" },
+    { pattern: /\\immediate\b/gi, label: "\\immediate" },
+    { pattern: /\\openout\b/gi, label: "\\openout" },
+    { pattern: /\\closeout\b/gi, label: "\\closeout" },
+    { pattern: /\\input\s*\{?\s*\|/gi, label: "\\input|" },
+    { pattern: /\\includeonly\b/gi, label: "\\includeonly" },
+];
+export function sanitizeLatex(content) {
+    const hits = [];
+    let next = content;
+    for (const { pattern, label } of DANGEROUS_PATTERNS) {
+        if (pattern.test(next)) {
+            hits.push(label);
+            next = next.replace(pattern, `% blocked:${label} `);
+        }
+        // Reset lastIndex for global regex reuse
+        pattern.lastIndex = 0;
+    }
+    if (hits.length > 0) {
+        return {
+            ok: false,
+            content: next,
+            error: `Blocked unsafe LaTeX: ${hits.join(", ")}`,
+        };
+    }
+    return { ok: true, content: next };
+}
+//# sourceMappingURL=sanitize.js.map

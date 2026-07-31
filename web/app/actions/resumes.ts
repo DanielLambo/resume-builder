@@ -6,9 +6,10 @@ import { z } from "zod";
 
 import type { Json } from "@/lib/database.types";
 import {
-  createDefaultResumeData,
+  createResumeData,
   DEFAULT_RESUME_TITLE,
   getLatexFromDataJson,
+  isResumeTemplateId,
 } from "@/lib/resume-template";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,12 +31,14 @@ async function requireUser() {
 
 export async function createResumeAction(
   title: string = DEFAULT_RESUME_TITLE,
+  templateId: string = "new-grad",
 ): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Sign in required.", status: 401 };
 
   const cleanTitle = title.trim().slice(0, 120) || DEFAULT_RESUME_TITLE;
-  const data = createDefaultResumeData();
+  const tpl = isResumeTemplateId(templateId) ? templateId : "new-grad";
+  const data = createResumeData(tpl);
 
   const { data: row, error } = await supabase
     .from("resumes")
@@ -118,14 +121,16 @@ export async function saveResumeLatexAction(
   resumeId: string,
   latex: string,
   title?: string,
+  templateId?: string,
 ): Promise<ActionResult> {
   const parsed = z
     .object({
       resumeId: z.string().uuid(),
       latex: z.string().min(1).max(400_000),
       title: z.string().trim().max(120).optional(),
+      templateId: z.string().trim().max(40).optional(),
     })
-    .safeParse({ resumeId, latex, title });
+    .safeParse({ resumeId, latex, title, templateId });
 
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid save payload." };
@@ -149,11 +154,14 @@ export async function saveResumeLatexAction(
       ? (existing.data_json as Record<string, unknown>)
       : {};
 
-  const nextData = {
+  const nextData: Record<string, unknown> = {
     ...prev,
     latex: parsed.data.latex,
     version: typeof prev.version === "number" ? prev.version + 1 : 1,
   };
+  if (parsed.data.templateId && isResumeTemplateId(parsed.data.templateId)) {
+    nextData.template = parsed.data.templateId;
+  }
 
   const updatePayload: { data_json: Json; title?: string } = {
     data_json: nextData as unknown as Json,

@@ -12,7 +12,7 @@ type AuthMode = "login" | "signup";
 function AuthFormInner({ mode }: { mode: AuthMode }) {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/dashboard";
+  const next = params.get("next") || (mode === "signup" ? "/onboarding" : "/dashboard");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,7 +40,11 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
           return;
         }
         toast.success("Welcome back");
-        router.replace(next);
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        const needsOnboarding = user?.user_metadata?.onboarding_completed !== true;
+        router.replace(needsOnboarding ? "/onboarding" : next);
         router.refresh();
         return;
       }
@@ -60,7 +64,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
       }
       if (data.session) {
         toast.success("Account created");
-        router.replace(next);
+        router.replace("/onboarding");
         router.refresh();
         return;
       }

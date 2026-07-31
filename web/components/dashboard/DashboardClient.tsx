@@ -11,7 +11,9 @@ import {
   duplicateResumeAction,
   getResumePdfSignedUrlAction,
 } from "@/app/actions/resumes";
+import { TemplatePicker } from "@/components/templates/TemplatePicker";
 import type { ResumeRow } from "@/lib/database.types";
+import type { ResumeTemplateId } from "@/lib/resume-template";
 
 function formatDate(iso: string): string {
   try {
@@ -44,13 +46,21 @@ export function DashboardClient({
   const [resumes, setResumes] = useState(initialResumes);
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-  function createNew() {
+  function openPicker() {
+    setPickerOpen(true);
+  }
+
+  function createFromTemplate(templateId: ResumeTemplateId, title: string) {
+    setPickerOpen(false);
     startTransition(async () => {
       const toastId = toast.loading("Creating resume…");
-      const result = await createResumeAction("My Resume");
+      const result = await createResumeAction(title, templateId);
       if (!result.ok || !result.id) {
-        toast.error(result.ok ? "Missing resume id" : result.error, { id: toastId });
+        toast.error(result.ok ? "Missing resume id" : result.error, {
+          id: toastId,
+        });
         return;
       }
       toast.success("Resume created", { id: toastId });
@@ -129,14 +139,16 @@ export function DashboardClient({
             Your resumes
           </h1>
           <p className="mt-1 max-w-xl text-sm text-studio-muted">
-            Edit cleanly in the studio. Duplicate a sheet for each application.
+            Start from a new-grad industry template, then tailor each sheet per
+            application.
           </p>
         </div>
         <button
           type="button"
-          onClick={createNew}
+          onClick={openPicker}
           disabled={pending}
           className="inline-flex items-center justify-center bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white hover:bg-studio-vermilion-hover disabled:opacity-60"
+          data-testid="create-resume"
         >
           {pending && !busyId ? "Creating…" : "Create New Resume"}
         </button>
@@ -144,16 +156,19 @@ export function DashboardClient({
 
       {resumes.length === 0 ? (
         <div className="grid place-items-center gap-3 border border-studio-border bg-studio-paper px-6 py-16 text-center shadow-paper-sheet">
-          <h2 className="text-lg font-semibold text-studio-ink">Nothing on the desk yet</h2>
+          <h2 className="text-lg font-semibold text-studio-ink">
+            Nothing on the desk yet
+          </h2>
           <p className="max-w-md text-sm text-studio-muted">
-            Create a resume to open the typesetter. Everything syncs to your account.
+            Pick a template built for new grads — PM, SWE, EE, MechE, or a
+            clean general layout — then open the typesetter.
           </p>
           <button
             type="button"
-            onClick={createNew}
+            onClick={openPicker}
             className="mt-2 bg-studio-vermilion px-4 py-2 text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
           >
-            Create New Resume
+            Choose a template
           </button>
         </div>
       ) : (
@@ -220,6 +235,12 @@ export function DashboardClient({
           })}
         </div>
       )}
+
+      <TemplatePicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onConfirm={createFromTemplate}
+      />
     </div>
   );
 }
