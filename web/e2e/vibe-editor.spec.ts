@@ -2,10 +2,10 @@ import { expect, test } from "@playwright/test";
 
 /**
  * Offline harness QA — runs with NEXT_PUBLIC_USE_MOCK_AI=true (no Groq / Upstash).
- * Validates the vibe editing UX: prompt → status log → token meter → 1-page preview.
+ * Validates vibe UX + real PDF compile via /api/compile (local pdflatex or latexonline).
  */
 test.describe("Vibe editor harness (mock AI)", () => {
-  test("streams engine steps, updates preview skills, and bumps token meter", async ({
+  test("streams engine steps, renders PDF preview, and bumps token meter", async ({
     page,
   }) => {
     await page.goto("/dev/harness");
@@ -14,11 +14,13 @@ test.describe("Vibe editor harness (mock AI)", () => {
     const meter = page.getByText(/Tokens Used Today/i);
     await expect(meter).toBeVisible();
     const beforeText = await meter.textContent();
-    const beforeUsed = Number((beforeText ?? "0").replace(/,/g, "").match(/(\d+)/)?.[1] ?? "0");
-
-    await page.getByTestId("vibe-prompt").fill(
-      "Add AWS and Docker to my technical skills",
+    const beforeUsed = Number(
+      (beforeText ?? "0").replace(/,/g, "").match(/(\d+)/)?.[1] ?? "0",
     );
+
+    await page
+      .getByTestId("vibe-prompt")
+      .fill("Add AWS and Docker to my technical skills");
     await page.getByTestId("vibe-submit").click();
 
     await expect(page.getByTestId("vermilion-loader")).toBeVisible();
@@ -34,14 +36,18 @@ test.describe("Vibe editor harness (mock AI)", () => {
       { timeout: 10_000 },
     );
     await expect(page.getByTestId("status-log")).toContainText(
-      /\[4\/4\] PDF rendered successfully in \d+ms\./,
-      { timeout: 15_000 },
+      /\[4\/4\] PDF rendered successfully/,
+      { timeout: 90_000 },
     );
 
     const preview = page.getByTestId("pdf-preview-canvas");
-    await expect(preview).toContainText(/AWS/i);
-    await expect(preview).toContainText(/Docker/i);
+    await expect(preview).toHaveAttribute("data-pdf-ready", "true", {
+      timeout: 10_000,
+    });
     await expect(preview).toHaveAttribute("data-page-count", "1");
+    await expect(preview.locator("iframe[title='Compiled resume PDF']")).toBeVisible();
+    await expect(page.getByTestId("harness-latex-skills")).toContainText(/AWS/i);
+    await expect(page.getByTestId("harness-latex-skills")).toContainText(/Docker/i);
     await expect(page.getByTestId("one-page-lock")).toContainText("1-PAGE LOCK ACTIVE");
 
     await expect(meter).toContainText(/Tokens Used Today/i);
@@ -61,9 +67,12 @@ test.describe("Vibe editor harness (mock AI)", () => {
     await expect(page.getByTestId("status-log")).toContainText("[1/4]", {
       timeout: 10_000,
     });
-    await expect(page.getByTestId("pdf-preview-canvas")).toContainText(/AWS/i, {
-      timeout: 15_000,
-    });
+    await expect(page.getByTestId("pdf-preview-canvas")).toHaveAttribute(
+      "data-pdf-ready",
+      "true",
+      { timeout: 90_000 },
+    );
+    await expect(page.getByTestId("harness-latex-skills")).toContainText(/AWS/i);
   });
 });
 
@@ -85,17 +94,26 @@ test.describe("Authenticated vibe editor (optional)", () => {
 
     const meter = page.getByText(/Tokens Used Today/i).first();
     const beforeText = await meter.textContent();
-    const beforeUsed = Number((beforeText ?? "0").replace(/,/g, "").match(/(\d+)/)?.[1] ?? "0");
-
-    await page.getByTestId("vibe-prompt").fill(
-      "Add AWS and Docker to my technical skills",
+    const beforeUsed = Number(
+      (beforeText ?? "0").replace(/,/g, "").match(/(\d+)/)?.[1] ?? "0",
     );
+
+    await page
+      .getByTestId("vibe-prompt")
+      .fill("Add AWS and Docker to my technical skills");
     await page.getByTestId("vibe-submit").click();
 
     await expect(page.getByTestId("status-log")).toContainText(/PDF rendered successfully/, {
-      timeout: 45_000,
+      timeout: 120_000,
     });
-    await expect(page.getByTestId("pdf-preview-canvas")).toContainText(/AWS/i);
+    await expect(page.getByTestId("pdf-preview-canvas")).toHaveAttribute(
+      "data-pdf-ready",
+      "true",
+    );
+    await expect(page.getByTestId("pdf-preview-canvas")).toHaveAttribute(
+      "data-page-count",
+      "1",
+    );
     await expect(page.getByTestId("one-page-lock")).toContainText("1-PAGE LOCK ACTIVE");
 
     await expect

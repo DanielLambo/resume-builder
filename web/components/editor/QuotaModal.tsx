@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 type QuotaModalProps = {
   open: boolean;
   title: string;
@@ -17,6 +19,15 @@ export function QuotaModal({
   filename = "resume.tex",
   onClose,
 }: QuotaModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   function exportTex() {
@@ -36,8 +47,12 @@ export function QuotaModal({
       aria-modal="true"
       aria-labelledby="quota-modal-title"
       data-testid="quota-modal"
+      onClick={onClose}
     >
-      <div className="w-full max-w-md border border-studio-border bg-studio-paper p-5 shadow-paper-sheet">
+      <div
+        className="w-full max-w-md border border-studio-border bg-studio-paper p-5 shadow-paper-sheet"
+        onClick={(e) => e.stopPropagation()}
+      >
         <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
           Typesetter notice
         </p>

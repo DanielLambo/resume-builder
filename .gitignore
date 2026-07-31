@@ -17,3 +17,4 @@ web/.env.local
 web/playwright-report/
 web/test-results/
 .vercel
+.env.local
