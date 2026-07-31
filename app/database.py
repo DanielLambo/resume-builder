@@ -1,8 +1,8 @@
 import aiosqlite
-from pathlib import Path
 from contextlib import asynccontextmanager
 
-DB_PATH = Path(__file__).parent.parent / "storage" / "resume_builder.db"
+from app.paths import DB_PATH
+from app.seed_templates import JAKE_NAME, build_seed_templates
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS resumes (
@@ -27,7 +27,8 @@ MIGRATIONS = [
     "ALTER TABLE resumes ADD COLUMN chat_history TEXT NOT NULL DEFAULT '[]'",
 ]
 
-SEED_TEMPLATES = [
+# Built-in templates after Jake (loaded first via build_seed_templates)
+_OTHER_TEMPLATES = [
     {
         "name": "Blank",
         "description": "Start from scratch",
@@ -370,6 +371,8 @@ Full-stack engineer: product features across UI and API. Targeting fullstack / p
     },
 ]
 
+SEED_TEMPLATES = build_seed_templates(_OTHER_TEMPLATES)
+
 
 @asynccontextmanager
 async def get_db():
@@ -381,6 +384,19 @@ async def get_db():
         await db.close()
 
 
+async def get_default_template_id(db) -> int | None:
+    """Prefer Jake's Resume; fall back to the lowest-id template."""
+    cursor = await db.execute(
+        "SELECT id FROM templates WHERE name = ? LIMIT 1", (JAKE_NAME,)
+    )
+    row = await cursor.fetchone()
+    if row:
+        return row["id"]
+    cursor = await db.execute("SELECT id FROM templates ORDER BY id LIMIT 1")
+    row = await cursor.fetchone()
+    return row["id"] if row else None
+
+
 async def init_db():
     async with aiosqlite.connect(str(DB_PATH)) as db:
         await db.executescript(SCHEMA)
@@ -389,6 +405,7 @@ async def init_db():
                 await db.execute(migration)
             except Exception:
                 pass
+
         cursor = await db.execute("SELECT COUNT(*) FROM templates")
         count = (await cursor.fetchone())[0]
         if count == 0:
@@ -396,5 +413,22 @@ async def init_db():
                 await db.execute(
                     "INSERT INTO templates (name, description, latex_content) VALUES (?, ?, ?)",
                     (t["name"], t["description"], t["latex_content"]),
+                )
+        else:
+            # Existing installs: ensure Jake's Resume is present and up to date
+            jake = SEED_TEMPLATES[0]
+            cursor = await db.execute(
+                "SELECT id FROM templates WHERE name = ?", (JAKE_NAME,)
+            )
+            existing = await cursor.fetchone()
+            if existing:
+                await db.execute(
+                    "UPDATE templates SET description = ?, latex_content = ? WHERE id = ?",
+                    (jake["description"], jake["latex_content"], existing[0]),
+                )
+            else:
+                await db.execute(
+                    "INSERT INTO templates (name, description, latex_content) VALUES (?, ?, ?)",
+                    (jake["name"], jake["description"], jake["latex_content"]),
                 )
         await db.commit()

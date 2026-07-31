@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Request, Form, Query
+from fastapi import APIRouter, Request, Form
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
@@ -20,6 +20,7 @@ async def editor(request: Request, resume_id: int):
         return RedirectResponse("/", status_code=303)
     r = dict(resume)
     r["chat_history"] = json.loads(r.get("chat_history") or "[]")
+    r["has_pdf"] = (COMPILED_DIR / f"{resume_id}.pdf").exists()
     return templates.TemplateResponse("editor.html", {"request": request, "resume": r})
 
 
@@ -75,13 +76,15 @@ async def compile_resume(resume_id: int, latex_content: str = Form(None)):
 
 
 @router.get("/{resume_id}/pdf")
-async def serve_pdf(resume_id: int):
+async def serve_pdf(resume_id: int, download: int = 0):
     pdf_path = COMPILED_DIR / f"{resume_id}.pdf"
     if not pdf_path.exists():
         return JSONResponse({"error": "not found"}, status_code=404)
     return FileResponse(
-        pdf_path, media_type="application/pdf",
-        content_disposition_type="inline",
+        pdf_path,
+        media_type="application/pdf",
+        filename=f"resume-{resume_id}.pdf" if download else None,
+        content_disposition_type="attachment" if download else "inline",
     )
 
 
@@ -145,4 +148,7 @@ async def delete_resume(resume_id: int):
     async with get_db() as db:
         await db.execute("DELETE FROM resumes WHERE id = ?", (resume_id,))
         await db.commit()
+    for suffix in (".pdf", ".synctex.json"):
+        path = COMPILED_DIR / f"{resume_id}{suffix}"
+        path.unlink(missing_ok=True)
     return RedirectResponse("/", status_code=303)
