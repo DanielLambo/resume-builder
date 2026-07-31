@@ -422,9 +422,10 @@ async def init_db():
             )
             existing = await cursor.fetchone()
             if existing:
+                # Keep description fresh, but never overwrite local latex edits.
                 await db.execute(
-                    "UPDATE templates SET description = ?, latex_content = ? WHERE id = ?",
-                    (jake["description"], jake["latex_content"], existing[0]),
+                    "UPDATE templates SET description = ? WHERE id = ?",
+                    (jake["description"], existing[0]),
                 )
             else:
                 await db.execute(
