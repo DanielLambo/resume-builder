@@ -15,6 +15,32 @@ RESUMES_DIR.mkdir(parents=True, exist_ok=True)
 COMPILED_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _flatten_multiline_commands(lines: list[str]) -> list[str]:
+    """Join commands whose brace-args are spread across multiple lines.
+
+    Handles the common pattern:
+        \\resumeSubheading
+        {Company}{Location}
+        {Role}{Date}
+    """
+    out = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if re.fullmatch(r"\\(resumeSubheading|role)\s*", stripped):
+            joined = stripped
+            j = i + 1
+            while j < len(lines) and lines[j].strip().startswith("{"):
+                joined += lines[j].strip()
+                j += 1
+            out.append(joined)
+            i = j
+            continue
+        out.append(lines[i])
+        i += 1
+    return out
+
+
 def latex_to_compact(latex: str) -> str:
     """Convert LaTeX resume to compact token-efficient plain text.
 
@@ -22,6 +48,7 @@ def latex_to_compact(latex: str) -> str:
     Saves ~3-5x tokens vs raw LaTeX on Groq.
     """
     lines = latex.split("\n")
+    lines = _flatten_multiline_commands(lines)
     out = []
     in_preamble = False
     brace_depth = 0
@@ -41,6 +68,12 @@ def latex_to_compact(latex: str) -> str:
         if stripped == "\\end{document}":
             continue
 
+        # moderncv \name{First Last} — set in preamble, rendered by \makecvtitle
+        m = re.match(r"\\name\{(.+?)\}", stripped)
+        if m:
+            out.append(f"NAME {m.group(1)}")
+            continue
+
         # Skip everything inside preamble
         if in_preamble:
             if stripped.startswith("\\newcommand") or stripped.startswith("\\renewcommand") or stripped.startswith("\\def"):
@@ -51,10 +84,13 @@ def latex_to_compact(latex: str) -> str:
                 continue
             continue
 
-        # Name header: \huge \scshape Name \\ \vspace{4pt}
-        if "\\huge" in stripped or "\\scshape" in stripped:
-            m = re.search(r"\\(?:huge|scshape|Large|large|normalsize)\s*", stripped)
-            name_text = re.sub(r"\\(?:huge|scshape|Large|large|normalsize|vspace|textbf|textit)\s*\{?[^}]*\}?\s*", "", stripped)
+        # Name header: \huge \scshape Name, {\LARGE\bfseries Name}
+        if any(cmd in stripped for cmd in ("\\huge", "\\scshape", "\\LARGE", "\\Large", "\\large", "\\normalsize")):
+            name_text = re.sub(
+                r"\\(?:huge|scshape|LARGE|Large|large|normalsize|vspace|textbf|textit)\s*\{?[^}]*\}?\s*",
+                "", stripped,
+            )
+            name_text = re.sub(r"\\+\s*\[.*?\]", "", name_text)
             name_text = re.sub(r"[\\{}]", "", name_text).strip()
             if name_text and len(name_text) > 2:
                 out.append(f"NAME {name_text}")
@@ -89,8 +125,12 @@ def latex_to_compact(latex: str) -> str:
                     out.append(f"CONTACT {' | '.join(parts)}")
                     continue
 
+        # Skip structural brace wrappers like { and {\small (brace may be on next line)
+        if stripped in ("}", "{") or re.fullmatch(r"\{\\(?:small|large|LARGE|huge|bfseries|normalsize)\s*(?:}|)", stripped):
+            continue
+
         # Section headers
-        m = re.match(r"\\(?:section|resumeSection)\*?\{(.+?)\}", stripped)
+        m = re.match(r"\\(?:section|resumesection|resumeSection)\*?\{(.+?)\}", stripped)
         if m:
             out.append(f"SECTION {m.group(1)}")
             continue
@@ -100,29 +140,55 @@ def latex_to_compact(latex: str) -> str:
             out.append(f"SUBSECTION {m.group(1)}")
             continue
 
-        # Subheading: \resumeSubheading{Company}{Date}{Role}{Location}
+        # Subheading (4-arg, Jake style): \resumeSubheading{Company}{Location}{Role}{Date}
         m = re.match(r"\\resumeSubheading\{(.+?)\}\{(.+?)\}\{(.+?)\}\{(.+?)\}", stripped)
         if m:
-            company, dates, role, loc = m.groups()
-            loc_str = f" | {loc}" if loc else ""
-            out.append(f"SUB {company} | {dates} | {role}{loc_str}")
+            company, loc, role, dates = m.groups()
+            out.append(f"@COMPANY {company}")
+            out.append(f"@LOC {loc}")
+            out.append(f"@ROLE {role}")
+            out.append(f"@DATES {dates}")
             continue
 
+        # Subheading (2-arg): \resumeSubheading{Title}{Date}
         m = re.match(r"\\resumeSubheading\{(.+?)\}\{(.+?)\}", stripped)
         if m:
-            out.append(f"SUB {m.group(1)} | {m.group(2)}")
+            out.append(f"@COMPANY {m.group(1)}")
+            out.append(f"@DATES {m.group(2)}")
             continue
 
-        # Role: \role{Company}{Role}{Dates}{Location}
+        # Role (4-arg): \role{Company}{Role}{Dates}{Location}
         m = re.match(r"\\role\{(.+?)\}\{(.+?)\}\{(.+?)\}\{(.+?)\}", stripped)
         if m:
             company, role, dates, loc = m.groups()
-            loc_str = f" | {loc}" if loc else ""
-            out.append(f"ROLE {company} | {role} | {dates}{loc_str}")
+            out.append(f"@COMPANY {company}")
+            out.append(f"@ROLE {role}")
+            out.append(f"@DATES {dates}")
+            if loc.strip():
+                out.append(f"@LOC {loc}")
             continue
 
-        # Bullet items
-        m = re.match(r"\\(?:resumeItem|item)\s*\{(.+)\}", stripped)
+        # Role (3-arg): \role{Title}{Company}{Details}
+        m = re.match(r"\\role\{(.+?)\}\{(.+?)\}\{(.+?)\}", stripped)
+        if m:
+            title, company, details = m.groups()
+            out.append(f"@TITLE {title}")
+            out.append(f"@COMPANY {company}")
+            out.append(f"@DETAILS {details}")
+            continue
+
+        # Bullet items: \resumeItem{label}{text} (2-arg) first
+        m = re.match(r"\\resumeItem\{([^}]*)\}\{(.+)\}\s*$", stripped)
+        if m:
+            label, text = m.groups()
+            out.append(f"- {label}: {text}" if label else f"- {text}")
+            continue
+        # Bullet items: \resumeItem{...} or \item text (1-arg)
+        m = re.match(r"\\(?:resumeItem)\s*\{(.+)\}", stripped)
+        if m:
+            out.append(f"- {m.group(1)}")
+            continue
+        m = re.match(r"\\(?:item)\s+(.+)$", stripped)
         if m:
             out.append(f"- {m.group(1)}")
             continue
@@ -169,15 +235,333 @@ def latex_to_compact(latex: str) -> str:
             out.append(m.group(2))
             continue
 
-        # Bare text (strip remaining LaTeX commands)
-        cleaned = re.sub(r"\\\w+\s*\{([^}]+)\}", r"\1", stripped)
-        cleaned = re.sub(r"\\[a-zA-Z]+", "", cleaned)
-        cleaned = re.sub(r"[{}%]", "", cleaned)
+        # Bare text — keep LaTeX escapes meaningful (e.g. \%, \quad, $...$)
+        # and only convert \textbf{}/\textit{} to compact ** / * markers.
+        cleaned = re.sub(r"\\textbf\{(.+?)\}", r"**\1**", stripped)
+        cleaned = re.sub(r"\\textit\{(.+?)\}", r"*\1*", cleaned)
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         if cleaned:
             out.append(cleaned)
 
     return "\n".join(out)
+
+
+# ── Document structure helpers ────────────────────────────────
+SECTION_RE = re.compile(r"^\\(?:section|resumesection)\*?\{(.+?)\}")
+HEADING_FIELD_RE = re.compile(r"^@(COMPANY|DATES|ROLE|LOC|TITLE|DETAILS)\s+(.*)$")
+
+
+def split_document(latex: str) -> tuple[str, str] | tuple[None, None]:
+    """Split a LaTeX document into (preamble, body).
+
+    The preamble is everything before \\begin{document}. The body is the
+    content between \\begin{document} and \\end{document} (exclusive).
+    Returns (None, None) if the markers are missing/malformed.
+    """
+    begin_m = re.search(r"\\begin\{document\}", latex)
+    end_m = re.search(r"\\end\{document\}", latex)
+    if not begin_m or not end_m or end_m.start() < begin_m.end():
+        return None, None
+    return latex[:begin_m.start()], latex[begin_m.end():end_m.start()]
+
+
+def extract_custom_commands(preamble: str) -> list[str]:
+    """Find user-defined LaTeX commands/environments in a preamble."""
+    commands = re.findall(r"\\(?:re)?newcommand\*?\s*\{\\([a-zA-Z]+)\}", preamble)
+    commands += re.findall(r"\\newenvironment\*?\s*\{([a-zA-Z]+)\}", preamble)
+    return sorted(set(commands))
+
+
+def split_blocks(body: str) -> list[dict]:
+    """Split a document body into blocks: a leading header block plus one
+    block per \\section / \\resumesection section. Each block is
+    {"kind": "header"|"section", "name": str|None, "lines": [str]}.
+    """
+    blocks = []
+    current = {"kind": "header", "name": None, "lines": []}
+    for line in body.split("\n"):
+        m = SECTION_RE.match(line.strip())
+        if m:
+            if current["lines"] or current["kind"] == "section":
+                blocks.append(current)
+            current = {"kind": "section", "name": m.group(1), "lines": [line]}
+        else:
+            current["lines"].append(line)
+    blocks.append(current)
+    return blocks
+
+
+def _split_compact_sections(compact: str) -> dict[str, list[str]]:
+    """Parse compact text into {section_name: [lines]}. Lines before the
+    first SECTION marker are grouped under the key None (header content).
+    """
+    sections = {}
+    current_key = None
+    for line in compact.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        m = SECTION_RE.match(stripped) or re.match(r"^SECTION\s+(.+)$", stripped)
+        if m:
+            current_key = m.group(1).strip()
+            sections.setdefault(current_key, [])
+        else:
+            if current_key is None:
+                current_key = "HEADER"
+                sections.setdefault(current_key, [])
+            sections[current_key].append(stripped)
+    return sections
+
+
+def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
+    """Rebuild a LaTeX section block from compact lines, using the command
+    style detected in the original block. Returns LaTeX lines.
+    """
+    # Flatten so \resumeSubheading\n{...}{...} is detectable
+    orig = "\n".join(_flatten_multiline_commands(block["lines"]))
+
+    has_resume_item = "\\resumeItem{" in orig
+    has_resume_sub = "\\resumeSubheading{" in orig
+    has_role = "\\role{" in orig
+    has_entrygap = "\\entrygap" in orig
+
+    sub_multiline = any(
+        re.fullmatch(r"\\resumeSubheading\s*", l.strip()) for l in block["lines"]
+    )
+
+    bl = block["lines"]
+    blank_before_heading = any(
+        bl[i].strip() == ""
+        and re.fullmatch(r"\\(?:resumeSubheading|role)\s*", bl[i + 1].strip())
+        for i in range(len(bl) - 1)
+    )
+
+    sub_args = 0
+    if has_resume_sub:
+        m = re.search(r"\\resumeSubheading\{(.+?)\}\{(.+?)\}\{(.+?)\}\{(.+?)\}", orig)
+        if m:
+            sub_args = 4
+        else:
+            m = re.search(r"\\resumeSubheading\{(.+?)\}\{(.+?)\}", orig)
+            if m:
+                sub_args = 2
+    role_args = 0
+    if has_role:
+        m = re.search(r"\\role\{(.+?)\}\{(.+?)\}\{(.+?)\}\{(.+?)\}", orig)
+        if m:
+            role_args = 4
+        else:
+            m = re.search(r"\\role\{(.+?)\}\{(.+?)\}\{(.+?)\}", orig)
+            if m:
+                role_args = 3
+
+    item_env = None
+    for env in ("resumeitemize", "itemize", "enumerate"):
+        if f"\\begin{{{env}}}" in orig:
+            item_env = env
+            break
+
+    bullet_cmd = "\\resumeItem" if has_resume_item else "\\item"
+    resume_item_args = 2 if re.search(r"\\resumeItem\{[^}]*\}\{", orig) else 1
+
+    item_indent = ""
+    m = re.search(r"^(\s*)\\(?:item|resumeItem)\b", orig, re.M)
+    if m:
+        item_indent = m.group(1)
+
+    out_lines = []
+    # Keep the section header line verbatim
+    if block["kind"] == "section" and block["lines"]:
+        out_lines.append(block["lines"][0])
+    elif block["kind"] == "header":
+        return block["lines"]
+
+    items = []
+    heading_group = []  # pending @-prefixed heading fields
+    prev_heading_emitted = False
+    items_flushed = False
+
+    def flush_heading():
+        nonlocal heading_group, prev_heading_emitted, items_flushed
+        if not heading_group:
+            return
+        fields = {f: v.strip() for f, v in heading_group}
+        heading_group = []
+        if has_entrygap and prev_heading_emitted:
+            out_lines.append("\\entrygap")
+        elif blank_before_heading and items_flushed:
+            out_lines.append("")
+        items_flushed = False
+        prev_heading_emitted = True
+        if has_resume_sub and sub_args == 4:
+            company, loc = fields.get("COMPANY", ""), fields.get("LOC", "")
+            role, dates = fields.get("ROLE", ""), fields.get("DATES", "")
+            if sub_multiline:
+                out_lines.append("\\resumeSubheading")
+                out_lines.append(f"{{{company}}}{{{loc}}}")
+                out_lines.append(f"{{{role}}}{{{dates}}}")
+            else:
+                out_lines.append(f"\\resumeSubheading{{{company}}}{{{loc}}}{{{role}}}{{{dates}}}")
+        elif has_resume_sub:
+            out_lines.append(
+                f"\\resumeSubheading{{{fields.get('COMPANY', '')}}}{{{fields.get('DATES', '')}}}"
+            )
+        elif has_role and role_args == 4:
+            out_lines.append(
+                f"\\role{{{fields.get('COMPANY', '')}}}{{{fields.get('ROLE', '')}}}"
+                f"{{{fields.get('DATES', '')}}}{{{fields.get('LOC', '')}}}"
+            )
+        elif has_role:
+            out_lines.append(
+                f"\\role{{{fields.get('TITLE', '')}}}{{{fields.get('COMPANY', '')}}}"
+                f"{{{fields.get('DETAILS', '')}}}"
+            )
+        else:
+            parts = [fields[k] for k in ("COMPANY", "DATES", "ROLE", "LOC") if fields.get(k)]
+            out_lines.append(" \\hfill ".join(parts))
+
+    def flush_items():
+        nonlocal items, items_flushed
+        if not items:
+            return
+        items_flushed = True
+        rendered = []
+        for content in items:
+            if has_resume_item and resume_item_args == 2:
+                fm = re.match(r"^(.*?):\s*(.*)$", content, re.S)
+                label, rest = (fm.group(1), fm.group(2)) if fm else ("", content)
+                rendered.append(f"{item_indent}\\resumeItem{{{label}}}{{{rest}}}")
+            elif has_resume_item:
+                rendered.append(f"{item_indent}\\resumeItem{{{content}}}")
+            else:
+                rendered.append(f"{item_indent}\\item {content}")
+        if item_env:
+            out_lines.append(f"\\begin{{{item_env}}}")
+            out_lines.extend(rendered)
+            out_lines.append(f"\\end{{{item_env}}}")
+        else:
+            out_lines.extend(rendered)
+        items = []
+
+    for line in compact_lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        m = SECTION_RE.match(stripped) or re.match(r"^SECTION\s+(.+)$", stripped)
+        if m:
+            continue
+        if stripped.startswith("@") and HEADING_FIELD_RE.match(stripped):
+            flush_items()
+            fm = HEADING_FIELD_RE.match(stripped)
+            heading_group.append((fm.group(1), fm.group(2)))
+            continue
+
+        if stripped.startswith("- "):
+            if heading_group:
+                flush_heading()
+            items.append(stripped[2:])
+            continue
+
+        # Non-heading, non-bullet line → flush pending groups
+        if heading_group:
+            flush_heading()
+        if items:
+            flush_items()
+
+        if stripped == "\\\\":
+            out_lines.append("\\\\")
+            continue
+        # Bold markers **text** → \textbf{text}
+        cleaned = re.sub(r"\*\*(.+?)\*\*", r"\\textbf{\1}", stripped)
+        out_lines.append(cleaned)
+
+    if heading_group:
+        flush_heading()
+    if items:
+        flush_items()
+
+    # Collapse consecutive blank lines
+    result = []
+    for line in out_lines:
+        if line.strip() == "" and result and result[-1].strip() == "":
+            continue
+        result.append(line)
+
+    # Preserve the block's trailing blank-line separation
+    trailing_blanks = 0
+    for ln in reversed(block["lines"]):
+        if ln.strip() == "":
+            trailing_blanks += 1
+        else:
+            break
+    while result and result[-1].strip() == "":
+        result.pop()
+    result.extend([""] * trailing_blanks)
+    return result
+
+
+def apply_compact_sections(latex: str, compact: str) -> str:
+    """Apply AI edits expressed as compact section text to a LaTeX document.
+
+    The preamble and the header block (before the first section) are always
+    preserved verbatim. Only sections that appear in the compact text are
+    rebuilt; all others are kept exactly as-is.
+    """
+    preamble, body = split_document(latex)
+    if preamble is None or body is None:
+        return latex
+
+    new_sections = _split_compact_sections(compact)
+    blocks = split_blocks(body)
+
+    new_body_lines = []
+    for block in blocks:
+        if block["kind"] == "header":
+            new_body_lines.extend(block["lines"])
+            continue
+        name = block["name"]
+        if name in new_sections:
+            new_body_lines.extend(compact_to_latex_block(block, new_sections[name]))
+        else:
+            new_body_lines.extend(block["lines"])
+
+    return _replace_body(latex, "\n".join(new_body_lines))
+
+
+def apply_ai_body(latex: str, ai_output: str) -> str:
+    """Splice the AI's document body into the original preamble.
+
+    Preserves the user's preamble and custom command definitions; only the
+    body between \\begin{document} and \\end{document} is taken from the AI.
+    """
+    begin_m = re.search(r"\\begin\{document\}", ai_output)
+    end_m = re.search(r"\\end\{document\}", ai_output)
+    if not begin_m or not end_m:
+        return ai_output
+
+    body = ai_output[begin_m.end():end_m.start()]
+    return _replace_body(latex, body)
+
+
+def _replace_body(latex: str, new_body: str) -> str:
+    """Replace the body of a LaTeX document in-place, preserving all other
+    text (including whitespace around the \\begin/\\end markers) exactly.
+    Falls back to returning `latex` if the markers can't be found.
+    """
+    begin_m = re.search(r"\\begin\{document\}", latex)
+    end_m = re.search(r"\\end\{document\}", latex)
+    if not begin_m or not end_m or end_m.start() < begin_m.end():
+        return latex
+    orig_body = latex[begin_m.end():end_m.start()]
+    leading = len(orig_body) - len(orig_body.lstrip("\n"))
+    trailing = len(orig_body) - len(orig_body.rstrip("\n"))
+    return (
+        latex[:begin_m.end()]
+        + "\n" * leading
+        + new_body.strip("\n")
+        + "\n" * trailing
+        + latex[end_m.start():]
+    )
 
 
 def parse_log_errors(log_text: str) -> list[dict]:

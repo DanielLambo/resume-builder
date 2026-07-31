@@ -41,7 +41,6 @@
         <button type="submit" class="btn btn-primary upload-submit" disabled>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/><path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.58 3.25 3.93"/></svg>
           Convert to LaTeX
-          <span class="upload-tex-label" style="display:none">Import .tex</span>
         </button>
       </div>
     </form>
@@ -100,6 +99,8 @@
   var drop = document.getElementById("upload-drop");
   var submit = document.querySelector(".upload-submit");
   var titleInput = document.querySelector(".upload-title-input");
+  var tplSelect = document.querySelector(".upload-tpl-select");
+  var form = document.querySelector(".upload-form");
   var panel = document.getElementById("upload-panel");
   var uploadBtn = document.querySelector(".upload-btn");
   var emptyUpload = document.querySelector(".empty-actions .btn:not(.btn-primary)");
@@ -126,10 +127,18 @@
         drop.querySelector(".upload-drop-hint").textContent = (f.size / 1024).toFixed(1) + " KB";
         submit.disabled = false;
         submit.textContent = isTex ? "Import .tex" : "Convert to LaTeX";
+        if (tplSelect) tplSelect.style.display = isTex ? "none" : "";
         if (titleInput && titleInput.value === "Uploaded Resume") {
           titleInput.value = f.name.replace(/\.[^.]+$/, "");
         }
       }
+    });
+  }
+
+  if (form) {
+    form.addEventListener("submit", function() {
+      submit.disabled = true;
+      submit.innerHTML = '<span class="spinner"></span> Uploading...';
     });
   }
 
