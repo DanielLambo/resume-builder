@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { PrivacyNotice } from "@/components/PrivacyNotice";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function HomePage() {
@@ -17,7 +18,7 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center gap-4 px-6">
+    <main className="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center gap-4 px-6 py-12">
       <p className="font-mono text-xs tracking-wide text-studio-muted">
         TYPESETTER / RESUME ENGINE
       </p>
@@ -41,6 +42,7 @@ export default async function HomePage() {
           Create account
         </Link>
       </div>
+      <PrivacyNotice className="mt-6 max-w-lg" />
     </main>
   );
 }

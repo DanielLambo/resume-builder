@@ -17,6 +17,7 @@ export type TokenUsageState = {
   limit: number;
   remaining: number;
   loading: boolean;
+  warning: string | null;
   refresh: () => Promise<void>;
   applyUsage: (used: number, remaining?: number, limit?: number) => void;
 };
@@ -28,6 +29,7 @@ export function TokenUsageProvider({ children }: { children: ReactNode }) {
   const [limit, setLimit] = useState(DAILY_AI_TOKEN_LIMIT);
   const [remaining, setRemaining] = useState(DAILY_AI_TOKEN_LIMIT);
   const [loading, setLoading] = useState(true);
+  const [warning, setWarning] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -37,6 +39,7 @@ export function TokenUsageProvider({ children }: { children: ReactNode }) {
         setUsed(0);
         setRemaining(DAILY_AI_TOKEN_LIMIT);
         setLimit(DAILY_AI_TOKEN_LIMIT);
+        setWarning(null);
         return;
       }
       if (!res.ok) return;
@@ -44,6 +47,7 @@ export function TokenUsageProvider({ children }: { children: ReactNode }) {
         used?: number;
         remaining?: number;
         limit?: number;
+        warning?: string;
       };
       setUsed(Number(data.used ?? 0));
       setLimit(Number(data.limit ?? DAILY_AI_TOKEN_LIMIT));
@@ -53,6 +57,7 @@ export function TokenUsageProvider({ children }: { children: ReactNode }) {
             Math.max(0, Number(data.limit ?? DAILY_AI_TOKEN_LIMIT) - Number(data.used ?? 0)),
         ),
       );
+      setWarning(typeof data.warning === "string" ? data.warning : null);
     } finally {
       setLoading(false);
     }
@@ -68,6 +73,7 @@ export function TokenUsageProvider({ children }: { children: ReactNode }) {
           ? nextRemaining
           : Math.max(0, lim - nextUsed),
       );
+      setWarning(null);
     },
     [limit],
   );
@@ -77,8 +83,8 @@ export function TokenUsageProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const value = useMemo(
-    () => ({ used, limit, remaining, loading, refresh, applyUsage }),
-    [used, limit, remaining, loading, refresh, applyUsage],
+    () => ({ used, limit, remaining, loading, warning, refresh, applyUsage }),
+    [used, limit, remaining, loading, warning, refresh, applyUsage],
   );
 
   return (

@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useTransition,
@@ -12,16 +13,28 @@ import {
 import { toast } from "sonner";
 
 import { vibeEditAction } from "@/app/actions/vibe-edit";
+import { shortenBulletAction } from "@/app/actions/shorten-bullet";
 import { saveResumeLatexAction } from "@/app/actions/resumes";
-import { GhostDiffPreview } from "@/components/editor/GhostDiffPreview";
+import { LineOptimizerToggle, useLineOptimizerPreference } from "@/components/editor/LineOptimizerToggle";
+import { OrphanHeatmapPanel } from "@/components/editor/OrphanHeatmapPanel";
+import { PDFPreview } from "@/components/editor/PDFPreview";
 import { QuotaModal } from "@/components/editor/QuotaModal";
 import { StatusLog } from "@/components/editor/StatusLog";
+import { TemplatePicker } from "@/components/templates/TemplatePicker";
+import { analyzeOrphans, type OrphanBullet } from "@/lib/analyzer/orphanDetector";
+import {
+  getTemplate,
+  type ResumeTemplateId,
+} from "@/lib/resume-template";
 import { useTokenUsage } from "@/lib/token-usage";
 
 type EditorClientProps = {
   resumeId: string;
   title: string;
   initialLatex: string;
+  initialTemplateId?: ResumeTemplateId;
+  initialPdfBase64?: string | null;
+  initialPageCount?: number | null;
 };
 
 type StudioMode = "vibe" | "source";
@@ -36,50 +49,163 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export function EditorClient({ resumeId, title, initialLatex }: EditorClientProps) {
+export function EditorClient({
+  resumeId,
+  title,
+  initialLatex,
+  initialTemplateId = "new-grad",
+  initialPdfBase64 = null,
+  initialPageCount = null,
+}: EditorClientProps) {
   const { applyUsage, used: tokensUsed } = useTokenUsage();
   const [latex, setLatex] = useState(initialLatex);
+  const [templateId, setTemplateId] = useState<ResumeTemplateId>(initialTemplateId);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [reply, setReply] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [pending, startTransition] = useTransition();
   const [compiling, setCompiling] = useState(false);
   const [mode, setMode] = useState<StudioMode>("vibe");
-  const [templateLabel, setTemplateLabel] = useState("Jake");
-  const [onePageLock, setOnePageLock] = useState(true);
+  const [onePageLock, setOnePageLock] = useState(
+    initialPageCount == null || initialPageCount === 1,
+  );
+  const [pageCount, setPageCount] = useState<number | null>(initialPageCount);
+  const [pdfBase64, setPdfBase64] = useState<string | null>(initialPdfBase64);
   const [statusLines, setStatusLines] = useState<string[]>([]);
   const [ghostActive, setGhostActive] = useState(false);
-  const [previousLatex, setPreviousLatex] = useState<string | null>(null);
   const [quotaOpen, setQuotaOpen] = useState(false);
   const [quotaTitle, setQuotaTitle] = useState("");
   const [quotaBody, setQuotaBody] = useState("");
+  const [heatmapOn, setHeatmapOn, heatmapReady] = useLineOptimizerPreference(false);
+  const [shorteningIndex, setShorteningIndex] = useState<number | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const runId = useRef(0);
+  const compileGen = useRef(0);
+  const latexRef = useRef(latex);
+  const templateIdRef = useRef(templateId);
+  const savingRef = useRef(false);
+  const pendingResaveRef = useRef(false);
+  const didInitialCompile = useRef(false);
+  latexRef.current = latex;
+  templateIdRef.current = templateId;
 
-  const autosave = useCallback(async () => {
-    if (!dirty) return;
-    const result = await saveResumeLatexAction(resumeId, latex, title);
-    if (result.ok) {
-      setDirty(false);
-      toast.success("Resume auto-saved to Supabase", { duration: 2200 });
-    } else {
-      toast.error(result.error);
+  const orphanCount = useMemo(
+    () => (heatmapOn ? analyzeOrphans(latex).orphanCount : 0),
+    [heatmapOn, latex],
+  );
+
+  const flushSave = useCallback(async () => {
+    if (savingRef.current) {
+      pendingResaveRef.current = true;
+      return;
     }
-  }, [dirty, latex, resumeId, title]);
+    savingRef.current = true;
+    try {
+      let passes = 0;
+      do {
+        pendingResaveRef.current = false;
+        passes += 1;
+        const snapshot = latexRef.current;
+        const snapshotTemplate = templateIdRef.current;
+        const result = await saveResumeLatexAction(
+          resumeId,
+          snapshot,
+          title,
+          snapshotTemplate,
+        );
+        if (!result.ok) {
+          toast.error(result.error);
+          return;
+        }
+        const drifted =
+          latexRef.current !== snapshot ||
+          templateIdRef.current !== snapshotTemplate ||
+          pendingResaveRef.current;
+        if (drifted && passes < 5) {
+          continue;
+        }
+        if (!drifted) setDirty(false);
+        toast.success("Resume saved to your account", { duration: 2200 });
+        return;
+      } while (passes < 5);
+    } finally {
+      savingRef.current = false;
+    }
+  }, [resumeId, title]);
 
   useEffect(() => {
     if (!dirty) return;
     const t = window.setTimeout(() => {
-      void autosave();
+      void flushSave();
     }, 1600);
     return () => window.clearTimeout(t);
-  }, [autosave, dirty, latex]);
+  }, [dirty, flushSave, latex, templateId]);
 
   useEffect(() => {
     if (!ghostActive) return;
     const t = window.setTimeout(() => setGhostActive(false), 3000);
     return () => window.clearTimeout(t);
   }, [ghostActive]);
+
+  const compilePdf = useCallback(
+    async (source: string, { quiet = false } = {}) => {
+      const gen = ++compileGen.current;
+      setCompiling(true);
+      if (!quiet) {
+        toast.message("Compiling LaTeX…", {
+          description: "1-Page Lock is measuring page count with pdf-lib.",
+        });
+      }
+      try {
+        const res = await fetch("/api/compile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ latex: source, autoFit: true }),
+        });
+        const data = (await res.json()) as {
+          success?: boolean;
+          pdfBase64?: string;
+          pageCount?: number;
+          lockedToOnePage?: boolean;
+          error?: string;
+          elapsedMs?: number;
+        };
+        if (!res.ok || !data.success || !data.pdfBase64) {
+          throw new Error(data.error || "Compile failed");
+        }
+        if (gen !== compileGen.current) return data; // stale response
+        setPdfBase64(data.pdfBase64);
+        setPageCount(data.pageCount ?? null);
+        setOnePageLock(Boolean(data.lockedToOnePage ?? data.pageCount === 1));
+        if (!quiet) {
+          toast.success("Preview ready", {
+            description: `${data.pageCount ?? "?"} page · ${data.elapsedMs ?? 0}ms`,
+          });
+        }
+        return data;
+      } catch (err) {
+        if (gen === compileGen.current) {
+          const message = err instanceof Error ? err.message : "Compile failed";
+          if (!quiet) toast.error(message);
+        }
+        throw err;
+      } finally {
+        if (gen === compileGen.current) {
+          setCompiling(false);
+        }
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (didInitialCompile.current || pdfBase64) return;
+    didInitialCompile.current = true;
+    void compilePdf(initialLatex, { quiet: true }).catch(() => {
+      /* soft-fail on first paint; user can hit Compile */
+    });
+  }, [compilePdf, initialLatex, pdfBase64]);
 
   async function streamClientSteps(signal: { cancelled: boolean }) {
     for (const step of CLIENT_STEPS) {
@@ -152,12 +278,13 @@ export function EditorClient({ resumeId, title, initialLatex }: EditorClientProp
             ? result.data_json.latex
             : priorLatex;
 
-        setPreviousLatex(priorLatex);
         setLatex(nextLatex);
         setDirty(true);
         setReply(result.reply);
         setPrompt("");
-        setOnePageLock(true);
+        setPdfBase64(result.pdfBase64);
+        setPageCount(result.pageCount);
+        setOnePageLock(result.lockedToOnePage);
         setGhostActive(true);
 
         const serverLines = result.steps.map(
@@ -169,12 +296,12 @@ export function EditorClient({ resumeId, title, initialLatex }: EditorClientProp
             ? serverLines
             : [
                 ...CLIENT_STEPS,
-                `[4/4] PDF rendered successfully in ${result.elapsedMs}ms.`,
+                `[4/4] PDF rendered successfully (${result.pageCount} page) in ${result.elapsedMs}ms.`,
               ],
         );
 
         toast.success("Vibe edit applied", {
-          description: `${result.tokensUsed.toLocaleString()} tokens · ${result.dailyTokensUsed.toLocaleString()} used today`,
+          description: `${result.tokensUsed.toLocaleString()} tokens · ${result.pageCount} page PDF`,
         });
       } catch {
         signal.cancelled = true;
@@ -195,27 +322,79 @@ export function EditorClient({ resumeId, title, initialLatex }: EditorClientProp
   }
 
   function onCompile() {
-    setCompiling(true);
-    toast.message("Compiling LaTeX…", {
-      description: "If this fails, the self-healing engine will try to resolve it.",
+    void compilePdf(latex).catch(() => {
+      /* toast already shown inside compilePdf */
     });
-    window.setTimeout(() => {
-      setCompiling(false);
-      const broken = latex.includes("\\bogus") || latex.includes("\\error");
-      if (broken) {
-        toast.warning("Syntax tweak detected, auto-healing LaTeX...");
+  }
+
+  function applyTemplate(nextId: ResumeTemplateId) {
+    if (nextId === templateId) {
+      setTemplatePickerOpen(false);
+      return;
+    }
+    const next = getTemplate(nextId);
+    const ok = window.confirm(
+      `Replace the current source with the “${next.name}” template? Unsaved wording in this draft will be overwritten.`,
+    );
+    if (!ok) return;
+    setTemplateId(next.id);
+    setLatex(next.latex);
+    setDirty(true);
+    setGhostActive(true);
+    setTemplatePickerOpen(false);
+    toast.success(`Switched to ${next.name}`, {
+      description: "Recompiling preview…",
+    });
+    void compilePdf(next.latex, { quiet: true }).catch(() => undefined);
+  }
+
+  async function onShortenOrphan(bullet: OrphanBullet) {
+    setShorteningIndex(bullet.index);
+    try {
+      const result = await shortenBulletAction({
+        resumeId,
+        latex,
+        itemStart: bullet.start,
+        itemEnd: bullet.end,
+        itemText: bullet.text,
+        kind: bullet.kind,
+      });
+      if (!result.ok) {
+        if (result.code === "AI_DAILY_LIMIT") {
+          setQuotaTitle("Daily AI token limit reached");
+          setQuotaBody(result.error);
+          setQuotaOpen(true);
+          if (typeof result.used === "number") {
+            applyUsage(result.used, undefined, result.limit);
+          }
+          return;
+        }
+        toast.error(result.error);
         return;
       }
-      setOnePageLock(true);
-      toast.success("Preview ready", {
-        description: "PDF compile succeeded (local preview stub).",
+      if (result.unchanged) {
+        toast.message("Couldn't tighten further", {
+          description: "Try a vibe edit, or trim a metric phrase manually.",
+        });
+        return;
+      }
+      setLatex(result.latex);
+      setDirty(true);
+      setGhostActive(true);
+      applyUsage(result.dailyTokensUsed, result.dailyTokensRemaining);
+      toast.success("Bullet tightened", {
+        description: "Updating PDF preview…",
       });
-    }, 900);
+      // Soft recompile keeps heatmap UX snappy; lock badge follows compile result.
+      void compilePdf(result.latex, { quiet: true }).catch(() => undefined);
+    } finally {
+      setShorteningIndex(null);
+    }
   }
 
   return (
     <div
-      className="relative flex min-h-[calc(100dvh-3.5rem)] flex-col bg-studio-bg lg:flex-row"
+      className="relative flex h-full min-h-0 flex-col bg-studio-bg lg:flex-row"
       data-testid="vibe-harness"
       data-token-used={tokensUsed}
     >
@@ -228,7 +407,7 @@ export function EditorClient({ resumeId, title, initialLatex }: EditorClientProp
         </div>
       )}
 
-      <aside className="flex w-full flex-col border-r border-studio-border bg-studio-bg lg:w-[42%] xl:w-[38%]">
+      <aside className="flex max-h-full w-full flex-col overflow-hidden border-r border-studio-border bg-studio-bg lg:w-[42%] xl:w-[38%]">
         <div className="flex items-center justify-between gap-3 border-b border-studio-border px-4 py-3">
           <div>
             <p className="font-mono text-xs tracking-wide text-studio-muted">
@@ -272,13 +451,11 @@ export function EditorClient({ resumeId, title, initialLatex }: EditorClientProp
             <button
               type="button"
               className="hover:text-studio-ink"
-              onClick={() =>
-                setTemplateLabel((t) =>
-                  t === "Jake" ? "Harvard" : t === "Harvard" ? "Blank" : "Jake",
-                )
-              }
+              onClick={() => setTemplatePickerOpen(true)}
+              data-testid="template-switch"
+              title={getTemplate(templateId).description}
             >
-              Template: {templateLabel}
+              Template: {getTemplate(templateId).name}
             </button>
             <span aria-hidden="true">|</span>
             <button
@@ -350,26 +527,46 @@ export function EditorClient({ resumeId, title, initialLatex }: EditorClientProp
         )}
       </aside>
 
-      <section className="flex min-h-[60vh] flex-1 flex-col bg-studio-canvas">
-        <div className="flex items-center justify-between gap-3 border-b border-studio-border bg-studio-canvas/90 px-4 py-3 shadow-floating-bar backdrop-blur-sm">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-studio-canvas">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-studio-border bg-studio-canvas/90 px-4 py-3 shadow-floating-bar backdrop-blur-sm">
           <span className="font-mono text-xs text-studio-muted">PREVIEW · LETTER</span>
-          <span
-            data-testid="one-page-lock"
-            className={`rounded border px-2 py-1 font-mono text-xs ${
-              onePageLock
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-studio-border bg-white text-studio-muted"
-            }`}
-          >
-            {onePageLock ? "[ 100% 1-PAGE LOCK ACTIVE ]" : "[ FIT PENDING ]"}
-          </span>
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+            <LineOptimizerToggle
+              enabled={heatmapOn}
+              orphanCount={orphanCount}
+              onChange={setHeatmapOn}
+              ready={heatmapReady}
+            />
+            <span
+              data-testid="one-page-lock"
+              className={`rounded border px-2 py-1 font-mono text-xs ${
+                onePageLock
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-studio-border bg-white text-studio-muted"
+              }`}
+            >
+              {onePageLock
+                ? `[ ${pageCount ?? 1}-PAGE LOCK ACTIVE ]`
+                : `[ ${pageCount ?? "?"} PAGES — FIT PENDING ]`}
+            </span>
+          </div>
         </div>
 
-        <div className="flex flex-1 items-start justify-center overflow-auto p-6 sm:p-10">
-          <GhostDiffPreview
-            latex={latex}
-            previousLatex={previousLatex}
+        <div className="flex flex-1 flex-col items-center gap-4 overflow-auto p-6 sm:p-10">
+          <PDFPreview
+            pdfBase64={pdfBase64}
+            pageCount={pageCount}
             ghostActive={ghostActive}
+            pendingLatex={latex}
+            compiling={compiling || pending}
+          />
+          <OrphanHeatmapPanel
+            latex={latex}
+            enabled={heatmapOn && heatmapReady}
+            shorteningIndex={shorteningIndex}
+            onShorten={(bullet) => {
+              void onShortenOrphan(bullet);
+            }}
           />
         </div>
       </section>
@@ -381,6 +578,15 @@ export function EditorClient({ resumeId, title, initialLatex }: EditorClientProp
         latex={latex}
         filename={`${title.replace(/\s+/g, "-").toLowerCase() || "resume"}.tex`}
         onClose={() => setQuotaOpen(false)}
+      />
+      <TemplatePicker
+        open={templatePickerOpen}
+        title="Switch template"
+        confirmLabel="Apply template"
+        initialTemplateId={templateId}
+        hideTitle
+        onClose={() => setTemplatePickerOpen(false)}
+        onConfirm={(id) => applyTemplate(id)}
       />
     </div>
   );

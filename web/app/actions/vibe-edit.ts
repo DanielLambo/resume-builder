@@ -1,8 +1,11 @@
 "use server";
 
+import { injectLaTeXConfig } from "@resumate/one-page-lock";
 import { z } from "zod";
 
 import type { Json } from "@/lib/database.types";
+import { sanitizeCompileError } from "@/lib/compile-latex";
+import { fitResumeToSinglePage } from "@/lib/fit-resume";
 import { invokeGroqVibeEdit } from "@/lib/groq";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import {
@@ -36,6 +39,9 @@ export type VibeEditSuccess = {
   elapsedMs: number;
   healed: boolean;
   steps: VibeEditStep[];
+  pdfBase64: string;
+  pageCount: number;
+  lockedToOnePage: boolean;
 };
 
 export type VibeEditFailure = {
@@ -166,8 +172,6 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       };
     }
 
-    push("Compiling LaTeX via 1-Page Lock engine...");
-
     let healed = false;
     const groqResult = await invokeGroqVibeEdit({
       prompt,
@@ -178,6 +182,28 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       },
     });
     if (groqResult.healed) healed = true;
+
+    const editedLatex =
+      typeof groqResult.output.data_json.latex === "string"
+        ? groqResult.output.data_json.latex
+        : "";
+
+    if (!editedLatex.trim()) {
+      return {
+        ok: false,
+        status: 500,
+        code: "INTERNAL",
+        error: "AI returned empty LaTeX.",
+        steps,
+      };
+    }
+
+    push("Compiling LaTeX via 1-Page Lock engine...");
+
+    const fit = await fitResumeToSinglePage(editedLatex, {
+      allowGroqCondense: true,
+    });
+    const fittedLatex = injectLaTeXConfig(editedLatex, fit.finalConfig);
 
     const usage = isMockAiEnabled()
       ? await (async () => {
@@ -193,11 +219,25 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
         })()
       : await incrementDailyAiTokens(user.id, groqResult.totalTokens);
 
-    // In mock mode still persist so the editor/PDF preview updates for E2E.
+    const prevData = asRecord(resume.data_json);
+    const modelData = asRecord(groqResult.output.data_json as Json);
+    const nextDataJson = {
+      ...prevData,
+      ...modelData,
+      latex: fittedLatex,
+      layout: fit.finalConfig,
+      pageCount: fit.pageCount,
+      // Preserve template id from the existing resume when the model omits it.
+      template:
+        (typeof prevData.template === "string" && prevData.template) ||
+        (typeof modelData.template === "string" && modelData.template) ||
+        "new-grad",
+    };
+
     const { data: updated, error: updateError } = await supabase
       .from("resumes")
       .update({
-        data_json: groqResult.output.data_json as Json,
+        data_json: nextDataJson as unknown as Json,
       })
       .eq("id", resumeId)
       .eq("user_id", user.id)
@@ -215,7 +255,9 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     }
 
     const elapsedMs = Date.now() - started;
-    push(`PDF rendered successfully in ${elapsedMs}ms.`);
+    push(
+      `PDF rendered successfully (${fit.pageCount} page${fit.pageCount === 1 ? "" : "s"}) in ${fit.elapsedMs}ms.`,
+    );
 
     return {
       ok: true,
@@ -228,6 +270,9 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       elapsedMs,
       healed,
       steps,
+      pdfBase64: fit.compiledPdf.toString("base64"),
+      pageCount: fit.pageCount,
+      lockedToOnePage: fit.lockedToOnePage,
     };
   } catch (err) {
     if (err instanceof AiRateLimitError) {
@@ -246,11 +291,13 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
 
     const message = err instanceof Error ? err.message : "Unexpected server error";
     const network = /fetch failed|network|ECONNREFUSED|timeout/i.test(message);
+    const compileRelated =
+      /LATEX_COMPILE|latexonline|pdflatex|PDF compile|1-page lock/i.test(message);
     return {
       ok: false,
       status: 500,
       code: network ? "NETWORK" : "INTERNAL",
-      error: message,
+      error: compileRelated ? sanitizeCompileError(err) : message,
       resetHint: network
         ? "Network dropped mid-edit. Your current draft is intact — export .tex as a backup."
         : undefined,

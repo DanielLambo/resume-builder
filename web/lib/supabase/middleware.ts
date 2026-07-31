@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import type { Database } from "@/lib/database.types";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/editor", "/api/ai"] as const;
+const PROTECTED_PREFIXES = ["/dashboard", "/editor", "/api/ai", "/onboarding"] as const;
 const AUTH_ROUTES = ["/login", "/signup"] as const;
 
 function isProtected(pathname: string): boolean {

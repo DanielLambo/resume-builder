@@ -61,7 +61,11 @@ create policy "resumes_delete_own"
   on public.resumes
   for delete
   to authenticated
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
+
+-- Expose table to Data API roles (RLS still enforces row access)
+grant select, insert, update, delete on table public.resumes to authenticated;
+grant usage on schema public to authenticated;
 
 -- ── storage: resume-pdfs (owner folder = auth.uid()) ─────────────────
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
