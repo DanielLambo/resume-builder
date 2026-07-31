@@ -7,8 +7,6 @@ import tempfile
 import re
 from pathlib import Path
 
-from app.paths import COMPILED_DIR
-
 
 def _flatten_multiline_commands(lines: list[str]) -> list[str]:
     """Join commands whose brace-args are spread across multiple lines.
@@ -80,9 +78,12 @@ def latex_to_compact(latex: str) -> str:
             continue
 
         # Name header: \huge \scshape Name, {\LARGE\bfseries Name}
-        if any(cmd in stripped for cmd in ("\\huge", "\\scshape", "\\LARGE", "\\Large", "\\large", "\\normalsize")):
+        if any(
+            cmd in stripped
+            for cmd in ("\\huge", "\\scshape", "\\LARGE", "\\Large", "\\large", "\\normalsize", "\\bfseries")
+        ):
             name_text = re.sub(
-                r"\\(?:huge|scshape|LARGE|Large|large|normalsize|vspace|textbf|textit)\s*\{?[^}]*\}?\s*",
+                r"\\(?:huge|scshape|LARGE|Large|large|normalsize|vspace|textbf|textit|bfseries)\s*\{?[^}]*\}?\s*",
                 "", stripped,
             )
             name_text = re.sub(r"\\+\s*\[.*?\]", "", name_text)
@@ -286,6 +287,170 @@ def split_blocks(body: str) -> list[dict]:
     return blocks
 
 
+def section_at_line(latex: str, line_num: int) -> str | None:
+    """Return the nearest \\section / \\resumesection name at or above line_num (1-based)."""
+    lines = latex.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    if line_num < 1:
+        return None
+    idx = min(line_num, len(lines)) - 1
+    for i in range(idx, -1, -1):
+        m = re.search(r"\\(?:resume)?section\*?\{([^}]+)\}", lines[i], flags=re.I)
+        if m:
+            return m.group(1).strip()
+    return None
+
+
+_DANGEROUS_PATTERNS = [
+    (r"\\write18\b", r"\write18"),
+    (r"\\ShellEscape\b", r"\ShellEscape"),
+    (r"\\input\s*\{\s*/", r"\input{/…}"),
+    (r"\\include\s*\{\s*/", r"\include{/…}"),
+    (r"\\openout\b", r"\openout"),
+    (r"\\immediate\s*\\write", r"\immediate\write"),
+    (r"\\catcode\b", r"\catcode"),
+]
+
+
+def sanitize_latex(content: str) -> dict:
+    """Block constructs that enable shell I/O even without -shell-escape."""
+    hits = []
+    for pat, label in _DANGEROUS_PATTERNS:
+        if re.search(pat, content):
+            hits.append(label)
+    if hits:
+        return {
+            "ok": False,
+            "error": "Blocked unsafe LaTeX: " + ", ".join(hits),
+            "content": content,
+        }
+    return {"ok": True, "content": content, "error": ""}
+
+
+def auto_page_fit(latex: str, aggressiveness: int = 1) -> str:
+    """Tighten geometry / baselineskip / font to help fit one page.
+
+    aggressiveness: 1 = mild margins, 2 = +smaller type, 3 = +tighter leading.
+    Does not rewrite content — layout only.
+    """
+    content = latex
+    margin = {1: "0.5in", 2: "0.45in", 3: "0.4in"}[max(1, min(3, aggressiveness))]
+    if re.search(r"\\usepackage\[([^\]]*)\]\{geometry\}", content):
+        content = re.sub(
+            r"\\usepackage\[[^\]]*\]\{geometry\}",
+            rf"\\usepackage[margin={margin}]{{geometry}}",
+            content,
+            count=1,
+        )
+    elif "\\usepackage{geometry}" in content:
+        content = content.replace(
+            "\\usepackage{geometry}",
+            f"\\usepackage[margin={margin}]{{geometry}}",
+            1,
+        )
+    elif re.search(r"\\usepackage\[empty\]\{fullpage\}", content):
+        content = re.sub(
+            r"\\usepackage\[empty\]\{fullpage\}",
+            rf"\\usepackage[margin={margin}]{{geometry}}",
+            content,
+            count=1,
+        )
+
+    # Jake-style margin tweaks
+    if "\\addtolength{\\oddsidemargin}" in content and aggressiveness >= 1:
+        content = re.sub(
+            r"\\addtolength\{\\oddsidemargin\}\{[^}]+\}",
+            r"\\addtolength{\\oddsidemargin}{-0.6in}",
+            content,
+        )
+        content = re.sub(
+            r"\\addtolength\{\\evensidemargin\}\{[^}]+\}",
+            r"\\addtolength{\\evensidemargin}{-0.6in}",
+            content,
+        )
+        content = re.sub(
+            r"\\addtolength\{\\textwidth\}\{[^}]+\}",
+            r"\\addtolength{\\textwidth}{1.15in}",
+            content,
+        )
+
+    if aggressiveness >= 2 and re.search(r"\\documentclass\[([^\]]*)\]", content):
+        def _font(m):
+            inner = re.sub(r"\d+pt", "10pt", m.group(1))
+            if "10pt" not in inner and "9pt" not in inner:
+                inner = "10pt," + inner
+            return f"\\documentclass[{inner}]"
+
+        content = re.sub(r"\\documentclass\[([^\]]*)\]", _font, content, count=1)
+
+    if aggressiveness >= 3:
+        if "\\baselineskip" not in content and "\\begin{document}" in content:
+            content = content.replace(
+                "\\begin{document}",
+                "\\begin{document}\n\\setlength{\\baselineskip}{11.5pt}",
+                1,
+            )
+        content = re.sub(
+            r"\\itemsep\}\{[^}]+\}",
+            r"\\itemsep}{0.05em}",
+            content,
+        )
+
+    return content
+
+
+def _scale_length_token(token: str, factor: float, floor: float | None = None) -> str:
+    """Scale a LaTeX length like 0.7em / 12pt / -5pt by factor."""
+    m = re.fullmatch(r"([+-]?(?:\d+\.?\d*|\.\d+))(em|ex|pt|in|mm|cm|mu)", token.strip())
+    if not m:
+        return token
+    value = float(m.group(1)) * factor
+    if floor is not None and abs(value) < floor and value != 0:
+        value = floor if value > 0 else -floor
+    unit = m.group(2)
+    if abs(value - round(value)) < 1e-6:
+        rendered = str(int(round(value)))
+    else:
+        rendered = f"{value:.2f}".rstrip("0").rstrip(".")
+    return f"{rendered}{unit}"
+
+
+def tighten_section_spacing(latex: str, factor: float = 0.55) -> str:
+    """Pull sections/entries closer by shrinking vertical skips in the source.
+
+    Compact AI edits cannot change preamble spacing — this is the deterministic
+    path for 'make sections closer / less whitespace' requests.
+    """
+    content = latex
+    factor = max(0.35, min(0.85, factor))
+
+    def _vspace(m: re.Match) -> str:
+        return f"\\vspace{{{_scale_length_token(m.group(1), factor, floor=0.12)}}}"
+
+    # Body + preamble vspaces (section gaps, entry gaps, Jake negative skips)
+    content = re.sub(r"\\vspace\{([^}]+)\}", _vspace, content)
+
+    # Common list density knobs inside \newenvironment / setlength
+    for key in ("itemsep", "parsep", "topsep", "partopsep"):
+        pat = r"(\\setlength\{\\" + key + r"\}\{)([^}]+)(\})"
+        content = re.sub(
+            pat,
+            lambda m, f=factor: m.group(1)
+            + _scale_length_token(m.group(2), f, floor=0.0)
+            + m.group(3),
+            content,
+        )
+
+    # entrygap macro bodies often wrap a vspace — already scaled above.
+    # Also shrink parskip if present.
+    content = re.sub(
+        r"(\\setlength\{\\parskip\}\{)([^}]+)(\})",
+        lambda m: m.group(1) + _scale_length_token(m.group(2), factor, floor=0.0) + m.group(3),
+        content,
+    )
+
+    return content
+
+
 def _split_compact_sections(compact: str) -> dict[str, list[str]]:
     """Parse compact text into {section_name: [lines]}. Lines before the
     first SECTION marker are grouped under the key None (header content).
@@ -312,19 +477,22 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
     """Rebuild a LaTeX section block from compact lines, using the command
     style detected in the original block. Returns LaTeX lines.
     """
+    # Normalize CRLF from uploads / Windows editors so indent detection stays clean.
+    bl = [ln.replace("\r", "") for ln in block["lines"]]
     # Flatten so \resumeSubheading\n{...}{...} is detectable
-    orig = "\n".join(_flatten_multiline_commands(block["lines"]))
+    orig = "\n".join(_flatten_multiline_commands(bl))
 
     has_resume_item = "\\resumeItem{" in orig
-    has_resume_sub = "\\resumeSubheading{" in orig
+    has_resume_sub = "\\resumeSubheading{" in orig or re.search(r"\\resumeSubheading\s*$", orig, re.M)
     has_role = "\\role{" in orig
     has_entrygap = "\\entrygap" in orig
+    has_item_list = "\\resumeItemListStart" in orig
+    has_sub_list = "\\resumeSubHeadingListStart" in orig
 
     sub_multiline = any(
-        re.fullmatch(r"\\resumeSubheading\s*", l.strip()) for l in block["lines"]
+        re.fullmatch(r"\\resumeSubheading\s*", l.strip()) for l in bl
     )
 
-    bl = block["lines"]
     blank_before_heading = any(
         bl[i].strip() == ""
         and re.fullmatch(r"\\(?:resumeSubheading|role)\s*", bl[i + 1].strip())
@@ -340,6 +508,8 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
             m = re.search(r"\\resumeSubheading\{(.+?)\}\{(.+?)\}", orig)
             if m:
                 sub_args = 2
+        if sub_args == 0 and sub_multiline:
+            sub_args = 4
     role_args = 0
     if has_role:
         m = re.search(r"\\role\{(.+?)\}\{(.+?)\}\{(.+?)\}\{(.+?)\}", orig)
@@ -356,20 +526,42 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
             item_env = env
             break
 
+    # Jake-style \resumeItem expands to \item — must live inside a list.
+    if has_resume_item and not has_item_list and not item_env:
+        has_item_list = True
+
     bullet_cmd = "\\resumeItem" if has_resume_item else "\\item"
     resume_item_args = 2 if re.search(r"\\resumeItem\{[^}]*\}\{", orig) else 1
 
-    item_indent = ""
-    m = re.search(r"^(\s*)\\(?:item|resumeItem)\b", orig, re.M)
+    item_indent = "        "
+    m = re.search(r"^([ \t]*)\\(?:item|resumeItem)\b", orig, re.M)
     if m:
         item_indent = m.group(1)
 
+    item_list_indent = "      "
+    m = re.search(r"^([ \t]*)\\resumeItemListStart", orig, re.M)
+    if m:
+        item_list_indent = m.group(1)
+
+    sub_list_indent = "  "
+    m = re.search(r"^([ \t]*)\\resumeSubHeadingListStart", orig, re.M)
+    if m:
+        sub_list_indent = m.group(1)
+
+    sub_indent = "    "
+    m = re.search(r"^([ \t]*)\\resumeSubheading\b", orig, re.M)
+    if m:
+        sub_indent = m.group(1)
+
     out_lines = []
     # Keep the section header line verbatim
-    if block["kind"] == "section" and block["lines"]:
-        out_lines.append(block["lines"][0])
+    if block["kind"] == "section" and bl:
+        out_lines.append(bl[0])
     elif block["kind"] == "header":
         return block["lines"]
+
+    if has_sub_list:
+        out_lines.append(f"{sub_list_indent}\\resumeSubHeadingListStart")
 
     items = []
     heading_group = []  # pending @-prefixed heading fields
@@ -392,14 +584,16 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
             company, loc = fields.get("COMPANY", ""), fields.get("LOC", "")
             role, dates = fields.get("ROLE", ""), fields.get("DATES", "")
             if sub_multiline:
-                out_lines.append("\\resumeSubheading")
-                out_lines.append(f"{{{company}}}{{{loc}}}")
-                out_lines.append(f"{{{role}}}{{{dates}}}")
+                out_lines.append(f"{sub_indent}\\resumeSubheading")
+                out_lines.append(f"{sub_indent}  {{{company}}}{{{loc}}}")
+                out_lines.append(f"{sub_indent}  {{{role}}}{{{dates}}}")
             else:
-                out_lines.append(f"\\resumeSubheading{{{company}}}{{{loc}}}{{{role}}}{{{dates}}}")
+                out_lines.append(
+                    f"{sub_indent}\\resumeSubheading{{{company}}}{{{loc}}}{{{role}}}{{{dates}}}"
+                )
         elif has_resume_sub:
             out_lines.append(
-                f"\\resumeSubheading{{{fields.get('COMPANY', '')}}}{{{fields.get('DATES', '')}}}"
+                f"{sub_indent}\\resumeSubheading{{{fields.get('COMPANY', '')}}}{{{fields.get('DATES', '')}}}"
             )
         elif has_role and role_args == 4:
             out_lines.append(
@@ -430,7 +624,11 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
                 rendered.append(f"{item_indent}\\resumeItem{{{content}}}")
             else:
                 rendered.append(f"{item_indent}\\item {content}")
-        if item_env:
+        if has_item_list:
+            out_lines.append(f"{item_list_indent}\\resumeItemListStart")
+            out_lines.extend(rendered)
+            out_lines.append(f"{item_list_indent}\\resumeItemListEnd")
+        elif item_env:
             out_lines.append(f"\\begin{{{item_env}}}")
             out_lines.extend(rendered)
             out_lines.append(f"\\end{{{item_env}}}")
@@ -448,7 +646,14 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
         if stripped.startswith("@") and HEADING_FIELD_RE.match(stripped):
             flush_items()
             fm = HEADING_FIELD_RE.match(stripped)
-            heading_group.append((fm.group(1), fm.group(2)))
+            field, value = fm.group(1), fm.group(2)
+            # New entry starts when the same lead field repeats (@TITLE…@TITLE or @COMPANY…@COMPANY).
+            # Do NOT flush on @COMPANY after @TITLE — that's the 3-arg \role style.
+            if field == "TITLE" and any(f == "TITLE" for f, _ in heading_group):
+                flush_heading()
+            elif field == "COMPANY" and any(f == "COMPANY" for f, _ in heading_group):
+                flush_heading()
+            heading_group.append((field, value))
             continue
 
         if stripped.startswith("- "):
@@ -475,6 +680,9 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
     if items:
         flush_items()
 
+    if has_sub_list:
+        out_lines.append(f"{sub_list_indent}\\resumeSubHeadingListEnd")
+
     # Collapse consecutive blank lines
     result = []
     for line in out_lines:
@@ -484,7 +692,7 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
 
     # Preserve the block's trailing blank-line separation
     trailing_blanks = 0
-    for ln in reversed(block["lines"]):
+    for ln in reversed(bl):
         if ln.strip() == "":
             trailing_blanks += 1
         else:
@@ -662,7 +870,7 @@ def _patch_packages(content: str) -> str:
 
 
 def parse_synctex_text(text: str) -> dict:
-    """Parse synctex text content.
+    r"""Parse synctex text content.
 
     Handles the real SyncTeX format:
       Input:LINE:FILE     — file index mapping
@@ -751,7 +959,36 @@ def load_synctex(tmpdir: Path, jobname: str) -> dict:
     return {"pages": {}}
 
 
-async def compile_latex(resume_id: int, latex_content: str) -> dict:
+_compile_locks: dict[str, asyncio.Lock] = {}
+_locks_guard = asyncio.Lock()
+
+
+async def _lock_for(job_id: str | int) -> asyncio.Lock:
+    key = str(job_id)
+    async with _locks_guard:
+        lock = _compile_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _compile_locks[key] = lock
+        return lock
+
+
+async def _compile_latex_unlocked(
+    job_id: str | int,
+    latex_content: str,
+    *,
+    auto_fit: bool = False,
+    max_pages: int = 1,
+) -> dict:
+    safe = sanitize_latex(latex_content)
+    if not safe["ok"]:
+        return {
+            "success": False,
+            "error": safe["error"],
+            "hint": "Remove shell/file I/O commands from your source.",
+            "errors": [],
+        }
+
     pdflatex = shutil.which("pdflatex")
     if not pdflatex:
         mac_tex = "/Library/TeX/texbin/pdflatex"
@@ -764,8 +1001,32 @@ async def compile_latex(resume_id: int, latex_content: str) -> dict:
             "hint": "Install TeX Live: brew install --cask mactex",
         }
 
-    jobname = f"resume_{resume_id}"
+    working = safe["content"]
+    fitted_level = 0
+    last_result = None
 
+    for attempt in range(1, 5 if auto_fit else 2):
+        if attempt > 1 and auto_fit:
+            fitted_level = attempt - 1
+            working = auto_page_fit(safe["content"], aggressiveness=fitted_level)
+
+        result = await _run_pdflatex(job_id, working, pdflatex)
+        last_result = result
+        if not result.get("success"):
+            return result
+
+        pages = result.get("pages") or 1
+        result["latex_content"] = working
+        result["auto_fit_level"] = fitted_level if fitted_level else None
+        if not auto_fit or pages <= max_pages or fitted_level >= 3:
+            return result
+
+    return last_result or {"success": False, "error": "Compile failed", "errors": []}
+
+
+async def _run_pdflatex(job_id: str | int, latex_content: str, pdflatex: str) -> dict:
+    safe_id = re.sub(r"[^A-Za-z0-9_-]", "", str(job_id))[:40] or "job"
+    jobname = f"resume_{safe_id}"
     latex_content = _patch_packages(latex_content)
 
     with tempfile.TemporaryDirectory(prefix="resumate_") as tmpdir:
@@ -780,6 +1041,7 @@ async def compile_latex(resume_id: int, latex_content: str) -> dict:
                 pdflatex,
                 "-interaction=nonstopmode",
                 "-halt-on-error",
+                "-no-shell-escape",
                 "-synctex=1",
                 f"-jobname={jobname}",
                 str(src),
@@ -801,21 +1063,12 @@ async def compile_latex(resume_id: int, latex_content: str) -> dict:
                 break
 
         compiled_pdf = Path(tmpdir) / f"{jobname}.pdf"
-        final_pdf = COMPILED_DIR / f"{resume_id}.pdf"
 
         if compiled_pdf.exists():
-            shutil.copy2(compiled_pdf, final_pdf)
-
-            synctex_data = load_synctex(Path(tmpdir), jobname)
-            synctex_json = COMPILED_DIR / f"{resume_id}.synctex.json"
-            try:
-                synctex_json.write_text(json.dumps(synctex_data), encoding="utf-8")
-            except Exception:
-                pass
-
             return {
                 "success": True,
-                "pdf_path": str(final_pdf),
+                "pdf_bytes": compiled_pdf.read_bytes(),
+                "synctex": load_synctex(Path(tmpdir), jobname),
                 "pages": _count_pages(log_text),
                 "errors": [],
             }
@@ -836,3 +1089,21 @@ async def compile_latex(resume_id: int, latex_content: str) -> dict:
             "hint": hint,
             "errors": [e for e in structured_errors if e.get("line")],
         }
+
+
+async def compile_latex(
+    job_id: str | int,
+    latex_content: str,
+    *,
+    auto_fit: bool = False,
+    max_pages: int = 1,
+) -> dict:
+    """Compile LaTeX ephemerally. Returns pdf_bytes + synctex in memory (no durable store)."""
+    lock = await _lock_for(job_id)
+    async with lock:
+        return await _compile_latex_unlocked(
+            job_id,
+            latex_content,
+            auto_fit=auto_fit,
+            max_pages=max_pages,
+        )

@@ -1,0 +1,86 @@
+% Harvard Classic — career-services style (single column, ATS-friendly).
+% Inspired by common Harvard FAS / college career-office layouts:
+% education-forward, leadership section, generous scanning whitespace.
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=0.6in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{parskip}
+
+\definecolor{accent}{HTML}{1a202c}
+\definecolor{muted}{HTML}{4a5568}
+
+\newcommand{\resumesection}[1]{%
+  \par\vspace{0.85em}%
+  {\normalsize\bfseries\scshape\color{accent}#1}\par
+  \vspace{-0.4em}%
+  \textcolor{accent}{\rule{\textwidth}{0.5pt}}\par
+  \vspace{0.4em}%
+}
+
+\newcommand{\role}[3]{%
+  \noindent\textbf{#1}\hfill\textit{#2}\\
+  \textcolor{muted}{\small #3}\par\vspace{0.2em}
+}
+
+\newenvironment{resumeitemize}{%
+  \begin{list}{\textbullet}{%
+    \setlength{\leftmargin}{1.15em}%
+    \setlength{\itemsep}{0.2em}%
+    \setlength{\parsep}{0pt}%
+    \setlength{\topsep}{0.15em}%
+    \setlength{\partopsep}{0pt}%
+  }%
+}{\end{list}}
+
+\newcommand{\entrygap}{\vspace{0.55em}}
+\pagestyle{empty}
+
+\begin{document}
+\begin{center}
+  {\LARGE\bfseries Your Name}\\[0.4em]
+  {\small
+    City, ST
+    $\cdot$ \href{mailto:you@email.com}{you@email.com}
+    $\cdot$ (555) 555-0100
+    $\cdot$ \href{https://linkedin.com/in/you}{linkedin.com/in/you}
+  }
+\end{center}
+
+\resumesection{Education}
+\role{University Name}{City, ST}{B.A.\ Economics \quad May 2024}
+\begin{resumeitemize}
+  \item GPA: 3.7/4.0 \quad Coursework: Microeconomics, Statistics, Corporate Finance
+\end{resumeitemize}
+
+\resumesection{Experience}
+\role{Business Analyst Intern}{Company Name}{City, ST \quad Jun 2023 -- Aug 2023}
+\begin{resumeitemize}
+  \item Analyzed sales pipeline data for 3 regions; recommended pricing changes adopted by product.
+  \item Built a weekly dashboard used by 12 managers to track conversion and churn.
+\end{resumeitemize}
+\entrygap
+\role{Research Assistant}{University Department}{City, ST \quad Sep 2022 -- May 2023}
+\begin{resumeitemize}
+  \item Cleaned survey data (n=1{,}200) and produced charts for a faculty publication.
+\end{resumeitemize}
+
+\resumesection{Leadership \& Activities}
+\role{President}{Student Consulting Club}{Campus \quad 2023 -- 2024}
+\begin{resumeitemize}
+  \item Led 40-member club; grew client projects from 2 to 7 per semester.
+\end{resumeitemize}
+\entrygap
+\role{Volunteer Tutor}{Community Center}{City, ST \quad 2021 -- 2023}
+\begin{resumeitemize}
+  \item Tutored 8 high-school students weekly in algebra and writing.
+\end{resumeitemize}
+
+\resumesection{Skills \& Interests}
+\noindent\textbf{Skills:} Excel, SQL, PowerPoint, Tableau, stakeholder communication\\
+\textbf{Languages:} English (native), Spanish (conversational)\\
+\textbf{Interests:} Distance running, chess, indie film
+\end{document}

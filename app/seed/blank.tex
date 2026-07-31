@@ -1,0 +1,67 @@
+% Blank scaffold — fill in and compile.
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=0.6in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{parskip}
+
+\definecolor{accent}{HTML}{1a365d}
+\definecolor{muted}{HTML}{4a5568}
+
+\newcommand{\resumesection}[1]{%
+  \par\vspace{0.7em}%
+  {\large\bfseries\color{accent}#1}\par
+  \vspace{-0.35em}%
+  \textcolor{accent}{\rule{\textwidth}{0.6pt}}\par
+  \vspace{0.35em}%
+}
+
+\newcommand{\role}[3]{%
+  \noindent\textbf{#1}\hfill\textit{#2}\\
+  \textcolor{muted}{\small #3}\par\vspace{0.15em}
+}
+
+\newenvironment{resumeitemize}{%
+  \begin{list}{\textbullet}{%
+    \setlength{\leftmargin}{1.1em}%
+    \setlength{\itemsep}{0.15em}%
+    \setlength{\parsep}{0pt}%
+    \setlength{\topsep}{0.2em}%
+    \setlength{\partopsep}{0pt}%
+  }%
+}{\end{list}}
+
+\newcommand{\entrygap}{\vspace{0.5em}}
+\pagestyle{empty}
+
+\begin{document}
+\begin{center}
+  {\LARGE\bfseries Your Name}\\[0.35em]
+  {\small
+    \href{mailto:you@email.com}{you@email.com}
+    $\cdot$ City, ST
+    $\cdot$ \href{https://linkedin.com/in/you}{linkedin.com/in/you}
+    $\cdot$ \href{https://github.com/you}{github.com/you}
+  }
+\end{center}
+
+\resumesection{Summary}
+One factual line about what you build and the roles you want.
+
+\resumesection{Experience}
+\role{Job Title}{Company}{City, ST \quad Jan 2024 -- Present}
+\begin{resumeitemize}
+  \item Strongest achievement with a metric.
+  \item Second achievement tied to impact.
+\end{resumeitemize}
+
+\resumesection{Education}
+\role{B.S.\ Computer Science}{University Name}{City, ST \quad May 2026}
+
+\resumesection{Skills}
+\noindent\textbf{Languages:} Python, TypeScript, SQL\\
+\textbf{Tools:} Git, Docker, AWS
+\end{document}

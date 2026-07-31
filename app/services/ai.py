@@ -2,164 +2,464 @@ import asyncio
 import httpx
 import os
 import re
-from pathlib import Path
-
-from dotenv import load_dotenv
+import secrets
 
 from app.services.latex import (
-    apply_ai_body,
     apply_compact_sections,
     extract_custom_commands,
     latex_to_compact,
     split_document,
+    compile_latex,
+    tighten_section_spacing,
 )
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
-
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.groq.com/openai")
+# Groq (OpenAI-compatible chat completions API)
+GROQ_BASE_URL = os.environ.get(
+    "GROQ_BASE_URL",
+    os.environ.get("OPENAI_BASE_URL", "https://api.groq.com/openai"),
+).rstrip("/")
 MODEL = os.environ.get("RESUMATE_MODEL", "llama-3.3-70b-versatile")
-
-# Compact docs at or below this size are sent as full text and the AI returns a
-# full .tex file (spliced into the original preamble). Larger docs get section-only
-# compact editing so responses stay inside Groq's output limit.
-FULLDOC_COMPACT_THRESHOLD = 3200
 
 MAX_RETRIES = 3
 BACKOFF_SECONDS = [2, 4, 8]
 RETRYABLE_STATUS = {408, 429, 500, 502, 503}
 
+# Phrases that make a resume read like ChatGPT wrote it.
+_BANNED_VOICE = [
+    r"\bhighly motivated\b",
+    r"\bresults[-\s]?driven\b",
+    r"\bpassionate\b",
+    r"\bleveraged\b",
+    r"\butilized\b",
+    r"\bspearheaded\b",
+    r"\borchestrated\b",
+    r"\brevolutionized\b",
+    r"\btransformed\b",
+    r"\belevated\b",
+    r"\bstreamlined\b",
+    r"\bcutting[-\s]?edge\b",
+    r"\bseamless\b",
+    r"\bsynergistic\b",
+    r"\bproven track record\b",
+    r"\bexpertise in\b",
+    r"\bwith expertise\b",
+    r"\bdemonstrated ability\b",
+    r"\bstrong communicator\b",
+    r"\bcross[-\s]?functional stakeholders\b",
+    r"\bend[-\s]?to[-\s]?end solutions?\b",
+    r"\bdevelopment methodologies\b",
+    r"\bprogramming languages:\b",  # prefer Languages:
+    r"\brobust\b",
+    r"\bscalable\b",
+    r"\binnovative\b",
+    r"\bcomprehensive\b",
+    r"\bfacilitated\b",
+    r"\bhelped (?:with|to)\b",
+    r"\bresponsible for\b",
+    r"\bvarious\b",
+    r"\bmultiple aspects\b",
+    # Template impact cadence recruiters flag
+    r",\s*resulting in (?:a )?\d",
+    r",\s*achieving (?:a )?\d",
+    r",\s*driving (?:a )?\d",
+    r",\s*leading to (?:a )?\d",
+]
+
+_BANNED_RE = re.compile("|".join(_BANNED_VOICE), re.I)
+
+# Short typed aliases → full edit instructions
+_PROMPT_ALIASES = {
+    "polish": (
+        "Rewrite Summary, Experience, Projects, Education, and Skills for elite SWE resume quality. "
+        "Keep employers, titles, dates, tools, and numeric facts — but rewrite sentence structure so it "
+        "sounds like a sharp human, not ChatGPT. "
+        "Rules: (1) kill fluff openers and banned buzzwords, "
+        "(2) ban ', resulting in / achieving / driving N%' cadence — put the number in the verb phrase "
+        "(e.g. 'Cut API p99 ~31%; throughput +25%'), "
+        "(3) one claim per bullet, concrete verb + specific object + tool when known, "
+        "(4) Summary = 1 short factual line, "
+        "(5) Skills = compact labeled rows like **Languages:** … not corporate category names, "
+        "(6) do not invent employers, products, or metrics. "
+        "Return every section you change."
+    ),
+    "rewrite": None,  # same as polish — filled below
+    "ats": (
+        "Make this ATS-cleaner without inventing experience: standard section names if needed, "
+        "clear keywords already evidenced by the bullets, plain Skills rows. "
+        "No fluff adjectives. Return every section you change."
+    ),
+    "metrics": (
+        "Improve how existing numbers are written. Keep the same figures. "
+        "Rephrase away from 'resulting in X%' templates into verb-led claims "
+        "(e.g. 'Cut p99 from ~800ms to ~120ms'). "
+        "Where impact is implied but no number exists, use [X%] / [N users] — never invent precise fakes. "
+        "Return every section you change."
+    ),
+    "summary": (
+        "Rewrite ONLY the Summary as ONE short factual line (two max). "
+        "Pattern: '<focus> engineer: <3 concrete domains>.' "
+        "Ban: highly motivated, expertise in, passionate, results-driven, Experienced in…, "
+        "scalable solutions, supporting product teams with…. "
+        "Example: 'Backend engineer: APIs, Postgres, and reliability for product teams.'"
+    ),
+    "one page": (
+        "Fit to ONE page by rewriting for density — not by inventing layout commands. "
+        "Compress every bullet to ~one printed line, drop the weakest claims, "
+        "Summary to 1 line, keep employers/titles/dates/tools/real numbers. "
+        "Human voice only. Return ALL content sections you touch."
+    ),
+    "humanize": (
+        "De-cringe / humanize the voice. Kill ChatGPT cadence, banned buzzwords, "
+        "and ', resulting in N%' templates. Keep every employer, title, date, tool, and real number. "
+        "Sound like a sharp engineer wrote it. Return every section you change."
+    ),
+    "action verbs": (
+        "Boost verbs only: rewrite bullets to start with strong past-tense action verbs "
+        "(Shipped, Cut, Built, Owned, Led). Do not invent metrics. Keep facts. "
+        "Return every Experience/Projects section you change."
+    ),
+    "tailor": (
+        "Tailor this resume to the TARGET JOB DESCRIPTION below. "
+        "Integrate missing keywords ONLY where the candidate already has related evidence — "
+        "never invent employers, products, or metrics. Prefer reordering emphasis and "
+        "rephrasing bullets over stuffing. Keep one-page density. Return every section you change."
+    ),
+}
+
+_PROMPT_ALIASES["rewrite"] = _PROMPT_ALIASES["polish"]
+_PROMPT_ALIASES["de-cringe"] = _PROMPT_ALIASES["humanize"]
+_PROMPT_ALIASES["humanise"] = _PROMPT_ALIASES["humanize"]
+_PROMPT_ALIASES["action verb"] = _PROMPT_ALIASES["action verbs"]
+_PROMPT_ALIASES["verbs"] = _PROMPT_ALIASES["action verbs"]
+_PROMPT_ALIASES["make this one page"] = _PROMPT_ALIASES["one page"]
+_PROMPT_ALIASES["1 page"] = _PROMPT_ALIASES["one page"]
+_PROMPT_ALIASES["fit to one page"] = _PROMPT_ALIASES["one page"]
+_PROMPT_ALIASES["match jd"] = _PROMPT_ALIASES["tailor"]
+_PROMPT_ALIASES["job match"] = _PROMPT_ALIASES["tailor"]
+_PROMPT_ALIASES["bullets"] = (
+    "Turn the candidate's work notes into resume bullets for the matching Experience entry. "
+    "Replace that role's bullets only. Keep employer, title, and dates. "
+    "If Experience has multiple jobs, return the FULL Experience section with other jobs unchanged."
+)
+_PROMPT_ALIASES["bulletize"] = _PROMPT_ALIASES["bullets"]
+_PROMPT_ALIASES["make bullets"] = _PROMPT_ALIASES["bullets"]
+
+_SPACING_REQUEST_RE = re.compile(
+    r"\b("
+    r"closer|tighter|too (?:much|far)|far apart|less space|more dense|denser|"
+    r"reduce (?:the )?spac(?:e|ing)|tighten (?:the )?(?:layout|spac(?:e|ing)|sections?)|"
+    r"sections? closer|compact (?:the )?spac(?:e|ing)|squeeze|cramped|whitespace|"
+    r"gap(?:s)? (?:between|too)|too much (?:white ?)?space"
+    r")\b",
+    re.I,
+)
+
+
+def _is_spacing_request(prompt: str) -> bool:
+    _, _, _, body = _strip_prompt_wrappers(prompt)
+    return bool(_SPACING_REQUEST_RE.search(body or prompt or ""))
+
+
+_MATERIAL_INTENT_RE = re.compile(
+    r"\b("
+    r"bulletize|make bullets?|turn (?:this|these|the following) into|"
+    r"convert (?:this|these|the following)|add (?:these|this) (?:to|as)|"
+    r"for my (?:job|role|position|work)|what i (?:did|do)|"
+    r"here(?:'s| is) what|my responsibilities|job duties|work notes"
+    r")\b",
+    re.I,
+)
+
+_MATERIAL_INSTRUCTIONS = """## Material → bullets (priority task)
+The block labeled CANDIDATE WORK NOTES is first-party source material from the candidate.
+Facts, tools, systems, products, and numbers inside it are ALLOWED — using them is not inventing.
+
+### Do this
+1. Find the matching Experience entry (employer/title/city if mentioned; else the scoped/most recent role).
+2. Replace THAT entry's bullets with 4–8 sharp resume bullets derived from the notes.
+3. Keep that entry's heading fields (@TITLE/@COMPANY/@DETAILS or @COMPANY/@LOC/@ROLE/@DATES) unless the notes clearly correct them.
+4. If Experience has multiple jobs, return the FULL `SECTION Experience` with every other job preserved exactly (same @fields and `-` bullets).
+5. Drop first-person ("I/we"), duty openers ("Responsible for…"), and fluff. One claim per bullet, verb-led, ~one printed line.
+6. Do not invent metrics absent from the notes. Keep qualitative impact when no number exists.
+7. Past tense for prior roles; present tense for a current role.
+
+### Output
+Return `SECTION Experience` (and only other sections if truly needed). Compact only — no LaTeX."""
+
+
+def _strip_prompt_wrappers(prompt: str) -> tuple[str, str, str, str]:
+    """Return (prefix, jd_text, scope_line, body) from a UI-wrapped prompt."""
+    raw = (prompt or "").strip()
+    prefix = ""
+    m = re.match(r"^(\[Target role:[^\]]*\]\s*)", raw, flags=re.I)
+    if m:
+        prefix = m.group(1)
+        raw = raw[m.end():].strip()
+
+    jd_text = ""
+    jd_match = re.match(
+        r"^\[Job description\]\s*(.*?)\s*\[/Job description\]\s*(.*)$",
+        raw,
+        flags=re.I | re.S,
+    )
+    if jd_match:
+        jd_text = jd_match.group(1).strip()
+        raw = jd_match.group(2).strip()
+
+    scope_line = ""
+    scope_match = re.match(
+        r"^(Edit ONLY the .+? section\.\s*Do not change other sections\.)\s*",
+        raw,
+        flags=re.I | re.S,
+    )
+    if scope_match:
+        scope_line = scope_match.group(1).strip()
+        raw = raw[scope_match.end():].strip()
+
+    return prefix, jd_text, scope_line, raw
+
+
+def _is_material_dump(prompt: str) -> bool:
+    """True when the user pasted work notes to turn into job bullets."""
+    _, _, _, body = _strip_prompt_wrappers(prompt)
+    if not body:
+        return False
+    # Explicit bulletize aliases with trailing notes
+    key = re.sub(r"[.!]+$", "", body.lower()).strip()
+    if key in {"bullets", "bulletize", "make bullets"}:
+        return False  # bare alias — no notes yet
+    if _MATERIAL_INTENT_RE.search(body) and len(body) >= 100:
+        return True
+    if len(body) >= 280:
+        return True
+    if body.count("\n") >= 3 and len(body) >= 160:
+        return True
+    # First-person work diary without a short command
+    if re.search(r"\b(i |i'm |i’ve |i've |my |we )\b", body, re.I) and len(body) >= 180:
+        return True
+    return False
+
+
+def _enrich_material_prompt(prompt: str) -> str:
+    """Wrap pasted work notes with explicit bullet-conversion instructions."""
+    prefix, jd_text, scope_line, body = _strip_prompt_wrappers(prompt)
+    # Peel a short instruction line if the user wrote one above the notes
+    instruction = ""
+    notes = body
+    first, _, rest = body.partition("\n")
+    if rest and len(first) < 160 and (
+        _MATERIAL_INTENT_RE.search(first)
+        or re.search(r"\b(experience|job|role|bullets?)\b", first, re.I)
+    ):
+        instruction = first.strip()
+        notes = rest.strip()
+
+    parts = [prefix.strip(), scope_line, _MATERIAL_INSTRUCTIONS]
+    if instruction:
+        parts.append(f"User instruction: {instruction}")
+    parts.append("CANDIDATE WORK NOTES:\n" + notes[:12000])
+    if jd_text:
+        parts.append(
+            "TARGET JOB DESCRIPTION (optional keyword emphasis only):\n" + jd_text[:4500]
+        )
+    return "\n\n".join(p for p in parts if p)
+
 
 def _api_key() -> str:
-    return os.environ.get("OPENAI_API_KEY", "").strip()
+    return (
+        os.environ.get("GROQ_API_KEY", "").strip()
+        or os.environ.get("OPENAI_API_KEY", "").strip()  # legacy alias
+    )
+
+
+def _normalize_prompt(prompt: str) -> str:
+    """Expand short/common phrases into clear edit instructions."""
+    raw = (prompt or "").strip()
+    if _is_material_dump(raw):
+        return _enrich_material_prompt(raw)
+
+    prefix, jd_text, scope_line, body = _strip_prompt_wrappers(raw)
+    key = re.sub(r"[.!]+$", "", body.lower()).strip()
+    alias = _PROMPT_ALIASES.get(key)
+    if alias:
+        out = "".join(p for p in (prefix, (scope_line + "\n\n") if scope_line else "", alias) if p)
+        if jd_text:
+            out += (
+                "\n\nTARGET JOB DESCRIPTION (use for keywords/emphasis only):\n"
+                + jd_text[:4500]
+            )
+        return out
+    if jd_text:
+        extra = f"\n\nExtra user request: {body}" if body and body.lower() != "tailor" else ""
+        scoped = (scope_line + "\n\n") if scope_line else ""
+        return (
+            prefix
+            + scoped
+            + _PROMPT_ALIASES["tailor"]
+            + "\n\nTARGET JOB DESCRIPTION (use for keywords/emphasis only):\n"
+            + jd_text[:4500]
+            + extra
+        )
+    return raw
+
+def _find_banned_voice(text: str) -> list[str]:
+    """Return unique banned-phrase hits in AI output or resulting body."""
+    hits = []
+    for m in _BANNED_RE.finditer(text or ""):
+        hit = m.group(0).strip()
+        if hit and hit.lower() not in {h.lower() for h in hits}:
+            hits.append(hit)
+    return hits[:8]
 
 
 def _compact_format_doc() -> str:
     return r"""- `NAME Name` = header name
 - `CONTACT label=value` = contact info
 - `SECTION Name` = section header
-- `@COMPANY` / `@LOC` / `@ROLE` / `@DATES` = job/education entry fields
-- `@TITLE` / `@COMPANY` / `@DETAILS` = alternative entry fields (3-arg role style)
+- `@COMPANY` / `@LOC` / `@ROLE` / `@DATES` = job/education entry fields (4-arg style)
+- `@TITLE` / `@COMPANY` / `@DETAILS` = job/education entry fields (3-arg style)
 - `- Bullet text` = resume bullet
-- `**Bold text**` = bold formatting"""
+- `**Bold text**` = bold formatting
+
+Keep @-field sets complete for each entry.
+Preserve LaTeX escapes inside values: \quad, --, \%, \&, $\cdot$."""
 
 
-_PRINCIPLES = r"""## Goal
-Write like a sharp human engineer edited this by hand — not like ChatGPT polished a LinkedIn profile.
-A recruiter scanning for 6 seconds should never think "AI wrote this."
+def _stylesheet(latex: str) -> str:
+    """Few concrete command examples from the live document so the model mirrors them."""
+    examples = []
+    for pat, label in (
+        (r"\\resumesection\{[^}]+\}", "section"),
+        (r"\\section\{[^}]+\}", "section"),
+        (r"\\role\{[^\n]+", "role"),
+        (r"\\resumeSubheading\{[^\n]+", "heading"),
+        (r"\\begin\{resumeitemize\}", "items"),
+        (r"\\begin\{itemize\}", "items"),
+        (r"\\resumeItem\{[^\n]+", "bullet"),
+        (r"\\entrygap", "gap"),
+    ):
+        m = re.search(pat, latex)
+        if m:
+            examples.append(f"- {label}: `{m.group(0)[:120]}`")
+    if not examples:
+        return "(no special commands detected — preserve the compact field layout)"
+    return "\n".join(examples[:8])
 
-## Truth first (non-negotiable)
-- Keep the candidate's real scope, tools, and seniority. Do not inflate titles, invent products, or invent employers.
-- Prefer the facts already on the page. Rewrite for clarity; do not invent a second career.
-- Never fabricate metrics. If a number is missing:
-  - keep the bullet qualitative, OR
-  - use an obvious placeholder like `[X%]` / `[N users]` the candidate can fill in
-  - never output fake-precise figures (e.g. 47%, 3.2×, $2.4M) unless they were already in the source
-- Do not upgrade "built an internal tool" into "architected a platform serving millions."
 
-## What recruiters flag as AI (avoid all of these)
-- Buzzverb bingo: Leveraged, Utilized, Spearheaded, Orchestrated, Revolutionized, Transformed, Elevated, Streamlined (unless truly accurate and already implied)
-- Template bullets: "Did X using Y resulting in Z% improvement" on every line
-- Buzzword fog: robust, scalable, cutting-edge, seamless, innovative, synergistic, end-to-end, cross-functional stakeholders, passionate, results-driven, proven track record, dynamic, comprehensive
-- Em dash abuse and "Not only… but also…" constructions
-- Identical rhythm across every bullet (same length, same clause pattern)
-- Keyword stuffing that reads unnatural
-- Summary lines that sound like a LinkedIn about-section ("Passionate software engineer with a proven track record…")
+_FEW_SHOT = r"""## Quality bar (match this voice)
 
-## How strong human bullets actually sound
-- Lead with a concrete verb + specific object (system, API, table, pipeline, test suite)
-- Name real tools when known (Postgres, Redis, FastAPI, Docker) instead of "cloud technologies"
-- One claim per bullet. Cut clauses that only decorate.
-- Impact is good when honest — "cut p99 from ~800ms to ~120ms" beats "significantly improved performance"
-- Variation is good: some bullets are impact-heavy; some are ownership/scope; not every line needs a percentage
-- Present tense for current role, past for previous. No "I/we".
+BAD: Highly motivated backend engineer with expertise in API design and scalable solutions.
+GOOD: Backend engineer: APIs, Postgres, and reliability for product teams.
 
-Examples:
-- BAD: "Leveraged cutting-edge cloud technologies to orchestrate robust microservices, resulting in a 47% improvement in scalability"
-- GOOD: "Rewrote the checkout query path in Postgres; p99 dropped from ~800ms to ~120ms under peak load"
-- BAD: "Passionate full-stack engineer with a proven track record delivering innovative solutions"
-- GOOD: "Backend-focused engineer: APIs, data stores, and reliability for product teams"
+BAD: Developed and deployed high-performance APIs, resulting in 31% latency reduction and 25% throughput increase.
+GOOD: Shipped Go/Postgres APIs; cut p99 latency ~31% and raised throughput ~25%.
+
+BAD: Improved data modeling and migration strategies using Postgres, achieving 40% reduction in p99 latency.
+GOOD: Redesigned Postgres schemas and migrations; p99 dropped ~40%.
+
+BAD: Created full-stack features, driving a 20% increase in user engagement.
+GOOD: Shipped API + UI features that lifted engagement ~20%.
+
+BAD: **Programming Languages:** Go, Python
+GOOD: **Languages:** Go, Python, TypeScript, SQL
+
+BAD: **Development Methodologies:** CI/CD
+GOOD: **Infra:** Docker, Kubernetes, AWS, CI/CD
+
+BAD: Maintain a 3.8/4.00 GPA.
+GOOD: GPA: 3.8/4.00
+
+BAD (prior role, wrong tense): Deliver API features that lift engagement ~20%.
+GOOD: Shipped API + UI features that lifted engagement ~20%."""
+
+
+_PRINCIPLES = r"""## Role
+You are a senior hiring manager's favorite resume editor for software engineers.
+Your edits should make a recruiter trust the candidate in 6 seconds.
+
+## Truth first
+- Keep real employers, titles, dates, tools, and numbers.
+- Never invent products, employers, tools, or fake-precise metrics.
+- Only mention a tool in a bullet if it already appears in that bullet or the Skills section.
+- Missing numbers → qualitative claim OR `[X%]` / `[N users]`.
+
+## Voice (non-negotiable)
+- Write like a sharp human who edited by hand.
+- Concrete verb + specific object (+ tool when known) (+ honest impact).
+- One claim per bullet. Roughly one printed line.
+- Present tense for current role, past tense for previous roles/internships. No "I/we".
+- Vary rhythm — not every bullet ends with a percentage clause.
+- Education GPA line stays factual: `GPA: 3.8/4.00` — not "Maintain a GPA…".
+
+## Hard bans
+Never output: highly motivated, results-driven, passionate, leveraged, utilized,
+spearheaded, orchestrated, cutting-edge, seamless, robust, innovative, synergistic,
+proven track record, expertise in, demonstrated ability, responsible for, facilitated,
+"Development Methodologies", or the cadence ", resulting in / achieving / driving N%".
+
+## Skills
+Use short labels: **Languages:** **Systems:** **Infra:** — never corporate taxonomy.
 
 ## Edit discipline
-- Change only what the request needs. Preserve structure, section order, and entry order unless asked to reorder.
-- Prefer surgical edits over full rewrites. Match the candidate's existing tone when it's already clean.
-- Keep bullets to roughly one printed line. Delete filler ("various", "multiple", "assisted with", "responsible for", "helped with").
-- For summaries: 2–3 factual lines max. Who they are, what they build, for whom — no soft adjectives.
-- For ATS/tailor requests: mirror job-post language only where it fits real experience. Never force keywords that contradict the resume.
+- Change what the request needs. Prefer returning only changed sections.
+- Preserve section order and entry order unless asked to reorder.
+- Header/contact is not editable — never invent SECTION Contact.
+- For simple renames (school/employer/city), change ONLY the matching @ field values —
+  keep every bullet byte-identical. Never rewrite surrounding content for a rename.
 
-## Edit modes (infer from the user request)
-- Polish (default): tighten wording, fix grammar, kill filler — keep meaning
-- Rewrite: new phrasing, same facts and scope
-- ATS: standard headings, clearer keywords, parsable structure
-- Metrics: improve quantification only with source numbers or `[placeholders]`
-- Tailor: reorder bullets / emphasize relevant work for a target role
-- Roast: brief critique of real weaknesses, then fix only the top issues"""
+## Output contract
+- Compact text ONLY. No LaTeX. No markdown fences. No commentary.
+- Changed sections only, each starting with `SECTION <ExactName>`.
+- ExactName must match an existing section title character-for-character.
+- If nothing should change: NO_CHANGES"""
 
 
-SYSTEM_PROMPT_FULLDOC = r"""You are a technical resume editor for engineers. You edit LaTeX resumes.
-
-Return the COMPLETE modified .tex file only — no markdown fences, no commentary.
-
-## Input format
-The user sends a compact representation of the resume:
-{compact_format}
-
-Map that compact input back to the document's real LaTeX commands.
-
-{principles}
-
-## LaTeX rules
-- Do not change the preamble (\documentclass, \usepackage, \newcommand). The preamble you output is discarded; only the body is kept — but the body must use the document's custom commands correctly.
-- Custom commands in this document: {commands}
-- Do not rename commands or change their argument shapes. Map @-fields back to the original command forms.
-- Preserve LaTeX escapes and formatting (\textbf, \textit, \quad, \%, --, $...$).
-- Output raw LaTeX only. First line may be preamble/\documentclass. Last line: \end{{document}}""".format(
-    compact_format=_compact_format_doc(),
-    principles=_PRINCIPLES,
-    commands="{commands}",
-)
-
-
-SYSTEM_PROMPT_SECTIONS = r"""You are a technical resume editor for engineers. You edit large LaTeX resumes via a compact text format.
-
-The user sends the FULL resume in compact form for context. Return ONLY the sections you change.
+SYSTEM_PROMPT = r"""You are a technical resume editor. You edit resumes via a compact text format.
+The host app maps your compact sections back onto the original LaTeX — you must NOT output LaTeX.
 
 ## Compact format
 {compact_format}
-- Preserve LaTeX escapes exactly: \quad, --, \%, \textbf{{...}}
 
-## Output rules
-- Return ONLY changed sections as compact blocks starting with `SECTION <Exact section name>`.
-- Do NOT output LaTeX. Do NOT include unchanged sections. Do NOT explain yourself.
-- Keep @-field lines and `- ` bullets in the same structural format as the input.
-- If nothing should change, return exactly: NO_CHANGES
+## This document's real LaTeX command shapes (mirror via compact fields; do not emit these)
+{stylesheet}
+
+## Custom commands present
+{commands}
+
+{few_shot}
 
 {principles}""".format(
     compact_format=_compact_format_doc(),
+    stylesheet="{stylesheet}",
+    commands="{commands}",
+    few_shot=_FEW_SHOT,
     principles=_PRINCIPLES,
 )
 
 
 CONVERT_PROMPT = r"""You convert plain resume text (from PDF/DOCX/TXT) into a LaTeX resume that follows the given template exactly.
 
-Match the template's commands and preamble. Fill it with the extracted content. Clean obvious grammar issues, but do NOT turn the writing into generic AI resume voice.
+Match the template's commands and preamble. Fill it with the extracted content.
+Rewrite weak/AI-sounding source text into sharp human bullets — but never invent facts.
 
-## Anti-AI-voice rules
-- Keep the candidate's real scope. Do not invent employers, titles, metrics, or technologies.
-- Prefer concrete tools and systems over buzzwords.
-- Ban: passionate, results-driven, leveraged, spearheaded, cutting-edge, robust, seamless, proven track record.
-- If a metric is unknown, omit it or use `[placeholder]` — never invent precise percentages.
+## Voice
+- Concrete verb + specific object + real tools
+- Ban: passionate, results-driven, leveraged, spearheaded, cutting-edge, robust, seamless,
+  proven track record, highly motivated, expertise in, ", resulting in N%"
+- Prefer: "Cut API p99 ~31%" over "resulting in a 31% latency reduction"
+- Skills as **Languages:** / **Systems:** / **Infra:**
 
 ## Job
 1. Identify name, contact, summary, experience, education, skills, projects
-2. Map content into the template's structure and commands
+2. Map into the template's structure and commands
 3. Tighten weak bullets without inflating claims
-4. If the source is messy, infer structure carefully; do not invent missing jobs
+4. Do not invent missing jobs, employers, or metrics
 
 ## Output
 - Raw .tex only — no markdown, no explanations
 - First line: \documentclass
 - Last line: \end{document}
-- Preserve template commands exactly (\resumesection, \role, \resumeitemize, \resumeSubheading, etc. as used by the template)
+- Preserve template commands exactly
 - Format email/LinkedIn/GitHub as \href when present"""
 
 
@@ -170,17 +470,6 @@ def _strip_markdown_fences(text: str) -> str:
     if lines and lines[-1].strip() == "```":
         lines = lines[:-1]
     return "\n".join(lines).strip()
-
-
-def _fix_brace_balance(content: str, max_diff: int = 3) -> str:
-    open_b = content.count("{")
-    close_b = content.count("}")
-    diff = open_b - close_b
-    if diff == 0 or abs(diff) > max_diff:
-        return content
-    if diff > 0:
-        return content.rstrip() + "\n" + "}" * diff
-    return content[: len(content) - abs(diff)].rstrip()
 
 
 async def _chat_completion(messages: list[dict], temperature: float, max_tokens: int) -> dict:
@@ -196,7 +485,7 @@ async def _chat_completion(messages: list[dict], temperature: float, max_tokens:
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 resp = await client.post(
-                    f"{OPENAI_BASE_URL}/v1/chat/completions",
+                    f"{GROQ_BASE_URL}/v1/chat/completions",
                     headers={
                         "Authorization": f"Bearer {_api_key()}",
                         "Content-Type": "application/json",
@@ -239,26 +528,95 @@ def _finish_error() -> dict:
 
 def _reply_for_prompt(prompt: str) -> str:
     p = prompt.lower()
-    if "polish" in p:
-        return "Tightened wording and cut filler. Facts unchanged."
+    if "candidate work notes" in p or "material → bullets" in p or "bulletize" in p:
+        return "Turned your notes into resume bullets for that role."
+    if "one page" in p or "1 page" in p or ("fit" in p and "page" in p):
+        return "Compressed to one page. Voice tightened; facts kept."
+    if "humanize" in p or "de-cringe" in p or "humanise" in p:
+        return "Humanized the voice — less AI, same facts."
+    if "action verb" in p or ("boost" in p and "verb" in p):
+        return "Boosted action verbs. Metrics unchanged."
+    if "job description" in p or "tailor" in p:
+        return "Tailored emphasis to the job description without inventing experience."
+    if "polish" in p or "rewrite" in p or "elite" in p or "quality" in p:
+        return "Rewrote for sharper human voice. Facts and numbers kept."
     if "ats" in p:
-        return "Adjusted headings/keywords for ATS parsing. No invented experience."
+        return "Cleared ATS friction. No invented experience."
     if "metric" in p or "quantif" in p or "number" in p:
-        return "Improved quantification where numbers existed; used placeholders where they didn't."
-    if "rewrite" in p or "overhaul" in p or "redo" in p:
-        return "Rewrote phrasing. Same scope and facts."
+        return "Reframed existing numbers into verb-led claims."
     if "summary" in p:
-        return "Rewrote the summary to be short and factual."
-    if "tailor" in p or "target" in p:
+        return "Summary is now one factual line."
+    if "section" in p and "only" in p:
+        return "Updated the selected section."
+    if "target" in p:
         return "Reordered emphasis for the target role."
     if "roast" in p or "critique" in p or "feedback" in p:
-        return "Called out the weak spots and fixed the top ones."
+        return "Called out weak spots and fixed the top ones."
     return "Updated."
+
+
+def _looks_like_latex(content: str) -> bool:
+    return bool(
+        re.search(r"\\begin\{document\}", content)
+        or re.search(r"\\documentclass", content)
+        or re.search(r"\\resumesection\{", content)
+        or re.search(r"\\resumeSubheading\{", content)
+        or re.search(r"\\role\{", content)
+    )
+
+
+async def _compiles_ok(latex: str) -> tuple[bool, str]:
+    """Return (ok, error). Soft-skip if pdflatex is missing."""
+    vid = f"validate-{secrets.token_hex(4)}"
+    try:
+        result = await compile_latex(vid, latex)
+    except Exception:
+        return True, ""
+    err = (result.get("error") or "").strip()
+    if not result.get("success") and "pdflatex not found" in err.lower():
+        return True, ""
+    if result.get("success"):
+        return True, ""
+    first = err.split("\n")[0][:240]
+    return False, first or "LaTeX compile failed"
+
+
+def _apply_compact_edit(latex_content: str, content: str) -> dict:
+    if content.strip().upper() == "NO_CHANGES":
+        return {
+            "success": True,
+            "latex_content": latex_content,
+            "ai_reply": "I reviewed your resume — no changes were needed.",
+            "no_changes": True,
+        }
+    if _looks_like_latex(content):
+        return {
+            "success": False,
+            "error": "AI returned LaTeX instead of compact sections. Try again with a clearer request.",
+        }
+    has_section = re.search(r"^SECTION\s+.+$", content, re.M)
+    if not has_section:
+        return {"success": False, "error": "AI returned no edited sections. Try a more specific request."}
+    final_latex = apply_compact_sections(latex_content, content)
+    if final_latex == latex_content:
+        return {"success": False, "error": "AI returned no usable edits. Try a more specific request."}
+    return {"success": True, "latex_content": final_latex}
+
+
+def _voice_repair_message(banned: list[str]) -> str:
+    joined = ", ".join(f'"{b}"' for b in banned)
+    return (
+        f"Quality gate failed. Your draft still contains banned AI-resume voice: {joined}. "
+        "Rewrite the SAME sections in compact form. Keep facts/numbers/tools. "
+        "Use verb-led bullets (e.g. 'Cut API p99 ~31%') — never ', resulting in N%'. "
+        "Summary must be one factual line. Skills labels: Languages / Systems / Infra. "
+        "Compact sections only — no LaTeX, no commentary."
+    )
 
 
 async def convert_resume(plain_text: str, template_latex: str) -> dict:
     if not _api_key():
-        return {"success": False, "error": "AI not configured. Set OPENAI_API_KEY environment variable."}
+        return {"success": False, "error": "AI not configured. Set GROQ_API_KEY environment variable."}
 
     truncated_tpl = template_latex if len(template_latex) < 8000 else template_latex[:8000] + "\n%...[truncated]"
     truncated_txt = plain_text if len(plain_text) < 6000 else plain_text[:6000] + "\n...[truncated]"
@@ -284,50 +642,187 @@ async def convert_resume(plain_text: str, template_latex: str) -> dict:
         return _api_error(e)
 
 
+def _canonicalize_school_name(raw: str) -> str:
+    s = re.sub(r"\s+", " ", (raw or "").strip())
+    s = re.sub(r"\ba\s*(?:and|&)\s*m\b", "A\\&M", s, flags=re.I)
+    parts = []
+    for w in s.split(" "):
+        low = w.lower()
+        if low in {"of", "in", "the", "and", "at"}:
+            parts.append(low)
+        elif re.fullmatch(r"A\\&M", w, flags=re.I):
+            parts.append("A\\&M")
+        else:
+            parts.append(w[:1].upper() + w[1:] if w else w)
+    name = " ".join(parts)
+    name = re.sub(r"A\\&M\b", r"A \\& M", name)
+    if re.search(r"A \\& M$", name) and "university" not in name.lower():
+        name += " University"
+    return name
+
+
+def _find_latex_phrase(latex: str, needle: str) -> str | None:
+    """Find a real employer/school phrase in the .tex that matches a loose needle."""
+    needle_l = re.sub(r"[^a-z0-9]+", " ", needle.lower()).strip()
+    if len(needle_l) < 3:
+        return None
+    candidates = re.findall(
+        r"\{([^{}]*(?:University|College|School|Institute|Inc\.?|Corp\.?|Labs?)[^{}]*)\}",
+        latex,
+        flags=re.I,
+    )
+    candidates += re.findall(r"\{([^{}]{3,60})\}", latex)
+    best = None
+    best_score = 0
+    for c in candidates:
+        cl = re.sub(r"[^a-z0-9]+", " ", c.lower()).strip()
+        if needle_l in cl or cl in needle_l or needle_l.split()[0] in cl:
+            score = len(set(needle_l.split()) & set(cl.split()))
+            if score > best_score:
+                best_score = score
+                best = c
+    return best
+
+
+def _try_simple_rename(latex: str, prompt: str) -> dict | None:
+    """Handle 'I'm at X not Y' corrections with a surgical string replace."""
+    p = (prompt or "").strip()
+    # Only short, user-typed corrections — never expanded system aliases.
+    if len(p) > 120:
+        return None
+    m = re.search(
+        r"(?:i'?m\s+(?:in|at|from)\s+|it'?s\s+|change\s+(?:it\s+)?to\s+)(.+?)\s+not\s+(.+)$",
+        p,
+        flags=re.I,
+    )
+    if not m:
+        # "alabama a&m not southwestern" (no leading I'm)
+        m = re.search(
+            r"^([a-z0-9][a-z0-9 .&'/\\-]{1,60}?)\s+not\s+([a-z0-9][a-z0-9 .&'/\\-]{1,40})$",
+            p,
+            flags=re.I,
+        )
+    if not m:
+        return None
+
+    new_raw, old_raw = m.group(1).strip(), m.group(2).strip()
+    # Reject if this looks like instruction prose ("do not invent…")
+    if new_raw.lower() in {"do", "does", "did", "please", "just"}:
+        return None
+    old_raw = re.sub(r"\b(university|college)\b\.?$", "", old_raw, flags=re.I).strip() or old_raw
+
+    old_phrase = _find_latex_phrase(latex, old_raw)
+    if not old_phrase:
+        m2 = re.search(re.escape(old_raw), latex, flags=re.I)
+        if not m2:
+            return None
+        start = latex.rfind("{", 0, m2.start())
+        end = latex.find("}", m2.end())
+        old_phrase = latex[start + 1 : end] if start != -1 and end != -1 else m2.group(0)
+
+    new_phrase = _canonicalize_school_name(new_raw)
+    if not new_phrase or new_phrase.lower() == old_phrase.lower():
+        return None
+
+    if old_phrase not in latex:
+        pattern = re.compile(re.escape(old_phrase), re.I)
+        if not pattern.search(latex):
+            return None
+        updated = pattern.sub(new_phrase, latex)
+    else:
+        updated = latex.replace(old_phrase, new_phrase)
+
+    if updated == latex:
+        return None
+    return {
+        "success": True,
+        "latex_content": updated,
+        "user_message": prompt,
+        "ai_reply": f'Updated "{old_phrase}" → "{new_phrase.replace(chr(92) + "&", "&")}".',
+    }
+
+
 async def ai_assist(latex_content: str, prompt: str, history: list | None = None) -> dict:
     if not _api_key():
         return {
             "success": False,
-            "error": "AI not configured. Set OPENAI_API_KEY environment variable.",
+            "error": "AI not configured. Set GROQ_API_KEY environment variable.",
         }
+
+    raw_prompt = (prompt or "").strip()
+    # Surgical renames must see the user's short text, not expanded aliases.
+    simple = _try_simple_rename(latex_content, raw_prompt)
+    if simple:
+        ok, _err = await _compiles_ok(simple["latex_content"])
+        if ok:
+            return simple
+
+    # Spacing/layout requests can't go through compact text — apply deterministically.
+    if _is_spacing_request(raw_prompt) and not _is_material_dump(raw_prompt):
+        tightened = tighten_section_spacing(latex_content, factor=0.55)
+        if tightened != latex_content:
+            ok, _err = await _compiles_ok(tightened)
+            if ok:
+                return {
+                    "success": True,
+                    "latex_content": tightened,
+                    "user_message": raw_prompt,
+                    "ai_reply": "Pulled sections and entries closer — less vertical whitespace.",
+                }
+            # If compile fails, fall through to the model with clearer instructions.
+
+    prompt = _normalize_prompt(raw_prompt)
+    material_mode = _is_material_dump(raw_prompt) or "CANDIDATE WORK NOTES:" in prompt
 
     preamble, _ = split_document(latex_content)
     custom_cmds = extract_custom_commands(preamble) if preamble else []
-    commands_text = ", ".join(f"\\{c}" for c in custom_cmds) if custom_cmds else "(none detected — map @-fields back to the commands used in the original body)"
+    commands_text = (
+        ", ".join(f"\\{c}" for c in custom_cmds)
+        if custom_cmds
+        else "(none detected)"
+    )
 
     compact = latex_to_compact(latex_content)
-    use_full_doc = len(compact) <= FULLDOC_COMPACT_THRESHOLD
-    system_prompt = SYSTEM_PROMPT_FULLDOC if use_full_doc else SYSTEM_PROMPT_SECTIONS
-    system_prompt = system_prompt.replace("{commands}", commands_text)
+    system_prompt = (
+        SYSTEM_PROMPT
+        .replace("{commands}", commands_text)
+        .replace("{stylesheet}", _stylesheet(latex_content))
+    )
 
     messages = [{"role": "system", "content": system_prompt}]
 
     if history:
-        for msg in history[-8:]:
+        for msg in history[-4:]:
             content = msg.get("content", "")
-            if len(content) > 500:
-                content = content[:500] + "...[trimmed]"
+            if len(content) > 300:
+                content = content[:300] + "...[trimmed]"
             messages.append({"role": msg.get("role", "user"), "content": content})
 
-    if use_full_doc:
+    if material_mode:
         user_content = (
-            f"Current resume (compact format):\n\n{compact}\n\n---\n\n"
-            f"User request: {prompt}\n\n"
-            "Constraints: preserve true scope; no fabricated metrics; no buzzword/AI-resume voice."
+            "Convert the candidate's work notes into Experience bullets.\n"
+            "OVERRIDE: tools/facts in CANDIDATE WORK NOTES are allowed source material — "
+            "do not refuse them as invention. Preserve other jobs unchanged.\n"
+            "Return ONLY compact SECTION blocks (usually just Experience). No LaTeX.\n\n"
+            f"Current resume (compact):\n\n{compact}\n\n"
+            f"---\n\n{prompt}"
         )
+        max_tokens = 8192
+        temperature = 0.15
     else:
         user_content = (
-            "You receive the FULL resume below for context, but you must return ONLY the compact "
-            "blocks of the sections you change, each starting with SECTION <Name>.\n\n"
-            f"Current resume (compact format):\n\n{compact}\n\n"
-            f"---\n\nUser request: {prompt}\n\n"
-            "Constraints: preserve true scope; no fabricated metrics; no buzzword/AI-resume voice."
+            "Edit the resume below for maximum credible quality. "
+            "Return ONLY changed compact SECTION blocks (or NO_CHANGES). Do not output LaTeX.\n\n"
+            f"Current resume (compact):\n\n{compact}\n\n"
+            f"---\n\nUser request: {prompt}"
         )
+        max_tokens = 4096
+        temperature = 0.2
 
     messages.append({"role": "user", "content": user_content})
 
     try:
-        data = await _chat_completion(messages, 0.25, 8192)
+        data = await _chat_completion(messages, temperature, max_tokens)
         choice = data["choices"][0]
         finish = choice.get("finish_reason")
         content = _strip_markdown_fences(choice["message"]["content"])
@@ -335,31 +830,103 @@ async def ai_assist(latex_content: str, prompt: str, history: list | None = None
         if finish == "length":
             return _finish_error()
 
-        if use_full_doc:
-            if (
-                "\\documentclass" not in content
-                or "\\begin{document}" not in content
-                or "\\end{document}" not in content
-                or content.index("\\end{document}") < content.index("\\begin{document}")
-            ):
-                return {"success": False, "error": "AI returned incomplete output. Please try again."}
+        applied = _apply_compact_edit(latex_content, content)
+        if not applied.get("success"):
+            repair_messages = messages + [
+                {"role": "assistant", "content": content[:1500]},
+                {
+                    "role": "user",
+                    "content": (
+                        f"That output was invalid ({applied.get('error', 'bad format')}). "
+                        "Return ONLY compact SECTION blocks. Example:\n"
+                        "SECTION Summary\n"
+                        "Backend engineer: APIs, Postgres, and reliability for product teams.\n\n"
+                        "SECTION Experience\n"
+                        "@TITLE Software Engineer\n"
+                        "@COMPANY Acme\n"
+                        "@DETAILS Remote \\quad Jan 2024 -- Present\n"
+                        "- Shipped billing APIs in Go; cut p99 ~40%."
+                    ),
+                },
+            ]
+            data = await _chat_completion(repair_messages, 0.1, 4096)
+            finish = data["choices"][0].get("finish_reason")
+            content = _strip_markdown_fences(data["choices"][0]["message"]["content"])
+            if finish == "length":
+                return _finish_error()
+            applied = _apply_compact_edit(latex_content, content)
+            if not applied.get("success"):
+                return applied
 
-            content = _fix_brace_balance(content)
-            final_latex = apply_ai_body(latex_content, content)
-        else:
-            if content.strip().upper() == "NO_CHANGES":
+        if applied.get("no_changes"):
+            return {
+                "success": True,
+                "latex_content": latex_content,
+                "user_message": prompt,
+                "ai_reply": applied["ai_reply"],
+            }
+
+        final_latex = applied["latex_content"]
+
+        # Voice quality gate — rewrite once if banned AI-slop remains in NEW text
+        banned = _find_banned_voice(content) or _find_banned_voice(
+            latex_to_compact(final_latex)
+        )
+        # Only gate phrases that are new vs the original (don't loop on pre-existing slop forever,
+        # but DO force a rewrite when the model introduced or kept slop in changed sections)
+        if banned:
+            voice_messages = messages + [
+                {"role": "assistant", "content": content[:1800]},
+                {"role": "user", "content": _voice_repair_message(banned)},
+            ]
+            data = await _chat_completion(voice_messages, 0.1, 4096)
+            finish = data["choices"][0].get("finish_reason")
+            content2 = _strip_markdown_fences(data["choices"][0]["message"]["content"])
+            if finish != "length":
+                applied2 = _apply_compact_edit(latex_content, content2)
+                if applied2.get("success") and not applied2.get("no_changes"):
+                    banned2 = _find_banned_voice(content2)
+                    # Prefer the cleaner draft even if not perfect
+                    if len(banned2) <= len(banned):
+                        final_latex = applied2["latex_content"]
+                        content = content2
+
+        ok, compile_err = await _compiles_ok(final_latex)
+        if not ok:
+            repair_messages = messages + [
+                {"role": "assistant", "content": content[:1500]},
+                {
+                    "role": "user",
+                    "content": (
+                        "Your compact edit was applied but the resulting LaTeX failed to compile:\n"
+                        f"{compile_err}\n\n"
+                        "Return a corrected compact SECTION edit that preserves field shapes "
+                        "(@TITLE/@COMPANY/@DETAILS or @COMPANY/@LOC/@ROLE/@DATES) and bullet lines. "
+                        "Compact only — no LaTeX."
+                    ),
+                },
+            ]
+            data = await _chat_completion(repair_messages, 0.1, 4096)
+            finish = data["choices"][0].get("finish_reason")
+            content2 = _strip_markdown_fences(data["choices"][0]["message"]["content"])
+            if finish == "length":
                 return {
-                    "success": True,
-                    "latex_content": latex_content,
-                    "user_message": prompt,
-                    "ai_reply": "I reviewed your resume — no changes were needed.",
+                    "success": False,
+                    "error": f"AI edit broke LaTeX compile ({compile_err}). Try a narrower request.",
                 }
-            has_section = re.search(r"^SECTION\s+.+$", content, re.M) or "\\resumesection" in content
-            if not has_section:
-                return {"success": False, "error": "AI returned no edited sections. Try a more specific request."}
-            final_latex = apply_compact_sections(latex_content, content)
-            if final_latex == latex_content:
-                return {"success": False, "error": "AI returned no usable edits. Try a more specific request."}
+            applied2 = _apply_compact_edit(latex_content, content2)
+            if not applied2.get("success"):
+                return {
+                    "success": False,
+                    "error": f"AI edit broke LaTeX compile ({compile_err}). Try a narrower request.",
+                }
+            final_latex = applied2["latex_content"]
+            ok2, compile_err2 = await _compiles_ok(final_latex)
+            if not ok2:
+                return {
+                    "success": False,
+                    "error": f"AI edit broke LaTeX compile ({compile_err2 or compile_err}). Try a narrower request.",
+                }
 
         return {
             "success": True,

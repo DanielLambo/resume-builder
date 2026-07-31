@@ -1,0 +1,24 @@
+# Resumate — Cursor project rules
+
+## TypeScript
+
+- Enforce strict TypeScript types. Do not use `any`. Prefer explicit interfaces, discriminated unions, and `unknown` with narrowing when the type is genuinely unknown.
+- Prefer `satisfies` and Zod-inferred types (`z.infer<typeof Schema>`) over hand-rolled loose types.
+
+## Groq / AI outputs
+
+- Mandate Zod schema validation on all Groq API JSON outputs before passing them to the frontend or the LaTeX compiler.
+- Never trust model JSON as-is. Parse with Zod; on failure, return a clear error to the caller and do not forward partial or unvalidated data.
+- Handle Groq rate limits gracefully: catch HTTP 429 / quota errors, surface a user-safe message, and avoid retry storms.
+
+## LaTeX compilation
+
+- Handle LaTeX compilation errors gracefully. Never crash the request path on pdflatex failure.
+- Return structured errors (message, optional line/hint) suitable for the editor UI.
+- Keep compile work ephemeral; do not persist user PDFs or sources as shared server state.
+
+## Resume state vs rendering
+
+- Separate raw JSON resume state from LaTeX template rendering string logic.
+- Treat structured resume data (JSON / typed objects) as the source of truth for content when that path exists.
+- Keep LaTeX template rendering as a pure transform from structured state (or validated AI patches) into a TeX string — do not mix unstructured string mutation with schema-backed state updates in the same layer.
