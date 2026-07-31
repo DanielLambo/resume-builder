@@ -28,7 +28,7 @@
 
   var editor = CodeMirror.fromTextArea(cmEl, {
     mode: "stex",
-    theme: "material-darker",
+    theme: "default",
     lineNumbers: true,
     lineWrapping: true,
     indentUnit: 2,
