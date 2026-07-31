@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
+import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function OnboardingPage() {
@@ -13,7 +14,8 @@ export default async function OnboardingPage() {
     redirect("/login?next=/onboarding");
   }
 
-  if (user.user_metadata?.onboarding_completed === true) {
+  // Already finished, or grandfathered (has resumes) → product.
+  if (!(await shouldForceOnboarding(user))) {
     redirect("/dashboard");
   }
 

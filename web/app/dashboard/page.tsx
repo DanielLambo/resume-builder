@@ -8,6 +8,7 @@ import {
 } from "@/components/dashboard/DashboardClient";
 import { PrivacyNotice } from "@/components/PrivacyNotice";
 import type { ResumeRow } from "@/lib/database.types";
+import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 
 async function DashboardBody() {
@@ -20,7 +21,7 @@ async function DashboardBody() {
     redirect("/login?next=/dashboard");
   }
 
-  if (user.user_metadata?.onboarding_completed !== true) {
+  if (await shouldForceOnboarding(user)) {
     redirect("/onboarding");
   }
 
