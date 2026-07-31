@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 
 const ALLOWED_NEXT = [
@@ -31,8 +32,7 @@ export async function GET(request: Request) {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      const onboarded = user?.user_metadata?.onboarding_completed === true;
-      if (!onboarded) {
+      if (user && (await shouldForceOnboarding(user))) {
         return NextResponse.redirect(`${origin}/onboarding`);
       }
       return NextResponse.redirect(`${origin}${next}`);
