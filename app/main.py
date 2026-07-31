@@ -1,19 +1,25 @@
-from fastapi import FastAPI, Request, Form, UploadFile, File
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from contextlib import asynccontextmanager
 from urllib.parse import quote
 import tempfile
 import shutil
 
-from .database import init_db, get_db
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+from fastapi import FastAPI, Request, Form, UploadFile, File
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+from .paths import BASE_DIR, COMPILED_DIR
+from .database import init_db, get_db, get_default_template_id
+from .seed_templates import JAKE_NAME
 from .routers import resumes
 from .services.extract import extract_text
 from .services.ai import convert_resume
 
-BASE_DIR = Path(__file__).parent.parent
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
@@ -23,9 +29,18 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Resumate", lifespan=lifespan)
+app = FastAPI(title="Resumate", version="2.0.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
 app.include_router(resumes.router)
+
+
+def _resume_rows(rows):
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["has_pdf"] = (COMPILED_DIR / f"{d['id']}.pdf").exists()
+        out.append(d)
+    return out
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -33,29 +48,46 @@ async def dashboard(request: Request, error: str = None):
     async with get_db() as db:
         cursor = await db.execute("SELECT * FROM resumes ORDER BY updated_at DESC")
         resumes_list = await cursor.fetchall()
-        cursor = await db.execute("SELECT id, name FROM templates ORDER BY id")
+        cursor = await db.execute(
+            "SELECT id, name FROM templates ORDER BY (name = ?) DESC, id", (JAKE_NAME,)
+        )
         tpl_list = await cursor.fetchall()
+        default_tpl = await get_default_template_id(db)
     return templates.TemplateResponse(
         "dashboard.html",
-        {"request": request, "resumes": [dict(r) for r in resumes_list],
-         "templates": [dict(t) for t in tpl_list], "error": error},
+        {
+            "request": request,
+            "resumes": _resume_rows(resumes_list),
+            "templates": [dict(t) for t in tpl_list],
+            "default_template_id": default_tpl,
+            "error": error,
+        },
     )
 
 
 @app.get("/templates", response_class=HTMLResponse)
 async def template_gallery(request: Request):
     async with get_db() as db:
-        cursor = await db.execute("SELECT * FROM templates ORDER BY id")
+        cursor = await db.execute(
+            "SELECT * FROM templates ORDER BY (name = ?) DESC, id", (JAKE_NAME,)
+        )
         tpl_list = await cursor.fetchall()
+        default_tpl = await get_default_template_id(db)
     return templates.TemplateResponse(
         "gallery.html",
-        {"request": request, "templates": [dict(t) for t in tpl_list]},
+        {
+            "request": request,
+            "templates": [dict(t) for t in tpl_list],
+            "default_template_id": default_tpl,
+        },
     )
 
 
 @app.post("/resume/new")
-async def create_resume(template_id: int = Form(...), title: str = Form("Untitled Resume")):
+async def create_resume(template_id: int = Form(None), title: str = Form("Untitled Resume")):
     async with get_db() as db:
+        if template_id is None:
+            template_id = await get_default_template_id(db)
         cursor = await db.execute(
             "SELECT latex_content FROM templates WHERE id = ?", (template_id,)
         )
@@ -73,10 +105,9 @@ async def create_resume(template_id: int = Form(...), title: str = Form("Untitle
 
 @app.post("/upload")
 async def upload_resume(
-    request: Request,
     file: UploadFile = File(...),
     title: str = Form("Uploaded Resume"),
-    template_id: int = Form(1),
+    template_id: int = Form(None),
 ):
     def error_redirect(msg: str) -> RedirectResponse:
         return RedirectResponse(f"/?error={quote(msg)}", status_code=303)
@@ -108,6 +139,8 @@ async def upload_resume(
             return RedirectResponse(f"/resume/{new_id}", status_code=303)
 
         async with get_db() as db:
+            if template_id is None:
+                template_id = await get_default_template_id(db)
             cursor = await db.execute(
                 "SELECT latex_content FROM templates WHERE id = ?", (template_id,)
             )

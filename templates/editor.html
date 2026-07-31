@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ resume.title }} — Resumate{% endblock %}
+{% block body_class %}is-editor{% endblock %}
 {% block main_class %}editor-wrap{% endblock %}
 
 {% block head %}
@@ -16,22 +17,20 @@
 
 {% block content %}
 <div class="editor-topbar">
-  <a href="/" class="back-btn">
+  <a href="/" class="back-btn" title="Dashboard">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-    Back
   </a>
-  <div class="editor-title">{{ resume.title }}</div>
+  <div class="editor-title-wrap">
+    <span class="dirty-dot" id="dirty-dot" title="Unsaved changes" hidden></span>
+    <div class="editor-title" title="{{ resume.title }}">{{ resume.title }}</div>
+  </div>
+  <span id="status-pill" class="status-pill" aria-live="polite"></span>
   <div class="editor-actions">
-    <span id="status-pill" class="status-pill"></span>
-    <button class="btn btn-sm" onclick="resumateSave()" title="Ctrl+S">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      Save
-      <kbd class="kbd">⌘S</kbd>
-    </button>
-    <button id="compile-btn" class="btn btn-sm btn-primary" onclick="resumateCompile()" title="Ctrl+Enter">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    <button type="button" class="btn btn-sm btn-ghost" onclick="resumateSave()" title="Save (⌘S)">Save</button>
+    <a id="download-pdf-btn" class="btn btn-sm{% if not resume.has_pdf %} is-hidden{% endif %}"
+       href="/resume/{{ resume.id }}/pdf?download=1" download title="Download PDF">Download</a>
+    <button id="compile-btn" type="button" class="btn btn-sm btn-primary" onclick="resumateCompile()" title="Compile (⌘⏎)">
       Compile
-      <kbd class="kbd kbd-light">⌘⏎</kbd>
     </button>
   </div>
 </div>
@@ -39,45 +38,33 @@
 <div class="editor-split">
   <div class="editor-pane" id="editor-pane">
     <div class="pane-header">
-      <span class="pane-label">LaTeX</span>
+      <span class="pane-label">Source</span>
       <span class="pane-label" id="cursor-pos">Ln 1, Col 1</span>
     </div>
     <textarea id="latex-editor" data-resume-id="{{ resume.id }}">{{ resume.latex_content }}</textarea>
 
+    <div class="ai-divider" id="ai-divider" title="Drag to resize" role="separator" aria-orientation="horizontal">
+      <div class="divider-grip"><span></span><span></span><span></span></div>
+    </div>
+
     <div class="ai-panel" id="ai-panel">
       <div class="ai-label">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/><path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.58 3.25 3.93"/></svg>
-        AI Assistant
+        AI
         <span class="ai-badge" id="ai-msg-count"></span>
-        <kbd class="kbd kbd-inline">⌘⇧A</kbd>
+        <button type="button" class="ai-clear-link" onclick="clearChat()" title="Clear chat">Clear</button>
       </div>
 
       <div class="ai-quick-actions">
-        <button class="ai-quick-btn" data-prompt="Polish my entire resume. Tighten every bullet point, remove filler words, strengthen action verbs, and make sure every line demonstrates measurable impact. Keep the same content but make it hit harder.">
-          <span class="quick-icon">✨</span> Polish
-        </button>
-        <button class="ai-quick-btn" data-prompt="Optimize my resume for ATS (Applicant Tracking Systems). Ensure proper section headings (Experience, Education, Skills), use standard industry keywords, remove tables/graphics, and format so parsing software reads it correctly.">
-          <span class="quick-icon">🎯</span> ATS Optimize
-        </button>
-        <button class="ai-quick-btn" data-prompt="Go through every bullet point and add or improve quantified metrics. Replace vague claims with specific numbers — percentages, dollar amounts, team sizes, user counts, performance improvements. Use realistic placeholders if exact numbers aren't available.">
-          <span class="quick-icon">📊</span> Add Metrics
-        </button>
-        <button class="ai-quick-btn" data-prompt="Rewrite my professional summary to be a powerful 2-3 line elevator pitch. It should immediately communicate: (1) who I am professionally, (2) my top 2-3 strengths with evidence, (3) the value I bring. No generic fluff — make every word earn its place.">
-          <span class="quick-icon">📝</span> Rewrite Summary
-        </button>
-        <button class="ai-quick-btn" data-prompt="Reorder my bullet points within each role so the most impressive, impactful achievement is listed first. Remove or condense any weak bullets that don't demonstrate clear value. Less impressive items should be cut entirely if the section is too long.">
-          <span class="quick-icon">🏆</span> Rank by Impact
-        </button>
-        <button class="ai-quick-btn" data-prompt="Review my resume as a harsh hiring manager. Give me a brutally honest assessment of what's weak, what's missing, what doesn't belong, and what would make me toss this in the no pile. Then fix the top 3 issues you find.">
-          <span class="quick-icon">🔥</span> Roast & Fix
-        </button>
+        <button type="button" class="ai-quick-btn" data-prompt="Polish wording only: tighten verbs, cut filler, fix grammar. Keep every fact, tool, and metric exactly as written. Do not invent impact numbers or add buzzwords.">Polish</button>
+        <button type="button" class="ai-quick-btn" data-prompt="Make this ATS-cleaner: standard section headings, clearer keywords that already match the experience, no tables/columns. Do not invent skills or inflate scope.">ATS</button>
+        <button type="button" class="ai-quick-btn" data-prompt="Improve quantification only where numbers already exist. Where a metric is missing, use an obvious placeholder like [X%] or [N users] — never invent precise fake stats.">Metrics</button>
+        <button type="button" class="ai-quick-btn" data-prompt="Rewrite the summary as 2–3 short factual lines. No 'passionate', 'results-driven', or LinkedIn fluff. State role focus and what they build.">Summary</button>
       </div>
 
       <div class="ai-thread" id="ai-thread">
         {% if not resume.chat_history %}
         <div class="ai-empty-state">
-          <div class="ai-empty-icon">💬</div>
-          <div class="ai-empty-text">Ask me to polish, rewrite, optimize, or tailor your resume. I know what recruiters actually look for.</div>
+          <div class="ai-empty-text">Describe an edit, or use a shortcut above.</div>
         </div>
         {% endif %}
         {% for msg in resume.chat_history %}
@@ -88,23 +75,16 @@
         {% endfor %}
       </div>
 
-      <div class="ai-context-bar">
-        <input id="ai-target-role" class="ai-role-input" type="text" placeholder="Target role (optional, e.g. Senior Backend Engineer)" />
-      </div>
       <div class="ai-bar">
-        <textarea id="ai-input" class="ai-input" rows="1" placeholder='Tell AI what to change. Examples: "Shorten every bullet by half", "Make the first bullet of each role stronger", "Rewrite my summary as a 2-line elevator pitch"...'></textarea>
-        <button id="ai-send" class="ai-send">Ask AI</button>
-        <button id="ai-clear" class="ai-clear-btn" onclick="clearChat()" title="Clear chat">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-        </button>
+        <input id="ai-target-role" class="ai-role-input" type="text" placeholder="Target role (optional)" />
+        <textarea id="ai-input" class="ai-input" rows="1" placeholder="e.g. Shorten every bullet by half"></textarea>
+        <button type="button" id="ai-send" class="ai-send">Send</button>
       </div>
     </div>
   </div>
 
   <div class="editor-divider" id="editor-divider">
-    <div class="divider-grip">
-      <span></span><span></span><span></span>
-    </div>
+    <div class="divider-grip"><span></span><span></span><span></span></div>
     <div class="split-overlay" id="split-overlay"></div>
   </div>
 
@@ -115,13 +95,7 @@
     </div>
     <div class="pdf-container" id="pdf-container">
       <div class="pdf-placeholder" id="pdf-placeholder">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        <p>Click <strong>Compile</strong> to generate your PDF</p>
-        <div class="shortcut-hint-row">
-          <kbd class="kbd">⌘S</kbd> save
-          <span class="shortcut-sep">/</span>
-          <kbd class="kbd">⌘⏎</kbd> compile
-        </div>
+        <p>Press <kbd class="kbd">⌘⏎</kbd> to compile</p>
       </div>
       <div class="pdf-pages" id="pdf-pages"></div>
     </div>

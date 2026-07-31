@@ -2,10 +2,9 @@
 (function () {
   "use strict";
 
-  /* ── Toasts ─────────────────────────────────────────────── */
   window.showToast = function (msg, type, ms) {
     type = type || "info";
-    ms = ms || 3500;
+    ms = ms || 3200;
     var c = document.getElementById("toasts");
     if (!c) return;
     var t = document.createElement("div");
@@ -14,15 +13,18 @@
     c.appendChild(t);
     setTimeout(function () {
       t.classList.add("leaving");
-      setTimeout(function () { t.remove(); }, 250);
+      setTimeout(function () { t.remove(); }, 220);
     }, ms);
   };
 
-  /* ── Editor (only on editor page) ───────────────────────── */
   var cmEl = document.getElementById("latex-editor");
   if (!cmEl) return;
 
   var resumeId = cmEl.getAttribute("data-resume-id");
+  var dirtyDot = document.getElementById("dirty-dot");
+  var pill = document.getElementById("status-pill");
+  var pillHideTimer = null;
+  var ignoreChange = false;
 
   var editor = CodeMirror.fromTextArea(cmEl, {
     mode: "stex",
@@ -49,43 +51,71 @@
   editor.on("cursorActivity", function () {
     if (!cursorEl) return;
     var p = editor.getCursor();
-    cursorEl.textContent = "Ln " + (p.line + 1) + ", Col " + (p.ch + 1);
+    cursorEl.textContent = (p.line + 1) + ":" + (p.ch + 1);
   });
 
   var saveTimer;
   editor.on("change", function () {
+    if (ignoreChange) return;
+    setDirty(true);
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(save, 2000);
+    saveTimer = setTimeout(save, 1200);
   });
 
-  /* ── Save ────────────────────────────────────────────────── */
+  function setDirty(on) {
+    if (dirtyDot) dirtyDot.hidden = !on;
+  }
+
+  function setStatus(text, kind, holdMs) {
+    if (!pill) return;
+    clearTimeout(pillHideTimer);
+    if (!text) {
+      pill.className = "status-pill";
+      pill.textContent = "";
+      return;
+    }
+    pill.className = "status-pill visible" + (kind ? " " + kind : "");
+    pill.textContent = text;
+    if (holdMs) {
+      pillHideTimer = setTimeout(function () { pill.className = "status-pill"; }, holdMs);
+    }
+  }
+
+  function esc(s) {
+    var d = document.createElement("div");
+    d.textContent = s == null ? "" : String(s);
+    return d.innerHTML;
+  }
+
+  /* ── Save (serialized, always writes latest content) ─────── */
   var saveChain = Promise.resolve();
-  var lastSaved = null;
+  var lastSaved = editor.getValue();
+  setDirty(false);
 
   function save() {
     var content = editor.getValue();
-    if (content === lastSaved) return saveChain;
-
-    var pill = document.getElementById("status-pill");
-    pill.className = "status-pill visible";
-    pill.innerHTML = '<span class="spinner"></span> Saving...';
-
-    var fd = new FormData();
-    fd.append("latex_content", content);
-
-    // Serialize saves so an older in-flight save never overwrites newer content
+    if (content === lastSaved) {
+      setDirty(false);
+      return saveChain;
+    }
+    setStatus("Saving…");
     saveChain = saveChain.then(function () {
-      return fetch("/resume/" + resumeId + "/save", { method: "POST", body: fd })
+      var latest = editor.getValue();
+      if (latest === lastSaved) {
+        setDirty(false);
+        return;
+      }
+      var body = new FormData();
+      body.append("latex_content", latest);
+      return fetch("/resume/" + resumeId + "/save", { method: "POST", body: body })
         .then(function (r) {
           if (!r.ok) throw new Error("bad");
-          lastSaved = content;
-          pill.className = "status-pill visible saved";
-          pill.textContent = "Saved";
-          setTimeout(function () { pill.className = "status-pill"; }, 2000);
+          lastSaved = latest;
+          setDirty(false);
+          setStatus("Saved", "saved", 1400);
         })
         .catch(function () {
-          pill.className = "status-pill visible error";
-          pill.textContent = "Save failed";
+          setStatus("Save failed", "error", 4000);
           showToast("Failed to save", "error");
         });
     });
@@ -95,24 +125,30 @@
 
   /* ── Compile ─────────────────────────────────────────────── */
   var compiling = false;
-  function compile() {
+  var pdfRenderToken = 0;
+
+  function setPreviewLoading(on) {
+    var el = document.getElementById("pdf-container");
+    if (el) el.classList.toggle("is-loading", !!on);
+  }
+
+  function compile(opts) {
+    opts = opts || {};
     if (compiling) return;
     compiling = true;
 
     var btn = document.getElementById("compile-btn");
-    var pill = document.getElementById("status-pill");
-    var orig = btn.innerHTML;
+    var orig = "Compile";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+    }
+    setStatus("Compiling…", "compiling");
+    setPreviewLoading(true);
 
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Compiling';
-    pill.className = "status-pill visible compiling";
-    pill.textContent = "Compiling...";
-
-    var content = editor.getValue();
     var fd = new FormData();
-    fd.append("latex_content", content);
+    fd.append("latex_content", editor.getValue());
 
-    // Persist first (queued behind any in-flight save), then compile
     save().then(function () {
       return fetch("/resume/" + resumeId + "/compile", { method: "POST", body: fd });
     })
@@ -122,91 +158,58 @@
         clearErrorLines();
         if (d.success) {
           var url = "/resume/" + resumeId + "/pdf?t=" + Date.now();
-          pill.className = "status-pill visible saved";
-          var pg = d.pages ? " (" + d.pages + " page" + (d.pages > 1 ? "s" : "") + ")" : "";
-          pill.textContent = "Compiled" + pg;
-          showToast("PDF compiled" + pg, "success");
-          setTimeout(function () { pill.className = "status-pill"; }, 3000);
+          setStatus(d.pages ? "Ready · " + d.pages + "p" : "Ready", "saved", 2200);
           var pc = document.getElementById("page-count");
-          if (pc) pc.textContent = d.pages ? d.pages + " page" + (d.pages > 1 ? "s" : "") : "";
+          if (pc) pc.textContent = d.pages ? d.pages + (d.pages === 1 ? " page" : " pages") : "";
           var ph = document.getElementById("pdf-placeholder");
           if (ph) ph.style.display = "none";
           var ep = document.getElementById("error-panel");
           if (ep) ep.remove();
-          setTimeout(function () { try { renderPDF(url); } catch (e) { console.error(e); } }, 50);
+          var dl = document.getElementById("download-pdf-btn");
+          if (dl) dl.classList.remove("is-hidden");
+          renderPDF(url);
         } else {
-          if (d.errors && d.errors.length) {
-            markErrorLines(d.errors);
+          setPreviewLoading(false);
+          if (d.errors && d.errors.length) markErrorLines(d.errors);
+          setStatus("Compile error", "error", 5000);
+          if (!opts.quiet) showToast("Compilation failed", "error");
+          var pane = document.getElementById("preview-pane");
+          var ep2 = document.getElementById("error-panel");
+          if (!ep2 && pane) {
+            ep2 = document.createElement("div");
+            ep2.id = "error-panel";
+            pane.appendChild(ep2);
           }
-          pill.className = "status-pill visible error";
-          pill.textContent = "Error";
-          showToast("Compilation failed", "error");
-          var ep = document.getElementById("error-panel");
-          if (!ep) {
-            ep = document.createElement("div");
-            ep.id = "error-panel";
-            document.getElementById("preview-pane").appendChild(ep);
+          if (ep2) {
+            ep2.innerHTML = '<div class="error-panel">' + esc(d.error) +
+              (d.hint ? '<div class="error-hint">' + esc(d.hint) + "</div>" : "") +
+              "</div>";
           }
-          ep.innerHTML = '<div class="error-panel">' + esc(d.error) +
-            (d.hint ? '<div class="error-hint">' + esc(d.hint) + "</div>" : "") +
-            "</div>";
         }
       })
       .catch(function () {
-        pill.className = "status-pill visible error";
-        pill.textContent = "Error";
+        setPreviewLoading(false);
+        setStatus("Request failed", "error", 4000);
         showToast("Request failed", "error");
       })
       .then(function () {
-        btn.disabled = false;
-        btn.innerHTML = orig;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = orig;
+        }
         compiling = false;
       });
   }
   window.resumateCompile = compile;
 
-  function esc(s) {
-    var d = document.createElement("div");
-    d.textContent = s;
-    return d.innerHTML;
-  }
-
-  /* ── PDF.js rendering ────────────────────────────────────── */
+  /* ── PDF.js ──────────────────────────────────────────────── */
   var synctexData = null;
   var errorMarks = [];
+  var syncFlash = null;
 
   function clearErrorMarks() {
-    for (var i = 0; i < errorMarks.length; i++) {
-      errorMarks[i].clear();
-    }
+    for (var i = 0; i < errorMarks.length; i++) errorMarks[i].clear();
     errorMarks = [];
-  }
-
-  function markErrorLines(errors) {
-    clearErrorLines();
-    if (!errors || !errors.length) return;
-    for (var i = 0; i < errors.length; i++) {
-      var e = errors[i];
-      if (e.line && e.line > 0) {
-        var lineIdx = Math.min(e.line - 1, editor.lastLine());
-        var lineContent = editor.getLine(lineIdx);
-        if (lineContent && lineContent.length > 0) {
-          var mark = editor.markText(
-            { line: lineIdx, ch: 0 },
-            { line: lineIdx, ch: lineContent.length },
-            { className: "cm-error-squiggly", attributes: { title: e.message } }
-          );
-          errorMarks.push(mark);
-        }
-        editor.setGutterMarker(lineIdx, "CodeMirror-linenumber", (function(msg) {
-          var span = document.createElement("div");
-          span.className = "cm-error-gutter";
-          span.title = msg;
-          span.textContent = "!";
-          return span;
-        })(e.message));
-      }
-    }
   }
 
   function clearErrorLines() {
@@ -215,25 +218,74 @@
     }
   }
 
+  function markErrorLines(errors) {
+    clearErrorLines();
+    if (!errors || !errors.length) return;
+    for (var i = 0; i < errors.length; i++) {
+      var e = errors[i];
+      if (!e.line || e.line <= 0) continue;
+      var lineIdx = Math.min(e.line - 1, editor.lastLine());
+      var lineContent = editor.getLine(lineIdx);
+      if (lineContent && lineContent.length > 0) {
+        errorMarks.push(editor.markText(
+          { line: lineIdx, ch: 0 },
+          { line: lineIdx, ch: lineContent.length },
+          { className: "cm-error-squiggly", attributes: { title: e.message } }
+        ));
+      }
+      editor.setGutterMarker(lineIdx, "CodeMirror-linenumber", (function (msg) {
+        var span = document.createElement("div");
+        span.className = "cm-error-gutter";
+        span.title = msg;
+        span.textContent = "!";
+        return span;
+      })(e.message));
+    }
+  }
+
+  function jumpToLine(lineNum) {
+    var lineIdx = Math.max(0, Math.min(editor.lastLine(), lineNum - 1));
+    editor.setCursor(lineIdx, 0);
+    editor.scrollIntoView({ line: lineIdx, ch: 0 }, 80);
+    editor.focus();
+    if (syncFlash) syncFlash.clear();
+    var lineContent = editor.getLine(lineIdx) || "";
+    syncFlash = editor.markText(
+      { line: lineIdx, ch: 0 },
+      { line: lineIdx, ch: lineContent.length },
+      { className: "cm-sync-flash" }
+    );
+    setTimeout(function () {
+      if (syncFlash) { syncFlash.clear(); syncFlash = null; }
+    }, 1000);
+  }
+
   function renderPDF(url) {
     var container = document.getElementById("pdf-pages");
     if (!container) return;
-    container.innerHTML = "";
-
     if (typeof pdfjsLib === "undefined") {
-      showToast("PDF viewer not loaded yet", "error");
+      setPreviewLoading(false);
+      showToast("PDF viewer not loaded", "error");
       return;
     }
 
+    var token = ++pdfRenderToken;
+    container.innerHTML = "";
+
     pdfjsLib.getDocument(url).promise.then(function (pdf) {
+      if (token !== pdfRenderToken) return;
       var scale = 1.5;
+      var pending = pdf.numPages;
       for (var i = 1; i <= pdf.numPages; i++) {
         (function (pageNum) {
           pdf.getPage(pageNum).then(function (page) {
+            if (token !== pdfRenderToken) return;
             var viewport = page.getViewport({ scale: scale });
+            var pageSize = page.getViewport({ scale: 1 });
             var canvas = document.createElement("canvas");
             canvas.className = "pdf-page";
             canvas.setAttribute("data-page", pageNum);
+            canvas.title = "Click to jump to source";
             var ctx = canvas.getContext("2d");
             canvas.height = viewport.height;
             canvas.width = viewport.width;
@@ -242,98 +294,163 @@
             canvas.addEventListener("click", function (e) {
               if (!synctexData || !synctexData.pages) return;
               var rect = canvas.getBoundingClientRect();
-              var cssX = e.clientX - rect.left;
-              var cssY = e.clientY - rect.top;
-              var pdfX = cssX * (viewport.width / rect.width);
-              var pdfY = (rect.height - cssY) * (viewport.height / rect.height);
-              var hits = synctexData.pages[String(pageNum)];
+              var pdfX = ((e.clientX - rect.left) / rect.width) * pageSize.width;
+              var pdfY = ((e.clientY - rect.top) / rect.height) * pageSize.height;
+              var hits = synctexData.pages[String(pageNum)] || synctexData.pages[pageNum];
               if (!hits || !hits.length) return;
               var best = null;
               var bestDist = Infinity;
               for (var j = 0; j < hits.length; j++) {
                 var h = hits[j];
-                var d = Math.abs(pdfX - h.x) + Math.abs(pdfY - h.y);
-                if (d < bestDist) {
-                  bestDist = d;
-                  best = h;
-                }
+                if (!h.line) continue;
+                var d = Math.abs(pdfX - h.x) + Math.abs(pdfY - h.y) * 1.5;
+                if (d < bestDist) { bestDist = d; best = h; }
               }
-              // Only jump when the click lands near actual content
-              var SYNC_TOLERANCE = 40; // PDF units
-              if (best && best.line && bestDist <= SYNC_TOLERANCE) {
-                var lineIdx = Math.max(0, best.line - 1);
-                editor.setCursor(lineIdx, 0);
-                editor.scrollIntoView({ line: lineIdx, ch: 0 }, 100);
-                editor.focus();
-              }
+              if (best && bestDist <= 110) jumpToLine(best.line);
             });
 
-            page.render({ canvasContext: ctx, viewport: viewport });
+            page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
+              pending -= 1;
+              if (pending <= 0 && token === pdfRenderToken) setPreviewLoading(false);
+            });
           });
         })(i);
       }
 
       fetch("/resume/" + resumeId + "/synctex")
         .then(function (r) { return r.json(); })
-        .then(function (d) { synctexData = d; })
+        .then(function (d) { if (token === pdfRenderToken) synctexData = d; })
         .catch(function () { synctexData = null; });
     }).catch(function (err) {
       console.error("PDF render error:", err);
+      setPreviewLoading(false);
       showToast("Failed to render PDF", "error");
     });
   }
 
-  /* ── Split pane drag ─────────────────────────────────────── */
+  /* ── Resizable panes ─────────────────────────────────────── */
+  var LS_SPLIT = "resumate.splitPct";
+  var LS_AI = "resumate.aiHeight";
   var divider = document.getElementById("editor-divider");
+  var aiDivider = document.getElementById("ai-divider");
   var edPane = document.getElementById("editor-pane");
   var pvPane = document.getElementById("preview-pane");
+  var aiPanel = document.getElementById("ai-panel");
   var split = document.querySelector(".editor-split");
   var overlay = document.getElementById("split-overlay");
-  var dragging = false;
+  var resizeTarget = null;
 
-  divider.addEventListener("mousedown", function (e) {
-    e.preventDefault();
-    dragging = true;
-    divider.classList.add("dragging");
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    document.body.style.pointerEvents = "none";
-    if (overlay) overlay.style.display = "block";
-  });
+  function isStackedSplit() {
+    return window.matchMedia("(max-width: 768px)").matches;
+  }
+
+  function applySplitPct(pct) {
+    pct = Math.max(20, Math.min(80, pct));
+    if (isStackedSplit()) {
+      edPane.style.flex = "none";
+      edPane.style.width = "";
+      edPane.style.height = pct + "%";
+      pvPane.style.flex = "1";
+      pvPane.style.height = "";
+      pvPane.style.width = "";
+    } else {
+      edPane.style.flex = "none";
+      edPane.style.height = "";
+      edPane.style.width = pct + "%";
+      pvPane.style.flex = "1";
+      pvPane.style.width = "";
+      pvPane.style.height = "";
+    }
+    try { localStorage.setItem(LS_SPLIT, String(Math.round(pct * 10) / 10)); } catch (e) {}
+    return pct;
+  }
+
+  function applyAiHeight(px) {
+    if (!aiPanel) return px;
+    var paneH = edPane.getBoundingClientRect().height;
+    var minH = 120;
+    var maxH = Math.max(minH, paneH - 140);
+    px = Math.max(minH, Math.min(maxH, Math.round(px)));
+    aiPanel.style.height = px + "px";
+    try { localStorage.setItem(LS_AI, String(px)); } catch (e) {}
+    editor.refresh();
+    return px;
+  }
+
+  (function restoreSizes() {
+    var savedPct = parseFloat(localStorage.getItem(LS_SPLIT) || "");
+    if (!isNaN(savedPct)) applySplitPct(savedPct);
+    var savedAi = parseFloat(localStorage.getItem(LS_AI) || "");
+    if (!isNaN(savedAi)) applyAiHeight(savedAi);
+    else applyAiHeight(200);
+  })();
+
+  function beginResize(target, handle, cursor) {
+    resizeTarget = target;
+    handle.classList.add("dragging");
+    document.body.classList.add("is-resizing");
+    document.body.style.cursor = cursor;
+    if (overlay) {
+      overlay.style.display = "block";
+      overlay.style.cursor = cursor;
+    }
+  }
+
+  function endResize() {
+    if (!resizeTarget) return;
+    resizeTarget = null;
+    if (divider) divider.classList.remove("dragging");
+    if (aiDivider) aiDivider.classList.remove("dragging");
+    document.body.classList.remove("is-resizing");
+    document.body.style.cursor = "";
+    if (overlay) {
+      overlay.style.display = "none";
+      overlay.style.cursor = "";
+    }
+    editor.refresh();
+  }
+
+  if (divider) {
+    divider.addEventListener("mousedown", function (e) {
+      e.preventDefault();
+      beginResize("split", divider, isStackedSplit() ? "row-resize" : "col-resize");
+    });
+  }
+  if (aiDivider) {
+    aiDivider.addEventListener("mousedown", function (e) {
+      e.preventDefault();
+      beginResize("ai", aiDivider, "row-resize");
+    });
+  }
 
   document.addEventListener("mousemove", function (e) {
-    if (!dragging) return;
-    var rect = split.getBoundingClientRect();
-    var x = e.clientX - rect.left;
-    var pct = (x / rect.width) * 100;
-    pct = Math.max(25, Math.min(75, pct));
-    edPane.style.flex = "none";
-    edPane.style.width = pct + "%";
-    pvPane.style.flex = "1";
+    if (!resizeTarget) return;
+    if (resizeTarget === "split") {
+      var rect = split.getBoundingClientRect();
+      applySplitPct(isStackedSplit()
+        ? ((e.clientY - rect.top) / rect.height) * 100
+        : ((e.clientX - rect.left) / rect.width) * 100);
+    } else if (resizeTarget === "ai") {
+      applyAiHeight(edPane.getBoundingClientRect().bottom - e.clientY);
+    }
+  });
+  document.addEventListener("mouseup", endResize);
+  window.addEventListener("resize", function () {
+    var savedPct = parseFloat(localStorage.getItem(LS_SPLIT) || "50");
+    if (!isNaN(savedPct)) applySplitPct(savedPct);
+    var savedAi = parseFloat(localStorage.getItem(LS_AI) || "");
+    if (!isNaN(savedAi)) applyAiHeight(savedAi);
+    else editor.refresh();
   });
 
-  document.addEventListener("mouseup", function () {
-    if (!dragging) return;
-    dragging = false;
-    divider.classList.remove("dragging");
-    document.body.style.cursor = "";
-    document.body.style.userSelect = "";
-    document.body.style.pointerEvents = "";
-    if (overlay) overlay.style.display = "none";
-    editor.refresh();
-  });
-
-  /* ── Global shortcuts ────────────────────────────────────── */
   document.addEventListener("keydown", function (e) {
     var mod = e.metaKey || e.ctrlKey;
     if (mod && e.shiftKey && e.key.toLowerCase() === "a") {
       e.preventDefault();
-      var inp = document.getElementById("ai-input");
-      if (inp) inp.focus();
+      if (aiInput) aiInput.focus();
     }
   });
 
-  /* ── Auto-render existing PDF on load ────────────────────── */
   (function autoRenderExisting() {
     var url = "/resume/" + resumeId + "/pdf?t=" + Date.now();
     fetch(url, { method: "HEAD" })
@@ -341,74 +458,36 @@
         if (r.ok && document.getElementById("pdf-pages")) {
           var ph = document.getElementById("pdf-placeholder");
           if (ph) ph.style.display = "none";
+          setPreviewLoading(true);
           renderPDF(url);
         }
       })
       .catch(function () {});
   })();
 
-  /* ── AI Chat ─────────────────────────────────────────────── */
+  /* ── AI ──────────────────────────────────────────────────── */
   var aiThread = document.getElementById("ai-thread");
   var aiInput = document.getElementById("ai-input");
   var aiSend = document.getElementById("ai-send");
   var aiCount = document.getElementById("ai-msg-count");
   var aiRoleInput = document.getElementById("ai-target-role");
 
-  var THINKING_PHRASES = [
-    "Percolating on that one...",
-    "Stroking my beard thoughtfully...",
-    "Consulting the resume gods...",
-    "Channeling inner recruiter energy...",
-    "Polishing imaginary spectacles...",
-    "Flipping through mental rolodex...",
-    "Adjusting monocle, reading closely...",
-    "Summoning ATS optimization spirits...",
-    "Muttering action verbs under breath...",
-    "Counting quantifiable achievements...",
-    "Rearranging bullet points telepathically...",
-    "Downloading hiring manager brainwaves...",
-    "Debugging your career narrative...",
-    "Injecting STAR method ruthlessly...",
-    "Removing filler words with extreme prejudice...",
-    "Calculating resume-to-interview odds...",
-    "Running on recruiter neural pathways...",
-    "Warming up the thesaurus engine...",
-    "Cross-referencing with 100K resumes...",
-    "Applying laser-focused edits...",
-  ];
-
-  var thinkingInterval = null;
-
-  function startThinking(el) {
-    var idx = Math.floor(Math.random() * THINKING_PHRASES.length);
-    el.innerHTML = '<div class="ai-msg-role">AI</div><div class="ai-msg-text"><span class="spinner"></span> <span class="thinking-text">' + THINKING_PHRASES[idx] + '</span></div>';
-    aiThread.scrollTop = aiThread.scrollHeight;
-    thinkingInterval = setInterval(function () {
-      idx = (idx + 1) % THINKING_PHRASES.length;
-      var textEl = el.querySelector(".thinking-text");
-      if (textEl) {
-        textEl.style.opacity = "0";
-        setTimeout(function () {
-          textEl.textContent = THINKING_PHRASES[idx];
-          textEl.style.opacity = "1";
-        }, 180);
-      }
-      aiThread.scrollTop = aiThread.scrollHeight;
-    }, 2200);
-  }
-
-  function stopThinking() {
-    if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
-  }
-
   function updateCount() {
-    var n = aiThread ? aiThread.children.length : 0;
-    if (aiCount) aiCount.textContent = n > 0 ? n + " messages" : "";
+    if (!aiCount || !aiThread) return;
+    var n = aiThread.querySelectorAll(".ai-msg").length;
+    aiCount.textContent = n ? String(n) : "";
   }
   updateCount();
 
+  function clearEmptyState() {
+    if (!aiThread) return;
+    var empty = aiThread.querySelector(".ai-empty-state");
+    if (empty) empty.remove();
+  }
+
   function addMsg(role, text) {
     if (!aiThread) return;
+    clearEmptyState();
     var div = document.createElement("div");
     div.className = "ai-msg ai-msg-" + role;
     div.innerHTML = '<div class="ai-msg-role">' + (role === "user" ? "You" : "AI") +
@@ -416,9 +495,9 @@
     aiThread.appendChild(div);
     aiThread.scrollTop = aiThread.scrollHeight;
     updateCount();
+    return div;
   }
 
-  /* ── Quick actions ────────────────────────────────────────── */
   document.querySelectorAll(".ai-quick-btn").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var prompt = btn.getAttribute("data-prompt");
@@ -439,22 +518,63 @@
     });
   }
 
+  function applyAI(latexContent) {
+    if (latexContent === editor.getValue()) return null;
+    var prev = editor.getValue();
+    ignoreChange = true;
+    editor.replaceRange(
+      latexContent,
+      { line: 0, ch: 0 },
+      { line: editor.lineCount(), ch: 0 }
+    );
+    ignoreChange = false;
+    lastSaved = null; // force save on next compile chain
+    setDirty(true);
+    return prev;
+  }
+
+  function attachRevertButton(snapshot) {
+    if (!aiThread || snapshot == null) return;
+    var last = aiThread.lastElementChild;
+    if (!last) return;
+    var textEl = last.querySelector(".ai-msg-text");
+    if (!textEl) return;
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ai-revert-btn";
+    btn.textContent = "Revert";
+    btn.addEventListener("click", function () {
+      ignoreChange = true;
+      editor.replaceRange(
+        snapshot,
+        { line: 0, ch: 0 },
+        { line: editor.lineCount(), ch: 0 }
+      );
+      ignoreChange = false;
+      lastSaved = null;
+      setDirty(true);
+      btn.remove();
+      compile({ quiet: true });
+    });
+    textEl.appendChild(btn);
+  }
+
   function sendAI() {
     var prompt = aiInput.value.trim();
     if (!prompt) return;
 
     var role = aiRoleInput ? aiRoleInput.value.trim() : "";
-    var fullPrompt = prompt;
-    if (role) fullPrompt = "[Target role: " + role + "] " + prompt;
+    var fullPrompt = role ? "[Target role: " + role + "] " + prompt : prompt;
 
     addMsg("user", prompt);
     aiInput.value = "";
     aiSend.disabled = true;
-    aiSend.textContent = "...";
+    aiSend.textContent = "…";
 
     var thinking = document.createElement("div");
     thinking.className = "ai-msg ai-msg-assistant ai-msg-thinking";
-    startThinking(thinking);
+    thinking.innerHTML = '<div class="ai-msg-role">AI</div><div class="ai-msg-text"><span class="spinner"></span> Editing…</div>';
+    clearEmptyState();
     aiThread.appendChild(thinking);
     aiThread.scrollTop = aiThread.scrollHeight;
 
@@ -464,78 +584,37 @@
     fetch("/resume/" + resumeId + "/ai", { method: "POST", body: fd })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        stopThinking();
         thinking.remove();
         if (d.success && d.latex_content) {
-          var aiEditApplied = applyAI(d.latex_content);
-          addMsg("assistant", d.ai_reply || "Updated your resume.");
-          if (aiEditApplied) attachRevertButton();
-          showToast("AI updated your resume", "success");
-          compile();
+          var snapshot = applyAI(d.latex_content);
+          addMsg("assistant", d.ai_reply || "Updated.");
+          if (snapshot !== null) attachRevertButton(snapshot);
+          compile({ quiet: true });
         } else {
-          addMsg("assistant", "Error: " + (d.error || "request failed"));
+          addMsg("assistant", d.error || "Request failed");
           showToast(d.error || "AI request failed", "error");
         }
       })
       .catch(function () {
-        stopThinking();
         thinking.remove();
-        addMsg("assistant", "Error: request failed");
+        addMsg("assistant", "Request failed");
         showToast("AI request failed", "error");
       })
       .then(function () {
         aiSend.disabled = false;
-        aiSend.textContent = "Ask AI";
+        aiSend.textContent = "Send";
+        updateCount();
       });
-  }
-
-  /* ── Undo-friendly AI apply + Revert ─────────────────────── */
-  var aiPrevContent = null;
-
-  function applyAI(latexContent) {
-    if (latexContent === editor.getValue()) return false;
-    aiPrevContent = editor.getValue();
-    // One replaceRange = one undo step (Ctrl/Cmd+Z) for the whole AI edit
-    editor.replaceRange(
-      latexContent,
-      { line: 0, ch: 0 },
-      { line: editor.lineCount(), ch: 0 }
-    );
-    return true;
-  }
-
-  function attachRevertButton() {
-    if (!aiThread) return;
-    var last = aiThread.lastElementChild;
-    if (!last) return;
-    var textEl = last.querySelector(".ai-msg-text");
-    if (!textEl) return;
-    var btn = document.createElement("button");
-    btn.className = "ai-revert-btn";
-    btn.textContent = "↩ Revert edit";
-    btn.title = "Restore the resume to how it looked before this AI edit";
-    btn.addEventListener("click", function () {
-      if (aiPrevContent === null) return;
-      editor.replaceRange(
-        aiPrevContent,
-        { line: 0, ch: 0 },
-        { line: editor.lineCount(), ch: 0 }
-      );
-      aiPrevContent = null;
-      btn.remove();
-      showToast("Reverted AI edit", "info");
-      compile();
-    });
-    textEl.appendChild(btn);
   }
 
   window.clearChat = function () {
     if (!confirm("Clear chat history?")) return;
     fetch("/resume/" + resumeId + "/clear-chat", { method: "POST" })
       .then(function () {
-        if (aiThread) aiThread.innerHTML = "";
+        if (aiThread) {
+          aiThread.innerHTML = '<div class="ai-empty-state"><div class="ai-empty-text">Describe an edit, or use a shortcut above.</div></div>';
+        }
         updateCount();
-        showToast("Chat cleared", "info");
       });
   };
 })();
