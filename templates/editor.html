@@ -92,7 +92,7 @@
         <input id="ai-target-role" class="ai-role-input" type="text" placeholder="Target role (optional, e.g. Senior Backend Engineer)" />
       </div>
       <div class="ai-bar">
-        <textarea id="ai-input" class="ai-input" rows="1" placeholder="Tell AI what to change..."></textarea>
+        <textarea id="ai-input" class="ai-input" rows="1" placeholder='Tell AI what to change. Examples: "Shorten every bullet by half", "Make the first bullet of each role stronger", "Rewrite my summary as a 2-line elevator pitch"...'></textarea>
         <button id="ai-send" class="ai-send">Ask AI</button>
         <button id="ai-clear" class="ai-clear-btn" onclick="clearChat()" title="Clear chat">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -127,8 +127,4 @@
     </div>
   </div>
 </div>
-
-<script>
-  var INIT_HISTORY = {{ resume.chat_history | tojson }};
-</script>
 {% endblock %}

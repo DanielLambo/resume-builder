@@ -391,6 +391,13 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-sec); white-space: pre-wrap;
 }
 .ai-msg-user .ai-msg-text { color: var(--text); }
+.ai-revert-btn {
+  display: block; margin-top: 0.5rem; padding: 0.3rem 0.6rem; font-size: 0.72rem;
+  background: transparent; color: var(--accent); border: 1px solid rgba(91,127,255,0.35);
+  border-radius: var(--radius-sm); cursor: pointer; font-family: inherit;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.ai-revert-btn:hover { background: var(--accent-subtle); border-color: var(--accent); }
 .ai-bar {
   display: flex; gap: 0.5rem; align-items: flex-end; padding: 0.5rem 0.75rem 0.6rem;
   border-top: 1px solid var(--border); flex-shrink: 0;

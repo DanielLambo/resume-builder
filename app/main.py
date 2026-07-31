@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from contextlib import asynccontextmanager
+from urllib.parse import quote
 import tempfile
 import shutil
 
@@ -70,21 +71,22 @@ async def create_resume(template_id: int = Form(...), title: str = Form("Untitle
     return RedirectResponse(f"/resume/{new_id}", status_code=303)
 
 
-@app.post("/upload", response_class=HTMLResponse)
+@app.post("/upload")
 async def upload_resume(
     request: Request,
     file: UploadFile = File(...),
     title: str = Form("Uploaded Resume"),
     template_id: int = Form(1),
 ):
+    def error_redirect(msg: str) -> RedirectResponse:
+        return RedirectResponse(f"/?error={quote(msg)}", status_code=303)
+
     allowed = {".pdf", ".docx", ".txt", ".tex"}
     ext = Path(file.filename).suffix.lower()
     if ext not in allowed:
-        return templates.TemplateResponse("dashboard.html", {
-            "request": request,
-            "resumes": [],
-            "error": f"Unsupported file type: {ext}. Use PDF, DOCX, TXT, or TEX.",
-        })
+        return error_redirect(
+            f"Unsupported file type: {ext}. Use PDF, DOCX, TXT, or TEX."
+        )
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
         shutil.copyfileobj(file.file, tmp)
@@ -93,11 +95,7 @@ async def upload_resume(
     try:
         extract_result = await extract_text(tmp_path, file.filename)
         if not extract_result["success"]:
-            return templates.TemplateResponse("dashboard.html", {
-                "request": request,
-                "resumes": [],
-                "error": extract_result["error"],
-            })
+            return error_redirect(extract_result["error"])
 
         if ext == ".tex" and "latex" in extract_result:
             async with get_db() as db:
@@ -118,11 +116,7 @@ async def upload_resume(
 
         convert_result = await convert_resume(extract_result["text"], template_latex)
         if not convert_result["success"]:
-            return templates.TemplateResponse("dashboard.html", {
-                "request": request,
-                "resumes": [],
-                "error": convert_result["error"],
-            })
+            return error_redirect(convert_result["error"])
 
         async with get_db() as db:
             cursor = await db.execute(

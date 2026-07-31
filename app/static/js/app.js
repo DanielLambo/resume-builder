@@ -59,30 +59,37 @@
   });
 
   /* ── Save ────────────────────────────────────────────────── */
-  var saving = false;
+  var saveChain = Promise.resolve();
+  var lastSaved = null;
+
   function save() {
-    if (saving) return;
-    saving = true;
+    var content = editor.getValue();
+    if (content === lastSaved) return saveChain;
+
     var pill = document.getElementById("status-pill");
     pill.className = "status-pill visible";
     pill.innerHTML = '<span class="spinner"></span> Saving...';
 
     var fd = new FormData();
-    fd.append("latex_content", editor.getValue());
+    fd.append("latex_content", content);
 
-    fetch("/resume/" + resumeId + "/save", { method: "POST", body: fd })
-      .then(function (r) {
-        if (!r.ok) throw new Error("bad");
-        pill.className = "status-pill visible saved";
-        pill.textContent = "Saved";
-        setTimeout(function () { pill.className = "status-pill"; }, 2000);
-      })
-      .catch(function () {
-        pill.className = "status-pill visible error";
-        pill.textContent = "Save failed";
-        showToast("Failed to save", "error");
-      })
-      .then(function () { saving = false; });
+    // Serialize saves so an older in-flight save never overwrites newer content
+    saveChain = saveChain.then(function () {
+      return fetch("/resume/" + resumeId + "/save", { method: "POST", body: fd })
+        .then(function (r) {
+          if (!r.ok) throw new Error("bad");
+          lastSaved = content;
+          pill.className = "status-pill visible saved";
+          pill.textContent = "Saved";
+          setTimeout(function () { pill.className = "status-pill"; }, 2000);
+        })
+        .catch(function () {
+          pill.className = "status-pill visible error";
+          pill.textContent = "Save failed";
+          showToast("Failed to save", "error");
+        });
+    });
+    return saveChain;
   }
   window.resumateSave = save;
 
@@ -105,10 +112,10 @@
     var fd = new FormData();
     fd.append("latex_content", content);
 
-    fetch("/resume/" + resumeId + "/save", { method: "POST", body: new URLSearchParams({latex_content: content}).toString(), headers: {"Content-Type": "application/x-www-form-urlencoded"} })
-      .then(function () {
-        return fetch("/resume/" + resumeId + "/compile", { method: "POST", body: fd });
-      })
+    // Persist first (queued behind any in-flight save), then compile
+    save().then(function () {
+      return fetch("/resume/" + resumeId + "/compile", { method: "POST", body: fd });
+    })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         clearErrorMarks();
@@ -251,7 +258,9 @@
                   best = h;
                 }
               }
-              if (best && best.line) {
+              // Only jump when the click lands near actual content
+              var SYNC_TOLERANCE = 40; // PDF units
+              if (best && best.line && bestDist <= SYNC_TOLERANCE) {
                 var lineIdx = Math.max(0, best.line - 1);
                 editor.setCursor(lineIdx, 0);
                 editor.scrollIntoView({ line: lineIdx, ch: 0 }, 100);
@@ -323,6 +332,20 @@
       if (inp) inp.focus();
     }
   });
+
+  /* ── Auto-render existing PDF on load ────────────────────── */
+  (function autoRenderExisting() {
+    var url = "/resume/" + resumeId + "/pdf?t=" + Date.now();
+    fetch(url, { method: "HEAD" })
+      .then(function (r) {
+        if (r.ok && document.getElementById("pdf-pages")) {
+          var ph = document.getElementById("pdf-placeholder");
+          if (ph) ph.style.display = "none";
+          renderPDF(url);
+        }
+      })
+      .catch(function () {});
+  })();
 
   /* ── AI Chat ─────────────────────────────────────────────── */
   var aiThread = document.getElementById("ai-thread");
@@ -444,8 +467,9 @@
         stopThinking();
         thinking.remove();
         if (d.success && d.latex_content) {
-          editor.setValue(d.latex_content);
+          var aiEditApplied = applyAI(d.latex_content);
           addMsg("assistant", d.ai_reply || "Updated your resume.");
+          if (aiEditApplied) attachRevertButton();
           showToast("AI updated your resume", "success");
           compile();
         } else {
@@ -463,6 +487,46 @@
         aiSend.disabled = false;
         aiSend.textContent = "Ask AI";
       });
+  }
+
+  /* ── Undo-friendly AI apply + Revert ─────────────────────── */
+  var aiPrevContent = null;
+
+  function applyAI(latexContent) {
+    if (latexContent === editor.getValue()) return false;
+    aiPrevContent = editor.getValue();
+    // One replaceRange = one undo step (Ctrl/Cmd+Z) for the whole AI edit
+    editor.replaceRange(
+      latexContent,
+      { line: 0, ch: 0 },
+      { line: editor.lineCount(), ch: 0 }
+    );
+    return true;
+  }
+
+  function attachRevertButton() {
+    if (!aiThread) return;
+    var last = aiThread.lastElementChild;
+    if (!last) return;
+    var textEl = last.querySelector(".ai-msg-text");
+    if (!textEl) return;
+    var btn = document.createElement("button");
+    btn.className = "ai-revert-btn";
+    btn.textContent = "↩ Revert edit";
+    btn.title = "Restore the resume to how it looked before this AI edit";
+    btn.addEventListener("click", function () {
+      if (aiPrevContent === null) return;
+      editor.replaceRange(
+        aiPrevContent,
+        { line: 0, ch: 0 },
+        { line: editor.lineCount(), ch: 0 }
+      );
+      aiPrevContent = null;
+      btn.remove();
+      showToast("Reverted AI edit", "info");
+      compile();
+    });
+    textEl.appendChild(btn);
   }
 
   window.clearChat = function () {
