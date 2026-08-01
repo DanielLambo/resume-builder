@@ -3,6 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
 import { EditorClient } from "@/components/editor/EditorClient";
 import {
+  formatJobTargetLabel,
+  getJobTargetFromDataJson,
+} from "@/lib/job-target";
+import {
   getLatexFromDataJson,
   getTemplateIdFromDataJson,
 } from "@/lib/resume-template";
@@ -40,6 +44,8 @@ export default async function EditorPage({ params }: EditorPageProps) {
     notFound();
   }
 
+  const job = getJobTargetFromDataJson(resume.data_json);
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <AppHeader email={user.email} />
@@ -49,6 +55,7 @@ export default async function EditorPage({ params }: EditorPageProps) {
           title={resume.title}
           initialLatex={getLatexFromDataJson(resume.data_json)}
           initialTemplateId={getTemplateIdFromDataJson(resume.data_json)}
+          jobLabel={job ? formatJobTargetLabel(job) : null}
         />
       </div>
     </div>

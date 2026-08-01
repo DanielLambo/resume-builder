@@ -35,6 +35,8 @@ type EditorClientProps = {
   initialTemplateId?: ResumeTemplateId;
   initialPdfBase64?: string | null;
   initialPageCount?: number | null;
+  /** When set, this sheet was tailored for a specific job application. */
+  jobLabel?: string | null;
 };
 
 type StudioMode = "vibe" | "source";
@@ -57,6 +59,7 @@ export function EditorClient({
   initialTemplateId = "new-grad",
   initialPdfBase64 = null,
   initialPageCount = null,
+  jobLabel = null,
 }: EditorClientProps) {
   const { applyUsage, used: tokensUsed } = useTokenUsage();
   const [latex, setLatex] = useState(initialLatex);
@@ -493,6 +496,15 @@ export function EditorClient({
                 {dirty ? "· dirty" : "· saved"}
               </span>
             </div>
+            {jobLabel ? (
+              <p
+                className="mt-1 truncate font-mono text-[0.65rem] text-studio-vermilion"
+                data-testid="job-target-label"
+                title={jobLabel}
+              >
+                Job target · {jobLabel}
+              </p>
+            ) : null}
           </div>
           <Link
             href="/dashboard"
