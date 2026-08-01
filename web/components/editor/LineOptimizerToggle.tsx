@@ -32,11 +32,11 @@ export function LineOptimizerToggle({
       >
         {compact ? (
           <>
-            <span className="sm:hidden">Heatmap</span>
-            <span className="hidden sm:inline">Line overflow heatmap</span>
+            <span className="sm:hidden">Lines</span>
+            <span className="hidden sm:inline">Line fit</span>
           </>
         ) : (
-          "Line overflow heatmap"
+          "Line fit"
         )}
       </span>
       <button
