@@ -575,7 +575,8 @@ export function EditorClient({
                 </div>
               ) : (
                 <div className="border border-dashed border-studio-border bg-studio-paper/60 p-3 font-mono text-xs text-studio-muted sm:p-4">
-                  Ask for a clean edit, or paste a job description to tailor.
+                  Vibe-code the TeX — rewrite bullets, rename fields, or paste a
+                  JD to tailor. Surgical edits, honest facts, PDF-ready source.
                   <span className="mt-2 hidden text-studio-muted/80 sm:block">
                     Shortcut: ⌘/Ctrl + Enter
                   </span>
@@ -592,7 +593,7 @@ export function EditorClient({
                 data-testid="vibe-prompt"
                 className="mb-1 w-full resize-none border border-studio-border bg-white px-3 py-2.5 font-mono text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion disabled:cursor-not-allowed disabled:opacity-60"
                 rows={3}
-                placeholder="Describe an edit, or paste a job description to tailor…"
+                placeholder="e.g. Make the Northstar bullets sharper — or paste a full job description…"
                 value={prompt}
                 disabled={pending}
                 onChange={(e) => setPrompt(e.target.value)}

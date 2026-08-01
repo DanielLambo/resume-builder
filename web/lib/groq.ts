@@ -1,5 +1,18 @@
 import { z } from "zod";
 
+import {
+  buildHealHint,
+  buildVibeSystemPrompt,
+  buildVibeUserPayload,
+} from "@/lib/ai/prompts";
+import {
+  extractLatexFromDataJson,
+  validateResumeLatex,
+} from "@/lib/ai/latex-guard";
+import {
+  buildResumeEditContext,
+  detectEditIntent,
+} from "@/lib/ai/resume-context";
 import { isMockAiEnabled, mockVibeEdit } from "@/lib/mock-ai";
 import {
   VibeEditModelOutputSchema,
@@ -32,15 +45,27 @@ const GroqChatCompletionSchema = z.object({
   usage: GroqUsageSchema,
 });
 
-function groqConfig(): { apiKey: string; baseUrl: string; model: string } {
+function groqConfig(): {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  maxTokens: number;
+  temperature: number;
+} {
   const apiKey = process.env.GROQ_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("Missing GROQ_API_KEY");
   }
   return {
     apiKey,
-    baseUrl: (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai").replace(/\/$/, ""),
+    baseUrl: (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai").replace(
+      /\/$/,
+      "",
+    ),
+    // Override with openai/gpt-oss-120b on Groq for max quality if available.
     model: process.env.RESUMATE_MODEL ?? "llama-3.3-70b-versatile",
+    maxTokens: Number(process.env.RESUMATE_MAX_TOKENS ?? 8_192),
+    temperature: Number(process.env.RESUMATE_TEMPERATURE ?? 0.35),
   };
 }
 
@@ -48,21 +73,34 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function looksLikeLatex(dataJson: Record<string, unknown>): string | null {
-  const latex = dataJson.latex;
-  if (typeof latex !== "string" || !latex.trim()) {
-    return "data_json.latex missing or empty";
-  }
-  if (!/\\documentclass/.test(latex)) {
-    return "LaTeX missing \\documentclass";
-  }
-  if (!/\\begin\{document\}/.test(latex) || !/\\end\{document\}/.test(latex)) {
-    return "LaTeX missing document environment";
-  }
-  if (/\\write18|\\immediate\\s*\\write|\\openout/.test(latex)) {
-    return "LaTeX contains blocked shell escapes";
-  }
-  return null;
+function stripMarkdownFences(content: string): string {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)```$/i);
+  return fenced ? fenced[1].trim() : trimmed;
+}
+
+function mergePreservingMeta(
+  prior: Record<string, unknown>,
+  modelData: Record<string, unknown>,
+  latex: string,
+): Record<string, unknown> {
+  // Model may drop job/template metadata — never lose those on merge.
+  return {
+    ...prior,
+    ...modelData,
+    latex,
+    template:
+      (typeof prior.template === "string" && prior.template) ||
+      (typeof modelData.template === "string" && modelData.template) ||
+      "new-grad",
+    job: prior.job ?? modelData.job,
+    version:
+      typeof prior.version === "number"
+        ? prior.version + 1
+        : typeof modelData.version === "number"
+          ? modelData.version
+          : 1,
+  };
 }
 
 async function callGroqOnce(input: {
@@ -72,24 +110,18 @@ async function callGroqOnce(input: {
   apiKey: string;
   baseUrl: string;
   model: string;
+  maxTokens: number;
+  temperature: number;
 }): Promise<GroqVibeEditResult> {
-  const system = [
-    "You are Resumate's vibe editor.",
-    "Return JSON only matching:",
-    '{"data_json": object, "reply": string}',
-    "data_json MUST include a full compilable LaTeX string in the `latex` field.",
-    "Update data_json based on the user prompt. Keep facts honest. Do not invent employers or metrics.",
-  ].join(" ");
-
-  const userPayload: Record<string, unknown> = {
+  const context = buildResumeEditContext(input.dataJson);
+  const intent = detectEditIntent(input.prompt);
+  const system = buildVibeSystemPrompt(intent);
+  const userPayload = buildVibeUserPayload({
     prompt: input.prompt,
-    data_json: input.dataJson,
-  };
-  if (input.healHint) {
-    userPayload.compiler_error = input.healHint;
-    userPayload.instruction =
-      "Previous output failed validation/compile. Fix the LaTeX and return valid JSON only.";
-  }
+    dataJson: input.dataJson,
+    context,
+    healHint: input.healHint,
+  });
 
   const response = await fetch(`${input.baseUrl}/v1/chat/completions`, {
     method: "POST",
@@ -99,8 +131,8 @@ async function callGroqOnce(input: {
     },
     body: JSON.stringify({
       model: input.model,
-      temperature: 0.2,
-      max_tokens: 4096,
+      temperature: input.healHint ? 0.15 : input.temperature,
+      max_tokens: input.maxTokens,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
@@ -122,7 +154,7 @@ async function callGroqOnce(input: {
 
   let parsedJson: unknown;
   try {
-    parsedJson = JSON.parse(content) as unknown;
+    parsedJson = JSON.parse(stripMarkdownFences(content)) as unknown;
   } catch {
     throw new Error("INVALID_JSON: Groq returned non-JSON content");
   }
@@ -134,13 +166,24 @@ async function callGroqOnce(input: {
     const detail = err instanceof Error ? err.message : "schema mismatch";
     throw new Error(`INVALID_JSON: ${detail}`);
   }
-  const latexError = looksLikeLatex(output.data_json);
+
+  const modelLatex = extractLatexFromDataJson(output.data_json);
+  const latexError = validateResumeLatex(modelLatex, context.latex);
   if (latexError) {
     throw new Error(`LATEX_INVALID: ${latexError}`);
   }
 
+  const mergedData = mergePreservingMeta(
+    input.dataJson,
+    output.data_json,
+    modelLatex,
+  );
+
   return {
-    output,
+    output: {
+      data_json: mergedData,
+      reply: output.reply.trim(),
+    },
     totalTokens: completion.usage.total_tokens,
   };
 }
@@ -160,7 +203,7 @@ export async function invokeGroqVibeEdit(input: {
     return mockVibeEdit(input);
   }
 
-  const { apiKey, baseUrl, model } = groqConfig();
+  const { apiKey, baseUrl, model, maxTokens, temperature } = groqConfig();
   const maxRetries = input.maxRetries ?? 3;
   const maxHealRetries = input.maxHealRetries ?? 2;
 
@@ -179,6 +222,8 @@ export async function invokeGroqVibeEdit(input: {
             apiKey,
             baseUrl,
             model,
+            maxTokens,
+            temperature,
           });
           return { ...result, healed };
         } catch (err) {
@@ -209,7 +254,8 @@ export async function invokeGroqVibeEdit(input: {
       }
 
       healed = true;
-      healHint = message;
+      const priorLatex = extractLatexFromDataJson(input.dataJson);
+      healHint = buildHealHint(message, priorLatex);
       input.onHeal?.(heal + 1, message);
       await sleep(200);
     }
