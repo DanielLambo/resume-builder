@@ -66,6 +66,20 @@ export function mockVibeEdit(input: {
   let reply = "Mock AI: no structural changes required.";
 
   if (
+    input.prompt.toLowerCase().includes("compile error") ||
+    input.prompt.toLowerCase().includes("fix this latex")
+  ) {
+    // Soft heal: ensure document env exists for broken drafts.
+    if (!/\\begin\{document\}/i.test(nextLatex)) {
+      nextLatex = `${nextLatex}\n\\begin{document}\n\\end{document}\n`;
+    }
+    if (!/\\documentclass/i.test(nextLatex)) {
+      nextLatex = `\\documentclass{article}\n${nextLatex}`;
+    }
+    reply = "Mock AI: patched LaTeX so it can compile again.";
+  }
+
+  if (
     prompt.includes("aws") ||
     prompt.includes("docker") ||
     prompt.includes("skills") ||

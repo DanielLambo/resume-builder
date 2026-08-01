@@ -194,6 +194,9 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
 
     const dataJson = asRecord(resume.data_json);
     const job = getJobTargetFromDataJson(dataJson);
+    const writingProfileNote = formatWritingProfileForPrompt(
+      writingProfileFromMetadata(user.user_metadata),
+    );
 
     // Review path: structured advice only — never mutates or recompiles.
     if (isResumeReviewPrompt(prompt)) {
@@ -204,6 +207,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
         prompt,
         dataJson,
         targetRole,
+        writingProfileNote,
         jobContext: job
           ? {
               company: job.company,
@@ -249,10 +253,6 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
         lockedToOnePage: pageCount === 1,
       };
     }
-
-    const writingProfileNote = formatWritingProfileForPrompt(
-      writingProfileFromMetadata(user.user_metadata),
-    );
 
     let healed = false;
     const groqResult = await invokeGroqVibeEdit({
