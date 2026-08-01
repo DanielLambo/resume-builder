@@ -1,24 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { safeNextPath } from "@/lib/auth-redirect";
 import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
-
-const ALLOWED_NEXT = [
-  /^\/$/,
-  /^\/dashboard(?:\/|$)/,
-  /^\/editor(?:\/|$)/,
-  /^\/onboarding(?:\/|$)/,
-] as const;
-
-function safeNextPath(next: string | null): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) {
-    return "/dashboard";
-  }
-  if (!ALLOWED_NEXT.some((re) => re.test(next))) {
-    return "/dashboard";
-  }
-  return next;
-}
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);

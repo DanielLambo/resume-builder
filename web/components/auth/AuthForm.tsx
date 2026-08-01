@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, Suspense, useState } from "react";
 import { toast } from "sonner";
 
+import { safeNextPath } from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase/client";
 
 type AuthMode = "login" | "signup";
@@ -12,7 +13,10 @@ type AuthMode = "login" | "signup";
 function AuthFormInner({ mode }: { mode: AuthMode }) {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || (mode === "signup" ? "/onboarding" : "/dashboard");
+  const next = safeNextPath(
+    params.get("next"),
+    mode === "signup" ? "/onboarding" : "/dashboard",
+  );
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

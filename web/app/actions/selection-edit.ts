@@ -12,6 +12,7 @@ import {
   incrementDailyAiTokens,
   rateLimitExceededPayload,
 } from "@/lib/ratelimit";
+import { pushAiHistory } from "@/lib/ai-history";
 import { createClient } from "@/lib/supabase/server";
 import {
   formatWritingProfileForPrompt,
@@ -254,10 +255,19 @@ export async function selectionEditAction(
       typeof prev.version === "number" && Number.isFinite(prev.version)
         ? prev.version + 1
         : 1;
+    const nextHistory = pushAiHistory(prev.ai_history, {
+      latex: nextLatex,
+      reply: edited.reply,
+      prompt,
+      at: new Date().toISOString(),
+    });
     const nextData = {
       ...prev,
       latex: nextLatex,
       version,
+      ai_history: nextHistory,
+      last_ai_reply: edited.reply,
+      last_ai_prompt: prompt,
       template:
         (typeof prev.template === "string" && prev.template) || "new-grad",
     };

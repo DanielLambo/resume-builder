@@ -48,6 +48,15 @@ function useTypewriter(lines: readonly string[], active: boolean) {
     return () => window.clearTimeout(t);
   }, [active, charIndex, done, lineIndex, lines]);
 
+  if (!active) {
+    const last = lines[lines.length - 1] ?? "";
+    return {
+      lineIndex: Math.max(0, lines.length - 1),
+      charIndex: last.length,
+      done: true,
+    };
+  }
+
   return { lineIndex, charIndex, done };
 }
 
