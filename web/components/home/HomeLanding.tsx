@@ -31,7 +31,8 @@ function useTypewriter(lines: readonly string[], active: boolean) {
 
     const current = lines[lineIndex] ?? "";
     if (charIndex < current.length) {
-      const t = window.setTimeout(() => setCharIndex((c) => c + 1), 28 + (charIndex % 5) * 8);
+      // Slightly slower cadence — reads more like a typewriter than a laptop.
+      const t = window.setTimeout(() => setCharIndex((c) => c + 1), 42 + (charIndex % 4) * 10);
       return () => window.clearTimeout(t);
     }
 
@@ -76,13 +77,13 @@ export function HomeLanding() {
             fill
             priority
             sizes="100vw"
-            className="object-cover object-[68%_30%] sm:object-[72%_28%]"
+            className="object-cover object-[70%_35%] sm:object-[74%_32%]"
           />
         </div>
 
         {/* Readability wash — not a promo sticker */}
         <div
-          className="absolute inset-0 bg-gradient-to-r from-[#FAF8F5] via-[#FAF8F5]/88 to-[#FAF8F5]/20 sm:via-[#FAF8F5]/78 sm:to-transparent"
+          className="absolute inset-0 bg-gradient-to-r from-[#FAF8F5] via-[#FAF8F5]/90 to-[#FAF8F5]/25 sm:via-[#FAF8F5]/80 sm:to-transparent"
           aria-hidden="true"
         />
         <div
@@ -121,12 +122,15 @@ export function HomeLanding() {
             </div>
           </div>
 
-          {/* Screen typing aligned to the laptop — she appears to write the draft */}
+          {/* Paper feed typing — sits with the typewriter page, not a laptop screen */}
           <div
-            className="pointer-events-none absolute right-[7%] top-[44%] hidden w-[min(20rem,32vw)] lg:block xl:right-[11%] xl:top-[42%]"
+            className="pointer-events-none absolute right-[8%] top-[38%] hidden w-[min(18rem,30vw)] lg:block xl:right-[12%] xl:top-[36%]"
             aria-hidden="true"
           >
-            <div className="min-h-[7rem] bg-[#0f0f0f]/78 px-3.5 py-3 font-mono text-[0.68rem] leading-relaxed text-[#F7F4EE] backdrop-blur-[2px]">
+            <div className="min-h-[7.5rem] border border-[#d8d2c6] bg-[#FFFEFA]/92 px-4 py-3 font-mono text-[0.7rem] leading-relaxed text-studio-ink shadow-[0_10px_28px_rgba(0,0,0,0.08)]">
+              <p className="mb-2 text-[0.62rem] font-semibold tracking-[0.18em] text-studio-ink/70">
+                RESUME
+              </p>
               {TYPING_LINES.map((line, i) => {
                 if (i > lineIndex) return null;
                 const shown =
@@ -136,7 +140,7 @@ export function HomeLanding() {
                   <p key={line} className="whitespace-pre-wrap">
                     {shown}
                     {showCaret ? (
-                      <span className="animate-caret-blink ml-0.5 inline-block h-[0.95em] w-[0.4em] translate-y-[0.1em] bg-studio-vermilion align-middle" />
+                      <span className="animate-caret-blink ml-0.5 inline-block h-[0.95em] w-[0.45em] translate-y-[0.1em] bg-studio-ink align-middle" />
                     ) : null}
                   </p>
                 );
@@ -144,11 +148,14 @@ export function HomeLanding() {
             </div>
           </div>
 
-          {/* Mobile: typing strip under CTAs — still part of the hero composition */}
+          {/* Mobile: typewriter strip under CTAs */}
           <div
-            className={`mt-8 max-w-md border-l-2 border-studio-vermilion/80 pl-3 font-mono text-[0.75rem] leading-relaxed text-studio-ink/80 lg:hidden ${motionOn ? "animate-hero-rise" : ""}`}
+            className={`mt-8 max-w-md border-l-2 border-studio-ink/25 pl-3 font-mono text-[0.75rem] leading-relaxed text-studio-ink/80 lg:hidden ${motionOn ? "animate-hero-rise" : ""}`}
             aria-live="polite"
           >
+            <p className="mb-1 text-[0.62rem] font-semibold tracking-[0.18em] text-studio-muted">
+              RESUME
+            </p>
             {TYPING_LINES.map((line, i) => {
               if (i > lineIndex) return null;
               const shown = i < lineIndex ? line : line.slice(0, charIndex);
@@ -157,7 +164,7 @@ export function HomeLanding() {
                 <p key={line}>
                   {shown}
                   {showCaret ? (
-                    <span className="animate-caret-blink ml-0.5 inline-block h-[0.9em] w-[0.4em] translate-y-[0.08em] bg-studio-vermilion align-middle" />
+                    <span className="animate-caret-blink ml-0.5 inline-block h-[0.9em] w-[0.4em] translate-y-[0.08em] bg-studio-ink align-middle" />
                   ) : null}
                 </p>
               );
