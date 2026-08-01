@@ -67,3 +67,49 @@ select {
     @apply border border-studio-border bg-studio-paper;
   }
 }
+
+@keyframes hero-ken {
+  0% {
+    transform: scale(1.04) translate3d(0, 0, 0);
+  }
+  100% {
+    transform: scale(1.1) translate3d(-1.2%, -0.6%, 0);
+  }
+}
+
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@layer utilities {
+  .animate-hero-ken {
+    animation: hero-ken 18s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+
+  .animate-hero-rise {
+    animation: hero-rise 0.7s ease-out both;
+  }
+
+  .animate-caret-blink {
+    animation: caret-blink 1s steps(1, end) infinite;
+  }
+}
