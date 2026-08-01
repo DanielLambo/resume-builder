@@ -9,6 +9,7 @@ import {
   replaceItemText,
   type OrphanBullet,
 } from "@/lib/analyzer/orphanDetector";
+import { buildShortenBulletSystemPrompt } from "@/lib/ai/prompts";
 import type { Json } from "@/lib/database.types";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import {
@@ -89,17 +90,25 @@ async function shortenWithGroq(bullet: string): Promise<{
     },
     body: JSON.stringify({
       model,
-      temperature: 0.2,
+      temperature: 0.25,
+      max_tokens: 512,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
-          content:
-            'You tighten one resume bullet. Return JSON only: {"text":"..."}. Remove 2–4 filler words. Keep metrics, employers, articles, and LaTeX commands intact. Do not invent facts. Do not lengthen the bullet.',
+          content: buildShortenBulletSystemPrompt(),
         },
         {
           role: "user",
-          content: JSON.stringify({ bullet }),
+          content: JSON.stringify({
+            task: "shorten_orphan_bullet",
+            bullet,
+            constraints: {
+              target_reduction: "2-5 words",
+              keep: ["metrics", "tools", "proper nouns", "LaTeX commands"],
+              forbid: ["invented facts", "lengthening", "leading \\item"],
+            },
+          }),
         },
       ],
     }),

@@ -11,7 +11,9 @@ export const JobTargetSchema = z.object({
 
 export type JobTarget = z.infer<typeof JobTargetSchema>;
 
-export function asDataRecord(value: Json | Record<string, unknown> | null | undefined): Record<string, unknown> {
+export function asDataRecord(
+  value: Json | Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
   }
@@ -27,12 +29,16 @@ export function getJobTargetFromDataJson(
 }
 
 /** Short library / editor label, e.g. "SWE Intern · Acme". */
-export function formatJobTargetLabel(job: Pick<JobTarget, "company" | "role">): string {
+export function formatJobTargetLabel(
+  job: Pick<JobTarget, "company" | "role">,
+): string {
   return `${job.role} · ${job.company}`;
 }
 
 /** Resume title used when creating a tailored variant. */
-export function formatJobResumeTitle(job: Pick<JobTarget, "company" | "role">): string {
+export function formatJobResumeTitle(
+  job: Pick<JobTarget, "company" | "role">,
+): string {
   return `${job.role} @ ${job.company}`.slice(0, 120);
 }
 
@@ -42,10 +48,21 @@ export function formatJobResumeTitle(job: Pick<JobTarget, "company" | "role">): 
 export function buildTailorJobPrompt(job: JobTarget): string {
   return [
     "Tailor this resume for the following job application.",
-    "Rewrite and reorder bullets to emphasize the most relevant experience and skills.",
-    "Keep every fact honest — do not invent employers, titles, dates, degrees, or metrics.",
-    "Prefer tightening and reframing existing content over adding new roles.",
-    "Keep the resume suitable for a single page.",
+    "",
+    "Operate like an elite technical recruiter paired with a LaTeX typesetter:",
+    "1) Extract the top 6–10 requirements / keywords from the JD.",
+    "2) Map each to honest evidence already on the resume (bullets, projects, skills, coursework).",
+    "3) Reorder bullets (and entries if needed) so the strongest matches appear first under Experience/Projects.",
+    "4) Rewrite matched bullets to use the posting's language ONLY where the underlying fact already exists.",
+    "5) Tighten or demote weak/irrelevant bullets; do not delete whole roles unless clearly necessary for one page.",
+    "6) Update Skills labels to surface overlapping tools — never invent tools absent from the resume.",
+    "7) Keep the document one-page dense and fully compilable.",
+    "",
+    "Hard rules:",
+    "- Keep every employer, title, date, school, and metric honest.",
+    "- Do not invent projects, employers, or fake-precise stats from the JD.",
+    "- Ban corporate sludge: leveraged, spearheaded, passionate, results-driven, cutting-edge, robust.",
+    "- Reply must list the JD themes you mirrored and what you changed.",
     "",
     `Company: ${job.company}`,
     `Role: ${job.role}`,

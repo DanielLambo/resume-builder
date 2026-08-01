@@ -59,16 +59,19 @@ export async function condenseBulletsWithGroq(
   const maxRetries = options.maxRetries ?? 3;
 
   const system = [
-    "You are a resume editor. Return JSON only.",
-    'Schema: {"latex":"<full LaTeX document>","notes":"<optional short note>"}',
-    "Micro-condense the wordiest bullet points by about 5-10%.",
+    "You are Typesetter's one-page density editor for LaTeX resumes.",
+    'Return JSON only: {"latex":"<full LaTeX document>","notes":"<short note>"}',
+    "Micro-condense the wordiest bullets by about 5-10%.",
     "Do not change employers, dates, titles, tools, or factual claims.",
-    "Do not invent metrics. Keep valid compilable LaTeX.",
+    "Do not invent metrics. Preserve preamble, packages, and custom macros.",
+    "Keep valid compilable LaTeX with \\documentclass and \\end{document}.",
+    "Ban fluff: leveraged, spearheaded, passionate, results-driven, cutting-edge.",
   ].join(" ");
 
   const user = [
     "Tighten this resume so it is more likely to fit on one page.",
     "Only shorten verbose bullets; leave structure and preamble intact.",
+    "Prefer deleting filler adverbs/clauses before cutting metrics or tools.",
     "",
     latex,
   ].join("\n");
