@@ -6,7 +6,8 @@ import { z } from "zod";
 import type { Json } from "@/lib/database.types";
 import { sanitizeCompileError } from "@/lib/compile-latex";
 import { fitResumeToSinglePage } from "@/lib/fit-resume";
-import { invokeGroqVibeEdit } from "@/lib/groq";
+import { invokeGroqResumeReview, invokeGroqVibeEdit } from "@/lib/groq";
+import { getJobTargetFromDataJson } from "@/lib/job-target";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import { persistResumePdf } from "@/lib/persist-resume-pdf";
 import {
@@ -16,11 +17,23 @@ import {
   incrementDailyAiTokens,
   rateLimitExceededPayload,
 } from "@/lib/ratelimit";
+import { pushAiHistory } from "@/lib/ai-history";
+import {
+  extractTargetRole,
+  isResumeReviewPrompt,
+  type ResumeReview,
+} from "@/lib/resume-review";
 import { createClient } from "@/lib/supabase/server";
+import {
+  formatWritingProfileForPrompt,
+  writingProfileFromMetadata,
+} from "@/lib/writing-profile";
 
 const VibeEditInputSchema = z.object({
   resumeId: z.string().uuid(),
   prompt: z.string().trim().min(1).max(4000),
+  /** When set, force the heal path with this compile/validation error. */
+  compilerError: z.string().trim().min(1).max(2000).optional(),
 });
 
 export type VibeEditStep = {
@@ -31,9 +44,12 @@ export type VibeEditStep = {
 
 export type VibeEditSuccess = {
   ok: true;
+  /** `review` returns advice without mutating LaTeX. */
+  mode: "edit" | "review";
   resumeId: string;
   data_json: Record<string, unknown>;
   reply: string;
+  review?: ResumeReview;
   tokensUsed: number;
   dailyTokensUsed: number;
   dailyTokensRemaining: number;
@@ -107,7 +123,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     };
   }
 
-  const { resumeId, prompt } = parsed.data;
+  const { resumeId, prompt, compilerError } = parsed.data;
   push("Parsing prompt and extracting Zod schema...");
 
   try {
@@ -176,10 +192,74 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       };
     }
 
+    const dataJson = asRecord(resume.data_json);
+    const job = getJobTargetFromDataJson(dataJson);
+    const writingProfileNote = formatWritingProfileForPrompt(
+      writingProfileFromMetadata(user.user_metadata),
+    );
+
+    // Review path: structured advice only — never mutates or recompiles.
+    if (isResumeReviewPrompt(prompt)) {
+      push("Reviewing resume against target role...");
+      const targetRole =
+        extractTargetRole(prompt) ?? (job ? `${job.role} @ ${job.company}` : null);
+      const reviewResult = await invokeGroqResumeReview({
+        prompt,
+        dataJson,
+        targetRole,
+        writingProfileNote,
+        jobContext: job
+          ? {
+              company: job.company,
+              role: job.role,
+              description: job.description,
+            }
+          : null,
+      });
+
+      const usage = isMockAiEnabled()
+        ? await (async () => {
+            try {
+              return await incrementDailyAiTokens(user.id, reviewResult.totalTokens);
+            } catch {
+              return {
+                used: reviewResult.totalTokens,
+                remaining: Math.max(0, DAILY_AI_TOKEN_LIMIT - reviewResult.totalTokens),
+                limit: DAILY_AI_TOKEN_LIMIT,
+              };
+            }
+          })()
+        : await incrementDailyAiTokens(user.id, reviewResult.totalTokens);
+
+      push("Structured feedback ready — resume unchanged.");
+      const pageCount =
+        typeof dataJson.pageCount === "number" ? dataJson.pageCount : null;
+
+      return {
+        ok: true,
+        mode: "review",
+        resumeId: resume.id,
+        data_json: dataJson,
+        reply: reviewResult.review.reply,
+        review: reviewResult.review,
+        tokensUsed: reviewResult.totalTokens,
+        dailyTokensUsed: usage.used,
+        dailyTokensRemaining: usage.remaining,
+        elapsedMs: Date.now() - started,
+        healed: false,
+        steps,
+        pdfBase64: null,
+        pageCount,
+        lockedToOnePage: pageCount === 1,
+      };
+    }
+
     let healed = false;
     const groqResult = await invokeGroqVibeEdit({
       prompt,
-      dataJson: asRecord(resume.data_json),
+      dataJson,
+      healHint: compilerError,
+      writingProfileNote,
       maxHealRetries: 2,
       onHeal: () => {
         healed = true;
@@ -243,12 +323,42 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
         })()
       : await incrementDailyAiTokens(user.id, groqResult.totalTokens);
 
-    const prevData = asRecord(resume.data_json);
+    const prevData = dataJson;
     const modelData = asRecord(groqResult.output.data_json as Json);
+    const prevVersion =
+      typeof prevData.version === "number" && Number.isFinite(prevData.version)
+        ? prevData.version
+        : 0;
+    const priorLatex =
+      typeof prevData.latex === "string" ? prevData.latex : fittedLatex;
+    // Snapshot the pre-edit state, then the post-edit tip for restore UX.
+    const nextHistory = pushAiHistory(
+      pushAiHistory(prevData.ai_history, {
+        latex: priorLatex,
+        reply:
+          typeof prevData.last_ai_reply === "string" ? prevData.last_ai_reply : "",
+        prompt:
+          typeof prevData.last_ai_prompt === "string"
+            ? prevData.last_ai_prompt
+            : "",
+        at: new Date().toISOString(),
+      }),
+      {
+        latex: fittedLatex,
+        reply: groqResult.output.reply,
+        prompt,
+        at: new Date().toISOString(),
+      },
+    );
+
     const nextDataJson: Record<string, unknown> = {
       ...prevData,
       ...modelData,
       latex: fittedLatex,
+      version: prevVersion + 1,
+      ai_history: nextHistory,
+      last_ai_reply: groqResult.output.reply,
+      last_ai_prompt: prompt,
       // Preserve template id from the existing resume when the model omits it.
       template:
         (typeof prevData.template === "string" && prevData.template) ||
@@ -291,6 +401,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
 
     return {
       ok: true,
+      mode: "edit",
       resumeId: updated.id,
       data_json: asRecord(updated.data_json),
       reply: groqResult.output.reply,
