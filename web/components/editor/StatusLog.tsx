@@ -10,7 +10,7 @@ export function StatusLog({ lines, active }: StatusLogProps) {
 
   return (
     <div
-      className="mt-3 max-h-36 overflow-auto border border-studio-border bg-studio-paper px-3 py-2"
+      className="mt-3 max-h-24 overflow-auto border border-studio-border bg-studio-paper px-3 py-2 sm:max-h-36"
       data-testid="status-log"
       aria-live="polite"
     >

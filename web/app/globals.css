@@ -9,10 +9,29 @@
 html,
 body {
   min-height: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
   @apply bg-studio-bg text-studio-ink antialiased font-sans;
+  /* Avoid iOS zoom on focused inputs under 16px */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Prevent iOS Safari zooming focused form fields under 16px */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+@media (min-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: inherit;
+  }
 }
 
 /* Ultra-thin editorial scrollbars */

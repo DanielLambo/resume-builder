@@ -38,6 +38,7 @@ type EditorClientProps = {
 };
 
 type StudioMode = "vibe" | "source";
+type MobilePane = "edit" | "preview";
 
 const CLIENT_STEPS = [
   "[1/4] Parsing prompt and extracting Zod schema...",
@@ -67,6 +68,7 @@ export function EditorClient({
   const [pending, startTransition] = useTransition();
   const [compiling, setCompiling] = useState(false);
   const [mode, setMode] = useState<StudioMode>("vibe");
+  const [mobilePane, setMobilePane] = useState<MobilePane>("edit");
   const [onePageLock, setOnePageLock] = useState(
     initialPageCount != null && initialPageCount === 1,
   );
@@ -182,6 +184,7 @@ export function EditorClient({
         setPdfBase64(data.pdfBase64);
         setPageCount(data.pageCount ?? null);
         setOnePageLock(Boolean(data.lockedToOnePage ?? data.pageCount === 1));
+        setMobilePane("preview");
         if (!quiet) {
           toast.success("Preview ready", {
             description: `${data.pageCount ?? "?"} page · ${data.elapsedMs ?? 0}ms`,
@@ -292,9 +295,12 @@ export function EditorClient({
           setPdfBase64(result.pdfBase64);
           setPageCount(result.pageCount);
           setOnePageLock(result.lockedToOnePage);
+          setMobilePane("preview");
         } else if (result.compileWarning) {
           // Edit saved; try a client recompile so the preview can still recover.
           void compilePdf(nextLatex, { quiet: true }).catch(() => undefined);
+        } else {
+          setMobilePane("preview");
         }
 
         const serverLines = result.steps.map(
@@ -426,34 +432,81 @@ export function EditorClient({
         </div>
       )}
 
-      <aside className="flex max-h-full w-full flex-col overflow-hidden border-r border-studio-border bg-studio-bg lg:w-[42%] xl:w-[38%]">
-        <div className="flex items-center justify-between gap-3 border-b border-studio-border px-4 py-3">
-          <div>
-            <p className="font-mono text-xs tracking-wide text-studio-muted">
+      {/* Mobile: one pane at a time so edit + preview don't crush each other */}
+      <div
+        className="flex shrink-0 border-b border-studio-border lg:hidden"
+        role="tablist"
+        aria-label="Editor panes"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobilePane === "edit"}
+          data-testid="mobile-pane-edit"
+          onClick={() => setMobilePane("edit")}
+          className={`flex-1 px-3 py-3 text-center text-sm font-semibold transition ${
+            mobilePane === "edit"
+              ? "border-b-2 border-studio-vermilion text-studio-ink"
+              : "text-studio-muted"
+          }`}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobilePane === "preview"}
+          data-testid="mobile-pane-preview"
+          onClick={() => setMobilePane("preview")}
+          className={`flex-1 px-3 py-3 text-center text-sm font-semibold transition ${
+            mobilePane === "preview"
+              ? "border-b-2 border-studio-vermilion text-studio-ink"
+              : "text-studio-muted"
+          }`}
+        >
+          Preview
+          {pageCount != null ? (
+            <span className="ml-1 font-mono text-[0.65rem] font-normal text-studio-muted">
+              · {pageCount}p
+            </span>
+          ) : null}
+        </button>
+      </div>
+
+      <aside
+        className={[
+          "min-h-0 w-full flex-col overflow-hidden border-studio-border bg-studio-bg lg:border-r",
+          mobilePane === "edit" ? "flex flex-1" : "hidden",
+          "lg:flex lg:w-[42%] lg:flex-none xl:w-[38%]",
+        ].join(" ")}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-studio-border px-3 py-2.5 sm:px-4 sm:py-3">
+          <div className="min-w-0">
+            <p className="hidden font-mono text-xs tracking-wide text-studio-muted sm:block">
               TYPESETTER / RESUME ENGINE
             </p>
-            <div className="mt-1 flex items-baseline gap-2">
-              <h1 className="text-base font-semibold tracking-tight text-studio-ink">
+            <div className="flex min-w-0 items-baseline gap-2 sm:mt-1">
+              <h1 className="truncate text-base font-semibold tracking-tight text-studio-ink">
                 {title}
               </h1>
-              <span className="font-mono text-[0.65rem] text-studio-muted">
+              <span className="shrink-0 font-mono text-[0.65rem] text-studio-muted">
                 {dirty ? "· dirty" : "· saved"}
               </span>
             </div>
           </div>
           <Link
             href="/dashboard"
-            className="font-mono text-xs text-studio-muted hover:text-studio-ink"
+            className="shrink-0 py-1 font-mono text-xs text-studio-muted hover:text-studio-ink"
           >
             ← Library
           </Link>
         </div>
 
-        <div className="border-b border-studio-border px-4 py-2">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-studio-muted">
+        <div className="border-b border-studio-border px-3 py-2 sm:px-4">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 font-mono text-xs text-studio-muted">
             <button
               type="button"
-              className={`hover:text-studio-ink ${mode === "vibe" ? "text-studio-ink" : ""}`}
+              className={`min-h-9 px-1.5 hover:text-studio-ink ${mode === "vibe" ? "text-studio-ink" : ""}`}
               onClick={() => setMode("vibe")}
             >
               Vibe
@@ -461,7 +514,7 @@ export function EditorClient({
             <span aria-hidden="true">|</span>
             <button
               type="button"
-              className={`hover:text-studio-ink ${mode === "source" ? "text-studio-ink" : ""}`}
+              className={`min-h-9 px-1.5 hover:text-studio-ink ${mode === "source" ? "text-studio-ink" : ""}`}
               onClick={() => setMode("source")}
             >
               Source
@@ -469,17 +522,19 @@ export function EditorClient({
             <span aria-hidden="true">|</span>
             <button
               type="button"
-              className="hover:text-studio-ink"
+              className="min-h-9 max-w-[11rem] truncate px-1.5 hover:text-studio-ink sm:max-w-none"
               onClick={() => setTemplatePickerOpen(true)}
               data-testid="template-switch"
               title={getTemplate(templateId).description}
             >
-              Template: {getTemplate(templateId).name}
+              <span className="sm:hidden">Tpl:</span>
+              <span className="hidden sm:inline">Template:</span>{" "}
+              {getTemplate(templateId).name}
             </button>
             <span aria-hidden="true">|</span>
             <button
               type="button"
-              className="hover:text-studio-ink"
+              className="min-h-9 px-1.5 hover:text-studio-ink"
               onClick={onCompile}
               disabled={compiling || pending}
             >
@@ -490,7 +545,7 @@ export function EditorClient({
 
         {mode === "source" ? (
           <textarea
-            className="min-h-[50vh] flex-1 resize-none bg-studio-paper p-4 font-mono text-[0.8rem] leading-relaxed text-studio-ink outline-none disabled:opacity-60"
+            className="min-h-0 flex-1 resize-none bg-studio-paper p-3 font-mono text-[0.8rem] leading-relaxed text-studio-ink outline-none disabled:opacity-60 sm:p-4"
             value={latex}
             spellCheck={false}
             disabled={pending}
@@ -501,22 +556,22 @@ export function EditorClient({
           />
         ) : (
           <>
-            <div className="flex-1 space-y-3 overflow-auto p-4">
+            <div className="min-h-0 flex-1 space-y-3 overflow-auto p-3 sm:p-4">
               {reply ? (
                 <div className="border border-studio-border bg-studio-paper p-3 text-sm leading-relaxed text-studio-ink">
                   {reply}
                 </div>
               ) : (
-                <div className="border border-dashed border-studio-border bg-studio-paper/60 p-4 font-mono text-xs text-studio-muted">
+                <div className="border border-dashed border-studio-border bg-studio-paper/60 p-3 font-mono text-xs text-studio-muted sm:p-4">
                   Ask for a clean edit, or paste a job description to tailor.
-                  <span className="mt-2 block text-studio-muted/80">
+                  <span className="mt-2 hidden text-studio-muted/80 sm:block">
                     Shortcut: ⌘/Ctrl + Enter
                   </span>
                 </div>
               )}
             </div>
 
-            <div className="border-t border-studio-border bg-studio-canvas/40 p-4">
+            <div className="shrink-0 border-t border-studio-border bg-studio-canvas/40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
               <label className="mb-2 block font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
                 AI prompt
               </label>
@@ -524,7 +579,7 @@ export function EditorClient({
                 ref={promptRef}
                 data-testid="vibe-prompt"
                 className="mb-1 w-full resize-none border border-studio-border bg-white px-3 py-2.5 font-mono text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion disabled:cursor-not-allowed disabled:opacity-60"
-                rows={4}
+                rows={3}
                 placeholder="Describe an edit, or paste a job description to tailor…"
                 value={prompt}
                 disabled={pending}
@@ -537,7 +592,7 @@ export function EditorClient({
                 data-testid="vibe-submit"
                 disabled={pending}
                 onClick={runVibeEdit}
-                className="mt-3 w-full bg-studio-vermilion px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-60"
+                className="mt-3 min-h-11 w-full bg-studio-vermilion px-3 py-3 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-60 sm:min-h-0 sm:py-2.5"
               >
                 {pending ? "Typesetting…" : "Run vibe edit"}
               </button>
@@ -546,32 +601,48 @@ export function EditorClient({
         )}
       </aside>
 
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-studio-canvas">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-studio-border bg-studio-canvas/90 px-4 py-3 shadow-floating-bar backdrop-blur-sm">
-          <span className="font-mono text-xs text-studio-muted">PREVIEW · LETTER</span>
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+      <section
+        className={[
+          "min-h-0 flex-1 flex-col overflow-hidden bg-studio-canvas",
+          mobilePane === "preview" ? "flex" : "hidden",
+          "lg:flex",
+        ].join(" ")}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-studio-border bg-studio-canvas/90 px-3 py-2.5 shadow-floating-bar backdrop-blur-sm sm:gap-3 sm:px-4 sm:py-3">
+          <span className="font-mono text-[0.65rem] text-studio-muted sm:text-xs">
+            PREVIEW · LETTER
+          </span>
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-4">
             <LineOptimizerToggle
               enabled={heatmapOn}
               orphanCount={orphanCount}
               onChange={setHeatmapOn}
               ready={heatmapReady}
+              compact
             />
             <span
               data-testid="one-page-lock"
-              className={`rounded border px-2 py-1 font-mono text-xs ${
+              className={`rounded border px-2 py-1 font-mono text-[0.65rem] sm:text-xs ${
                 onePageLock
                   ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                   : "border-studio-border bg-white text-studio-muted"
               }`}
             >
-              {onePageLock
-                ? `[ ${pageCount ?? 1}-PAGE LOCK ACTIVE ]`
-                : `[ ${pageCount ?? "?"} PAGES — FIT PENDING ]`}
+              <span className="sm:hidden">
+                {onePageLock
+                  ? `[ ${pageCount ?? 1}-PG LOCK ]`
+                  : `[ ${pageCount ?? "?"} PG ]`}
+              </span>
+              <span className="hidden sm:inline">
+                {onePageLock
+                  ? `[ ${pageCount ?? 1}-PAGE LOCK ACTIVE ]`
+                  : `[ ${pageCount ?? "?"} PAGES — FIT PENDING ]`}
+              </span>
             </span>
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col items-center gap-4 overflow-auto p-6 sm:p-10">
+        <div className="flex flex-1 flex-col items-center gap-3 overflow-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:gap-4 sm:p-6 md:p-10">
           <PDFPreview
             pdfBase64={pdfBase64}
             pageCount={pageCount}

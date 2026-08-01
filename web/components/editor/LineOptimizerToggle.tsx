@@ -10,6 +10,8 @@ type LineOptimizerToggleProps = {
   onChange: (enabled: boolean) => void;
   /** Avoid flashing the wrong ON/OFF before localStorage hydrates. */
   ready?: boolean;
+  /** Shorter label for narrow preview toolbars. */
+  compact?: boolean;
 };
 
 export function LineOptimizerToggle({
@@ -17,6 +19,7 @@ export function LineOptimizerToggle({
   orphanCount = 0,
   onChange,
   ready = true,
+  compact = false,
 }: LineOptimizerToggleProps) {
   return (
     <div
@@ -27,7 +30,14 @@ export function LineOptimizerToggle({
         id="line-optimizer-label"
         className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted"
       >
-        Line overflow heatmap
+        {compact ? (
+          <>
+            <span className="sm:hidden">Heatmap</span>
+            <span className="hidden sm:inline">Line overflow heatmap</span>
+          </>
+        ) : (
+          "Line overflow heatmap"
+        )}
       </span>
       <button
         type="button"
@@ -37,14 +47,16 @@ export function LineOptimizerToggle({
         disabled={!ready}
         onClick={() => onChange(!enabled)}
         className={[
-          "relative h-5 w-9 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-studio-vermilion disabled:opacity-50",
+          "relative h-6 w-10 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-studio-vermilion disabled:opacity-50 sm:h-5 sm:w-9",
           ready && enabled ? "bg-amber-500" : "bg-studio-border",
         ].join(" ")}
       >
         <span
           className={[
-            "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
-            ready && enabled ? "translate-x-4" : "translate-x-0.5",
+            "absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform sm:top-0.5",
+            ready && enabled
+              ? "translate-x-[1.35rem] sm:translate-x-4"
+              : "translate-x-0.5",
           ].join(" ")}
         />
       </button>

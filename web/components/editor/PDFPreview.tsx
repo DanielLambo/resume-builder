@@ -59,7 +59,7 @@ export function PDFPreview({
 
   return (
     <article
-      className="relative w-full max-w-[8.5in] aspect-[1/1.29] overflow-hidden border border-studio-border bg-studio-paper shadow-paper-sheet"
+      className="relative w-full max-w-[min(100%,8.5in)] aspect-[1/1.29] overflow-hidden border border-studio-border bg-studio-paper shadow-paper-sheet"
       aria-label="Resume paper preview"
       data-testid="pdf-preview-canvas"
       data-page-count={measuredPages != null ? String(measuredPages) : undefined}
@@ -72,7 +72,7 @@ export function PDFPreview({
           className="h-full w-full border-0 bg-white"
         />
       ) : (
-        <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+        <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center sm:p-8">
           <p className="font-mono text-xs uppercase tracking-wide text-studio-muted">
             {statusLabel ?? "No PDF yet"}
           </p>
