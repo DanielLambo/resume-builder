@@ -8,6 +8,7 @@ import { sanitizeCompileError } from "@/lib/compile-latex";
 import { fitResumeToSinglePage } from "@/lib/fit-resume";
 import { invokeGroqVibeEdit } from "@/lib/groq";
 import { isMockAiEnabled } from "@/lib/mock-ai";
+import { persistResumePdf } from "@/lib/persist-resume-pdf";
 import {
   AiRateLimitError,
   assertWithinDailyAiLimit,
@@ -39,9 +40,11 @@ export type VibeEditSuccess = {
   elapsedMs: number;
   healed: boolean;
   steps: VibeEditStep[];
-  pdfBase64: string;
-  pageCount: number;
+  /** Null when compile failed after a successful AI edit (latex still saved). */
+  pdfBase64: string | null;
+  pageCount: number | null;
   lockedToOnePage: boolean;
+  compileWarning?: string;
 };
 
 export type VibeEditFailure = {
@@ -84,6 +87,7 @@ function utcMidnightResetHint(): string {
 /**
  * Secure vibe-edit server action with mock mode + self-heal.
  * Never wipes client state on failure — returns an error payload only.
+ * AI latex is persisted even when PDF compile is unavailable.
  */
 export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult> {
   const started = Date.now();
@@ -200,10 +204,30 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
 
     push("Compiling LaTeX via 1-Page Lock engine...");
 
-    const fit = await fitResumeToSinglePage(editedLatex, {
-      allowGroqCondense: true,
-    });
-    const fittedLatex = injectLaTeXConfig(editedLatex, fit.finalConfig);
+    let fittedLatex = editedLatex;
+    let pdfBase64: string | null = null;
+    let pageCount: number | null = null;
+    let lockedToOnePage = false;
+    let compileWarning: string | undefined;
+    let layout: unknown = undefined;
+    let fitElapsedMs = 0;
+
+    try {
+      const fit = await fitResumeToSinglePage(editedLatex, {
+        allowGroqCondense: true,
+      });
+      fittedLatex = injectLaTeXConfig(editedLatex, fit.finalConfig);
+      pdfBase64 = fit.compiledPdf.toString("base64");
+      pageCount = fit.pageCount;
+      lockedToOnePage = fit.lockedToOnePage;
+      layout = fit.finalConfig;
+      fitElapsedMs = fit.elapsedMs;
+      await persistResumePdf(supabase, user.id, resumeId, fit.compiledPdf);
+    } catch (compileErr) {
+      // Persist the AI edit even when TeX host is down — demo must not look broken.
+      compileWarning = sanitizeCompileError(compileErr);
+      push(`PDF compile skipped: ${compileWarning}`);
+    }
 
     const usage = isMockAiEnabled()
       ? await (async () => {
@@ -221,18 +245,22 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
 
     const prevData = asRecord(resume.data_json);
     const modelData = asRecord(groqResult.output.data_json as Json);
-    const nextDataJson = {
+    const nextDataJson: Record<string, unknown> = {
       ...prevData,
       ...modelData,
       latex: fittedLatex,
-      layout: fit.finalConfig,
-      pageCount: fit.pageCount,
       // Preserve template id from the existing resume when the model omits it.
       template:
         (typeof prevData.template === "string" && prevData.template) ||
         (typeof modelData.template === "string" && modelData.template) ||
         "new-grad",
     };
+    if (layout !== undefined) {
+      nextDataJson.layout = layout;
+    }
+    if (pageCount != null) {
+      nextDataJson.pageCount = pageCount;
+    }
 
     const { data: updated, error: updateError } = await supabase
       .from("resumes")
@@ -255,9 +283,11 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     }
 
     const elapsedMs = Date.now() - started;
-    push(
-      `PDF rendered successfully (${fit.pageCount} page${fit.pageCount === 1 ? "" : "s"}) in ${fit.elapsedMs}ms.`,
-    );
+    if (!compileWarning) {
+      push(
+        `PDF rendered successfully (${pageCount} page${pageCount === 1 ? "" : "s"}) in ${fitElapsedMs}ms.`,
+      );
+    }
 
     return {
       ok: true,
@@ -270,9 +300,10 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       elapsedMs,
       healed,
       steps,
-      pdfBase64: fit.compiledPdf.toString("base64"),
-      pageCount: fit.pageCount,
-      lockedToOnePage: fit.lockedToOnePage,
+      pdfBase64,
+      pageCount,
+      lockedToOnePage,
+      compileWarning,
     };
   } catch (err) {
     if (err instanceof AiRateLimitError) {

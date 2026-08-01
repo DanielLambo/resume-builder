@@ -1,7 +1,5 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
-
 import { OptionCard } from "@/components/onboarding/OptionCard";
 import { REFERRAL_OPTIONS } from "@/lib/onboarding/options";
 import type { OnboardingData, ReferralSource } from "@/lib/onboarding/schema";
@@ -25,6 +23,8 @@ export function Step2Referral({
       referralOtherText: id === "other" ? data.referralOtherText : "",
     });
   }
+
+  const showOther = data.referralSource === "other";
 
   return (
     <div className="space-y-8">
@@ -54,30 +54,19 @@ export function Step2Referral({
         ))}
       </div>
 
-      <AnimatePresence initial={false}>
-        {data.referralSource === "other" ? (
-          <motion.div
-            key="other"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="overflow-hidden"
-          >
-            <label className="grid gap-1.5 pt-1">
-              <span className="text-xs font-medium text-studio-muted">
-                Please specify
-              </span>
-              <input
-                className="rounded-xl border border-studio-border bg-white px-3.5 py-3 text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion"
-                value={data.referralOtherText ?? ""}
-                onChange={(e) => onChange({ referralOtherText: e.target.value })}
-                placeholder="Newsletter, campus career fair…"
-              />
-            </label>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      {showOther ? (
+        <label className="grid gap-1.5 pt-1">
+          <span className="text-xs font-medium text-studio-muted">
+            Please specify
+          </span>
+          <input
+            className="rounded-xl border border-studio-border bg-white px-3.5 py-3 text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion"
+            value={data.referralOtherText ?? ""}
+            onChange={(e) => onChange({ referralOtherText: e.target.value })}
+            placeholder="Newsletter, campus career fair…"
+          />
+        </label>
+      ) : null}
 
       <button
         type="button"

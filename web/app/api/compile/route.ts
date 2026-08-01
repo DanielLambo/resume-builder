@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { sanitizeCompileError } from "@/lib/compile-latex";
 import { fitResumeToSinglePage } from "@/lib/fit-resume";
+import { persistResumePdf } from "@/lib/persist-resume-pdf";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -12,6 +13,8 @@ const BodySchema = z.object({
   latex: z.string().min(1).max(400_000),
   /** When true (default), run full 1-page lock. When false, single compile only. */
   autoFit: z.boolean().optional().default(true),
+  /** When set (authenticated), persist PDF to storage for dashboard download. */
+  resumeId: z.string().uuid().optional(),
 });
 
 /**
@@ -47,14 +50,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const { latex, autoFit } = parsed.data;
+    const { latex, autoFit, resumeId } = parsed.data;
     latexForDiagnostics = latex;
+
+    const maybePersist = async (pdf: Buffer) => {
+      if (!user || !resumeId) return;
+      await persistResumePdf(supabase, user.id, resumeId, pdf);
+    };
 
     if (!autoFit) {
       const { compileLatexRemote } = await import("@/lib/compile-latex");
       const { getPDFPageCount } = await import("@resumate/one-page-lock");
       const pdf = await compileLatexRemote(latex);
       const pageCount = await getPDFPageCount(pdf);
+      await maybePersist(pdf);
       return NextResponse.json({
         success: true,
         pdfBase64: pdf.toString("base64"),
@@ -67,6 +76,7 @@ export async function POST(request: Request) {
 
     // Spacing search only — no Groq condense on passive preview compiles.
     const fit = await fitResumeToSinglePage(latex, { allowGroqCondense: false });
+    await maybePersist(fit.compiledPdf);
     return NextResponse.json({
       success: true,
       pdfBase64: fit.compiledPdf.toString("base64"),

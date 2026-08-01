@@ -38,14 +38,28 @@ export function aiLimitRedisKey(userId: string, date = new Date()): string {
 
 let redisSingleton: Redis | null = null;
 
-export function getRedis(): Redis {
+function openUsage(userId: string): RateLimitStatus {
+  return {
+    allowed: true,
+    used: 0,
+    remaining: DAILY_AI_TOKEN_LIMIT,
+    limit: DAILY_AI_TOKEN_LIMIT,
+    dayKey: utcDayKey(),
+    redisKey: aiLimitRedisKey(userId),
+  };
+}
+
+/**
+ * Returns Redis when configured; null when env is missing (local/demo soft-open).
+ */
+export function getRedis(): Redis | null {
   if (redisSingleton) return redisSingleton;
 
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (!url || !token) {
-    throw new Error("Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN");
+    return null;
   }
 
   redisSingleton = new Redis({ url, token });
@@ -54,22 +68,29 @@ export function getRedis(): Redis {
 
 /**
  * Read current daily token usage. Does not increment.
+ * Soft-opens (allows AI) when Upstash is unavailable so demos do not hard-fail.
  */
 export async function getDailyAiUsage(userId: string): Promise<RateLimitStatus> {
   const redis = getRedis();
-  const redisKey = aiLimitRedisKey(userId);
-  const raw = await redis.get<number | string | null>(redisKey);
-  const used = Number(raw ?? 0);
-  const safeUsed = Number.isFinite(used) && used > 0 ? used : 0;
+  if (!redis) return openUsage(userId);
 
-  return {
-    allowed: safeUsed < DAILY_AI_TOKEN_LIMIT,
-    used: safeUsed,
-    remaining: Math.max(0, DAILY_AI_TOKEN_LIMIT - safeUsed),
-    limit: DAILY_AI_TOKEN_LIMIT,
-    dayKey: utcDayKey(),
-    redisKey,
-  };
+  try {
+    const redisKey = aiLimitRedisKey(userId);
+    const raw = await redis.get<number | string | null>(redisKey);
+    const used = Number(raw ?? 0);
+    const safeUsed = Number.isFinite(used) && used > 0 ? used : 0;
+
+    return {
+      allowed: safeUsed < DAILY_AI_TOKEN_LIMIT,
+      used: safeUsed,
+      remaining: Math.max(0, DAILY_AI_TOKEN_LIMIT - safeUsed),
+      limit: DAILY_AI_TOKEN_LIMIT,
+      dayKey: utcDayKey(),
+      redisKey,
+    };
+  } catch {
+    return openUsage(userId);
+  }
 }
 
 /**
@@ -87,6 +108,7 @@ export async function assertWithinDailyAiLimit(userId: string): Promise<RateLimi
 /**
  * Increment the user's daily token counter after a successful Groq call.
  * TTL ≈ 48h so keys self-expire across day boundaries.
+ * Soft-opens when Redis is down — AI still succeeds for demos.
  */
 export async function incrementDailyAiTokens(
   userId: string,
@@ -94,22 +116,41 @@ export async function incrementDailyAiTokens(
 ): Promise<RateLimitStatus> {
   const amount = Math.max(0, Math.floor(tokens));
   const redis = getRedis();
-  const redisKey = aiLimitRedisKey(userId);
+  if (!redis) {
+    return {
+      ...openUsage(userId),
+      used: amount,
+      remaining: Math.max(0, DAILY_AI_TOKEN_LIMIT - amount),
+    };
+  }
 
-  const used = amount === 0 ? Number((await redis.get(redisKey)) ?? 0) : await redis.incrby(redisKey, amount);
+  try {
+    const redisKey = aiLimitRedisKey(userId);
 
-  // Refresh TTL on every write so the key outlives the calendar day slightly.
-  await redis.expire(redisKey, 60 * 60 * 48);
+    const used =
+      amount === 0
+        ? Number((await redis.get(redisKey)) ?? 0)
+        : await redis.incrby(redisKey, amount);
 
-  const safeUsed = Number(used) || 0;
-  return {
-    allowed: safeUsed < DAILY_AI_TOKEN_LIMIT,
-    used: safeUsed,
-    remaining: Math.max(0, DAILY_AI_TOKEN_LIMIT - safeUsed),
-    limit: DAILY_AI_TOKEN_LIMIT,
-    dayKey: utcDayKey(),
-    redisKey,
-  };
+    // Refresh TTL on every write so the key outlives the calendar day slightly.
+    await redis.expire(redisKey, 60 * 60 * 48);
+
+    const safeUsed = Number(used) || 0;
+    return {
+      allowed: safeUsed < DAILY_AI_TOKEN_LIMIT,
+      used: safeUsed,
+      remaining: Math.max(0, DAILY_AI_TOKEN_LIMIT - safeUsed),
+      limit: DAILY_AI_TOKEN_LIMIT,
+      dayKey: utcDayKey(),
+      redisKey,
+    };
+  } catch {
+    return {
+      ...openUsage(userId),
+      used: amount,
+      remaining: Math.max(0, DAILY_AI_TOKEN_LIMIT - amount),
+    };
+  }
 }
 
 /**
