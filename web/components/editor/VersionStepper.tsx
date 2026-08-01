@@ -19,8 +19,9 @@ export function VersionStepper({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-2 font-mono text-[0.7rem] text-studio-muted"
+      className="inline-flex items-center gap-1.5 border border-studio-border bg-studio-paper px-1.5 py-0.5 font-mono text-[0.7rem] text-studio-muted"
       data-testid="version-stepper"
+      title="Session history"
     >
       <button
         type="button"
@@ -28,13 +29,12 @@ export function VersionStepper({
         aria-label="Previous version"
         disabled={disabled || index <= 0}
         onClick={onPrev}
-        className="min-h-8 border border-studio-border bg-studio-paper px-2 py-1 transition hover:text-studio-ink disabled:opacity-40"
+        className="min-h-7 px-1.5 transition hover:text-studio-ink disabled:opacity-40"
       >
-        ← Prev
+        ←
       </button>
-      <span data-testid="version-label">
+      <span data-testid="version-label" className="min-w-[4.5rem] text-center">
         {index + 1}/{total}
-        <span className="ml-1 text-studio-muted/80">this session</span>
       </span>
       <button
         type="button"
@@ -42,9 +42,9 @@ export function VersionStepper({
         aria-label="Next version"
         disabled={disabled || index >= total - 1}
         onClick={onNext}
-        className="min-h-8 border border-studio-border bg-studio-paper px-2 py-1 transition hover:text-studio-ink disabled:opacity-40"
+        className="min-h-7 px-1.5 transition hover:text-studio-ink disabled:opacity-40"
       >
-        Next →
+        →
       </button>
     </div>
   );

@@ -1,6 +1,5 @@
 "use client";
 
-import { Loader2, Sparkles } from "lucide-react";
 import { useMemo } from "react";
 
 import {
@@ -44,14 +43,16 @@ export function OrphanHeatmapPanel({
       aria-live="polite"
     >
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-xs font-medium text-studio-ink">Line overflow</p>
-        <p className="text-[0.7rem] text-studio-muted">
+        <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
+          Line overflow
+        </p>
+        <p className="text-xs text-studio-muted">
           {orphans.length === 0 ? "Clear" : `${orphans.length} to trim`}
         </p>
       </div>
 
       {orphans.length === 0 ? (
-        <p className="text-xs text-studio-muted">
+        <p className="text-sm text-studio-muted">
           No short overflow lines at ~{analysis.lineWidth} chars.
         </p>
       ) : (
@@ -61,14 +62,14 @@ export function OrphanHeatmapPanel({
             return (
               <li
                 key={`${bullet.kind}-${bullet.index}-${bullet.start}`}
-                className="border-l-2 border-amber-500 pl-3"
+                className="border-l-2 border-studio-ink/20 pl-3"
                 data-testid="orphan-bullet"
               >
-                <p className="line-clamp-3 text-[0.8rem] leading-relaxed text-studio-ink">
+                <p className="line-clamp-3 text-sm leading-relaxed text-studio-ink">
                   {bullet.text}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[0.7rem] text-studio-muted">
+                  <span className="text-xs text-studio-muted">
                     ~{bullet.trailingWords} word
                     {bullet.trailingWords === 1 ? "" : "s"} over
                   </span>
@@ -76,17 +77,9 @@ export function OrphanHeatmapPanel({
                     type="button"
                     disabled={busy || shorteningIndex !== null}
                     onClick={() => onShorten(bullet)}
-                    className="inline-flex items-center gap-1.5 border border-studio-border bg-studio-paper px-2.5 py-1 text-[0.7rem] font-medium text-studio-ink transition hover:border-studio-ink/30 disabled:opacity-60"
+                    className="min-h-9 border border-studio-border bg-studio-paper px-3 py-1.5 text-sm font-medium text-studio-ink transition hover:border-studio-ink/30 disabled:opacity-45"
                     data-testid="orphan-shorten"
                   >
-                    {busy ? (
-                      <Loader2
-                        className="h-3 w-3 animate-spin"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <Sparkles className="h-3 w-3" aria-hidden="true" />
-                    )}
                     {busy ? "Shortening…" : "Shorten"}
                   </button>
                 </div>

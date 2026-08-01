@@ -77,10 +77,17 @@ type VersionState = {
 };
 
 const CLIENT_STEPS = [
-  "[1/4] Parsing prompt and extracting Zod schema...",
-  "[2/4] Checking Upstash Redis daily token limit...",
-  "[3/4] Compiling LaTeX via 1-Page Lock engine...",
+  "[1/4] Reading your prompt…",
+  "[2/4] Checking daily AI quota…",
+  "[3/4] Typesetting your resume…",
 ] as const;
+
+const btnPrimary =
+  "min-h-9 bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45";
+const btnSecondary =
+  "min-h-9 border border-studio-border bg-studio-paper px-3 py-2 text-sm font-medium text-studio-ink transition hover:border-studio-ink/30 disabled:opacity-45";
+const btnGhost =
+  "min-h-9 px-2.5 text-sm font-medium text-studio-muted transition hover:text-studio-ink disabled:opacity-45";
 
 const COMPILE_FIX_PROMPT =
   "Fix this LaTeX compile error without inventing new experience. Keep facts honest.";
@@ -121,6 +128,7 @@ export function EditorClient({
   const [reply, setReply] = useState<string | null>(null);
   const [review, setReview] = useState<ResumeReview | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [, startTransition] = useTransition();
   /** Own busy flag so Stop can unlock the UI before the server action settles. */
   const [aiBusy, setAiBusy] = useState(false);
@@ -186,6 +194,7 @@ export function EditorClient({
         return;
       }
       savingRef.current = true;
+      setSaving(true);
       try {
         let passes = 0;
         do {
@@ -212,12 +221,13 @@ export function EditorClient({
           }
           if (!drifted) setDirty(false);
           if (!quiet) {
-            toast.success("Resume saved to your account", { duration: 2200 });
+            toast.success("Resume saved", { duration: 1800 });
           }
           return;
         } while (passes < 5);
       } finally {
         savingRef.current = false;
+        setSaving(false);
       }
     },
     [resumeId, title],
@@ -341,7 +351,7 @@ export function EditorClient({
         if (gen === compileGen.current) {
           const message = err instanceof Error ? err.message : "Compile failed";
           setCompileError(message);
-          if (!quiet) toast.error(message);
+          // Banner is the canonical compile error surface — avoid duplicate toasts.
         }
         throw err;
       } finally {
@@ -576,12 +586,12 @@ export function EditorClient({
         );
 
         if (result.compileWarning) {
-          toast.success("Vibe edit saved", {
-            description: `AI applied · preview unavailable: ${result.compileWarning}`,
+          toast.success("AI edit saved", {
+            description: "Preview unavailable — open the compile banner to fix.",
           });
         } else {
-          toast.success("Vibe edit applied", {
-            description: `${result.tokensUsed.toLocaleString()} tokens · ${result.pageCount ?? "?"} page PDF`,
+          toast.success("AI edit applied", {
+            description: `${result.pageCount ?? "?"} page PDF`,
           });
         }
       } catch {
@@ -671,11 +681,8 @@ export function EditorClient({
         setReview(null);
         setReply(result.reply);
         setGhostActive(true);
-        setMode("vibe");
-        setStatusLines([`Selection updated · ${result.tokensUsed} tokens`]);
-        toast.success("Selection updated", {
-          description: "Recompiling preview…",
-        });
+        setStatusLines(["Selection updated"]);
+        toast.success("Selection updated");
         void compilePdf(result.latex, { quiet: true }).catch(() => undefined);
       } catch {
         if (id !== runId.current) return;
@@ -711,21 +718,28 @@ export function EditorClient({
       return;
     }
     const next = getTemplate(nextId);
-    const ok = window.confirm(
-      `Replace the current source with the “${next.name}” template? Unsaved wording in this draft will be overwritten.`,
-    );
-    if (!ok) return;
     setTemplateId(next.id);
     setLatex(next.latex);
     setSelection(null);
     setDirty(true);
     setGhostActive(true);
     setTemplatePickerOpen(false);
-    toast.success(`Switched to ${next.name}`, {
-      description: "Recompiling preview…",
-    });
+    toast.success(`Switched to ${next.name}`);
     void compilePdf(next.latex, { quiet: true }).catch(() => undefined);
   }
+
+  function fixCompileWithAi() {
+    if (!compileError) return;
+    setMode("vibe");
+    setMobilePane("edit");
+    runVibeEdit({
+      prompt: COMPILE_FIX_PROMPT,
+      compilerError: compileError,
+      clearPrompt: false,
+    });
+  }
+
+  const saveLabel = saving ? "Saving…" : dirty ? "Unsaved" : "Saved";
 
   async function onShortenOrphan(bullet: OrphanBullet) {
     if (busy || shorteningIndex != null) return;
@@ -757,7 +771,7 @@ export function EditorClient({
       }
       if (result.unchanged) {
         toast.message("Couldn't tighten further", {
-          description: "Try a vibe edit, or trim a metric phrase manually.",
+          description: "Try an AI edit, or trim a metric phrase manually.",
         });
         return;
       }
@@ -788,7 +802,7 @@ export function EditorClient({
 
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col bg-studio-bg lg:flex-row"
+      className="relative flex h-full min-h-0 flex-col bg-studio-bg"
       data-testid="vibe-harness"
       data-token-used={tokensUsed}
     >
@@ -801,6 +815,7 @@ export function EditorClient({
         </div>
       )}
 
+      {/* Mobile Edit / Preview */}
       <div
         className="flex shrink-0 border-b border-studio-border lg:hidden"
         role="tablist"
@@ -841,21 +856,19 @@ export function EditorClient({
         </button>
       </div>
 
-      <aside
-        className={[
-          "min-h-0 w-full flex-col overflow-hidden border-studio-border bg-studio-bg lg:border-r",
-          mobilePane === "edit" ? "flex flex-1" : "hidden",
-          "lg:flex lg:w-[40%] lg:flex-none xl:w-[36%]",
-        ].join(" ")}
-      >
-        <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">
+      {/* Shared studio chrome — always available on Edit and Preview */}
+      <header className="shrink-0 border-b border-studio-border bg-studio-bg px-4 py-3 sm:px-5">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex min-w-0 items-baseline gap-2">
               <h1 className="truncate text-[0.95rem] font-semibold tracking-tight text-studio-ink">
                 {title}
               </h1>
-              <span className="shrink-0 text-[0.7rem] text-studio-muted">
-                {dirty ? "Unsaved" : "Saved"}
+              <span
+                className="shrink-0 text-[0.7rem] text-studio-muted"
+                data-testid="save-state"
+              >
+                {saveLabel}
               </span>
             </div>
             {jobLabel ? (
@@ -870,7 +883,7 @@ export function EditorClient({
           </div>
           <Link
             href="/dashboard"
-            className="shrink-0 text-xs text-studio-muted transition hover:text-studio-ink"
+            className={btnGhost}
             onClick={() => {
               if (dirtyRef.current) {
                 void flushSave({ quiet: true });
@@ -881,7 +894,7 @@ export function EditorClient({
           </Link>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3 sm:px-5">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <div
             className="inline-flex border border-studio-border bg-studio-paper p-0.5"
             role="group"
@@ -894,7 +907,10 @@ export function EditorClient({
                   ? "bg-studio-ink text-white"
                   : "text-studio-muted hover:text-studio-ink"
               }`}
-              onClick={() => setMode("vibe")}
+              onClick={() => {
+                setMode("vibe");
+                setMobilePane("edit");
+              }}
             >
               AI
             </button>
@@ -905,221 +921,250 @@ export function EditorClient({
                   ? "bg-studio-ink text-white"
                   : "text-studio-muted hover:text-studio-ink"
               }`}
-              onClick={() => setMode("source")}
+              onClick={() => {
+                setMode("source");
+                setMobilePane("edit");
+              }}
             >
               Source
             </button>
           </div>
-          <div className="flex items-center gap-1 text-xs text-studio-muted">
-            <button
-              type="button"
-              className="min-h-8 px-2 transition hover:text-studio-ink"
-              data-testid="writing-profile-open"
-              onClick={() => setProfileOpen(true)}
-            >
-              Profile
-            </button>
-            <button
-              type="button"
-              className="min-h-8 max-w-[10rem] truncate px-2 transition hover:text-studio-ink sm:max-w-[14rem]"
-              onClick={() => setTemplatePickerOpen(true)}
-              data-testid="template-switch"
-              title={getTemplate(templateId).description}
-            >
-              {getTemplate(templateId).name}
-            </button>
-            <button
-              type="button"
-              className="min-h-8 px-2 transition hover:text-studio-ink disabled:opacity-50"
-              onClick={onCompile}
-              disabled={compiling || busy}
-            >
-              {compiling ? "Compiling…" : "Compile"}
-            </button>
-          </div>
+
+          <button
+            type="button"
+            className={btnGhost}
+            data-testid="writing-profile-open"
+            onClick={() => setProfileOpen(true)}
+          >
+            Profile
+          </button>
+          <button
+            type="button"
+            className={`${btnGhost} max-w-[9rem] truncate sm:max-w-[12rem]`}
+            onClick={() => setTemplatePickerOpen(true)}
+            data-testid="template-switch"
+            title={getTemplate(templateId).description}
+          >
+            {getTemplate(templateId).name}
+          </button>
+
+          {versions.stack.length > 1 ? (
+            <VersionStepper
+              index={versions.index}
+              total={versions.stack.length}
+              disabled={busy || compiling}
+              onPrev={() => restoreVersion(versions.index - 1)}
+              onNext={() => restoreVersion(versions.index + 1)}
+            />
+          ) : null}
+
+          <button
+            type="button"
+            className={`${btnSecondary} ml-auto`}
+            onClick={onCompile}
+            disabled={compiling || busy}
+          >
+            {compiling ? "Compiling…" : "Compile"}
+          </button>
         </div>
 
-        {mode === "source" ? (
-          <>
-            {hasSelection ? (
-              <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-studio-border bg-studio-paper px-4 py-2 sm:px-5">
-                <span className="text-[0.7rem] font-medium text-studio-ink">
-                  Edit selection
-                </span>
-                <input
-                  type="text"
-                  value={selectionPrompt}
-                  disabled={busy}
-                  placeholder="e.g. Tighten this bullet"
-                  onChange={(e) => setSelectionPrompt(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      runSelectionEdit();
-                    }
-                  }}
-                  className="min-h-8 min-w-0 flex-1 border border-studio-border bg-studio-bg px-2 py-1 text-xs text-studio-ink outline-none placeholder:text-studio-muted/70 focus:border-studio-ink/30 disabled:opacity-60"
-                />
-                <button
-                  type="button"
-                  data-testid="selection-edit-submit"
-                  disabled={busy || !selectionPrompt.trim()}
-                  onClick={runSelectionEdit}
-                  className="min-h-8 bg-studio-vermilion px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45"
-                >
-                  {busy ? "Editing…" : "Apply"}
-                </button>
-              </div>
-            ) : null}
-            <textarea
-              ref={sourceRef}
-              aria-label="Resume LaTeX source"
-              className="min-h-0 flex-1 resize-none border-t border-studio-border bg-studio-paper px-4 py-3 font-mono text-[0.8rem] leading-relaxed text-studio-ink outline-none focus:bg-white disabled:opacity-60 sm:px-5 sm:py-4"
-              value={latex}
-              spellCheck={false}
-              disabled={busy}
-              onChange={(e) => {
-                setLatex(e.target.value);
-                setDirty(true);
-                setSelection(readTextareaSelection(e.currentTarget));
-              }}
-              onSelect={syncSourceSelection}
-              onKeyUp={syncSourceSelection}
-              onMouseUp={syncSourceSelection}
+        {compileError ? (
+          <div className="mt-3">
+            <CompileErrorBanner
+              error={compileError}
+              pending={busy}
+              onDismiss={() => setCompileError(null)}
+              onFix={fixCompileWithAi}
             />
-          </>
-        ) : (
-          <>
-            <div className="min-h-0 flex-1 overflow-auto border-t border-studio-border px-4 py-4 sm:px-5">
-              {versions.stack.length > 1 ? (
-                <div className="mb-3">
-                  <VersionStepper
-                    index={versions.index}
-                    total={versions.stack.length}
-                    disabled={busy || compiling}
-                    onPrev={() => restoreVersion(versions.index - 1)}
-                    onNext={() => restoreVersion(versions.index + 1)}
-                  />
-                </div>
-              ) : null}
-              {review ? (
-                <ResumeReviewPanel review={review} />
-              ) : reply ? (
-                <p className="text-[0.95rem] leading-relaxed text-studio-ink">{reply}</p>
-              ) : (
-                <div className="flex h-full min-h-[10rem] flex-col justify-center">
-                  <p className="text-sm text-studio-muted">
-                    Ask for an edit, a role review, or paste a job description.
-                  </p>
-                  <p className="mt-2 text-sm text-studio-muted">
-                    Try a recipe below
-                  </p>
-                </div>
-              )}
-            </div>
+          </div>
+        ) : null}
+      </header>
 
-            <div className="shrink-0 border-t border-studio-border bg-studio-bg px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4">
-              {compileError ? (
-                <div className="mb-2">
-                  <CompileErrorBanner
-                    error={compileError}
-                    pending={busy}
-                    onDismiss={() => setCompileError(null)}
-                    onFix={() => {
-                      if (!compileError) return;
-                      runVibeEdit({
-                        prompt: COMPILE_FIX_PROMPT,
-                        compilerError: compileError,
-                        clearPrompt: false,
-                      });
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <aside
+          className={[
+            "min-h-0 w-full flex-col overflow-hidden bg-studio-bg lg:border-r lg:border-studio-border",
+            mobilePane === "edit" ? "flex flex-1" : "hidden",
+            "lg:flex lg:w-[40%] lg:flex-none xl:w-[36%]",
+          ].join(" ")}
+        >
+          {mode === "source" ? (
+            <>
+              {hasSelection ? (
+                <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-studio-border bg-studio-paper px-4 py-2.5 sm:px-5">
+                  <span className="text-xs font-medium text-studio-ink">
+                    Edit selection
+                  </span>
+                  <input
+                    type="text"
+                    value={selectionPrompt}
+                    disabled={busy}
+                    placeholder="e.g. Tighten this bullet"
+                    aria-label="Selection edit prompt"
+                    onChange={(e) => setSelectionPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        runSelectionEdit();
+                      }
                     }}
+                    className="min-h-9 min-w-0 flex-1 border border-studio-border bg-studio-bg px-2.5 py-1.5 text-sm text-studio-ink outline-none placeholder:text-studio-muted/70 focus:border-studio-ink/30 disabled:opacity-60"
                   />
+                  <button
+                    type="button"
+                    data-testid="selection-edit-submit"
+                    disabled={busy || !selectionPrompt.trim()}
+                    onClick={runSelectionEdit}
+                    className={btnPrimary}
+                  >
+                    {busy ? "Editing…" : "Apply"}
+                  </button>
                 </div>
-              ) : null}
-              <PromptRecipes
+              ) : (
+                <p className="shrink-0 border-b border-studio-border px-4 py-2 text-xs text-studio-muted sm:px-5">
+                  Select any span in the source to edit it with AI.
+                </p>
+              )}
+              <textarea
+                ref={sourceRef}
+                aria-label="Resume LaTeX source"
+                className="min-h-0 flex-1 resize-none bg-studio-paper px-4 py-3 font-mono text-[0.8rem] leading-relaxed text-studio-ink outline-none focus:bg-white disabled:opacity-60 sm:px-5 sm:py-4"
+                value={latex}
+                spellCheck={false}
                 disabled={busy}
-                onPick={(recipePrompt) => {
-                  setPrompt(recipePrompt);
-                  promptRef.current?.focus();
+                onChange={(e) => {
+                  setLatex(e.target.value);
+                  setDirty(true);
+                  setSelection(readTextareaSelection(e.currentTarget));
                 }}
+                onSelect={syncSourceSelection}
+                onKeyUp={syncSourceSelection}
+                onMouseUp={syncSourceSelection}
               />
-              <div className="border border-studio-border bg-studio-paper focus-within:border-studio-ink/30">
-                <textarea
-                  ref={promptRef}
-                  data-testid="vibe-prompt"
-                  aria-label="AI edit prompt"
-                  className="w-full resize-none bg-transparent px-3 py-3 text-sm leading-relaxed text-studio-ink outline-none placeholder:text-studio-muted/70 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[0.9rem]"
-                  rows={3}
-                  placeholder="What should change?"
-                  value={prompt}
+            </>
+          ) : (
+            <>
+              <div className="min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-5">
+                {review ? (
+                  <ResumeReviewPanel review={review} />
+                ) : reply ? (
+                  <div>
+                    <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
+                      AI reply
+                    </p>
+                    <p className="mt-2 text-[0.95rem] leading-relaxed text-studio-ink">
+                      {reply}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex h-full min-h-[10rem] flex-col justify-center">
+                    <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
+                      AI assistant
+                    </p>
+                    <p className="mt-2 text-sm leading-relaxed text-studio-muted">
+                      Ask for an edit, a role review, or paste a job description.
+                      Pick a suggestion below to get started.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="shrink-0 border-t border-studio-border bg-studio-bg px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4">
+                <PromptRecipes
                   disabled={busy}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  onKeyDown={onPromptKeyDown}
+                  onPick={(recipePrompt) => {
+                    setPrompt(recipePrompt);
+                    promptRef.current?.focus();
+                  }}
                 />
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-studio-border/80 px-3 py-2">
-                  <p className="hidden text-[0.7rem] text-studio-muted sm:block">
-                    ⌘/Ctrl + Enter
-                  </p>
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none">
-                    {busy ? (
+                <div className="border border-studio-border bg-studio-paper focus-within:border-studio-ink/30">
+                  <textarea
+                    ref={promptRef}
+                    data-testid="vibe-prompt"
+                    aria-label="AI edit prompt"
+                    className="w-full resize-none bg-transparent px-3 py-3 text-sm leading-relaxed text-studio-ink outline-none placeholder:text-studio-muted/70 disabled:cursor-not-allowed disabled:opacity-60"
+                    rows={3}
+                    placeholder="What should change?"
+                    value={prompt}
+                    disabled={busy}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    onKeyDown={onPromptKeyDown}
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-studio-border/80 px-3 py-2">
+                    <p className="hidden text-[0.7rem] text-studio-muted sm:block">
+                      ⌘/Ctrl + Enter
+                    </p>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none">
+                      {busy ? (
+                        <button
+                          type="button"
+                          data-testid="vibe-stop"
+                          onClick={stopVibeEdit}
+                          className={btnSecondary}
+                        >
+                          Stop
+                        </button>
+                      ) : null}
+                      {!busy && lastPrompt ? (
+                        <button
+                          type="button"
+                          data-testid="vibe-regenerate"
+                          onClick={() =>
+                            runVibeEdit({
+                              prompt: lastPrompt,
+                              clearPrompt: false,
+                            })
+                          }
+                          className={btnSecondary}
+                        >
+                          Regenerate
+                        </button>
+                      ) : null}
                       <button
                         type="button"
-                        data-testid="vibe-stop"
-                        onClick={stopVibeEdit}
-                        className="min-h-9 border border-studio-border bg-studio-paper px-3 py-2 text-sm font-medium text-studio-ink transition hover:border-studio-ink/30"
+                        data-testid="vibe-submit"
+                        disabled={busy || !prompt.trim()}
+                        onClick={() => runVibeEdit()}
+                        className={`${btnPrimary} flex-1 sm:flex-none sm:min-w-[7.5rem]`}
                       >
-                        Stop
+                        {busy
+                          ? promptIsReview
+                            ? "Reviewing…"
+                            : "Working…"
+                          : promptIsReview
+                            ? "Review"
+                            : "Run"}
                       </button>
-                    ) : null}
-                    {!busy && lastPrompt ? (
-                      <button
-                        type="button"
-                        data-testid="vibe-regenerate"
-                        onClick={() =>
-                          runVibeEdit({
-                            prompt: lastPrompt,
-                            clearPrompt: false,
-                          })
-                        }
-                        className="min-h-9 border border-studio-border bg-studio-paper px-3 py-2 text-sm font-medium text-studio-ink transition hover:border-studio-ink/30"
-                      >
-                        Regenerate
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      data-testid="vibe-submit"
-                      disabled={busy || !prompt.trim()}
-                      onClick={() => runVibeEdit()}
-                      className="min-h-9 flex-1 bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45 sm:flex-none sm:min-w-[7.5rem]"
-                    >
-                      {busy
-                        ? promptIsReview
-                          ? "Reviewing…"
-                          : "Working…"
-                        : promptIsReview
-                          ? "Review"
-                          : "Run"}
-                    </button>
+                    </div>
                   </div>
                 </div>
+                <StatusLog lines={statusLines} active={busy} />
               </div>
-              <StatusLog lines={statusLines} active={busy} />
-            </div>
-          </>
-        )}
-      </aside>
+            </>
+          )}
+        </aside>
 
-      <section
-        className={[
-          "min-h-0 flex-1 flex-col overflow-hidden bg-studio-canvas",
-          mobilePane === "preview" ? "flex" : "hidden",
-          "lg:flex",
-        ].join(" ")}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-studio-border bg-studio-canvas/90 px-4 py-2.5 backdrop-blur-sm sm:px-5">
-          <span className="text-xs text-studio-muted">Preview</span>
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-3 sm:gap-4">
+        <section
+          className={[
+            "min-h-0 flex-1 flex-col overflow-hidden bg-studio-canvas",
+            mobilePane === "preview" ? "flex" : "hidden",
+            "lg:flex",
+          ].join(" ")}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-studio-border bg-studio-canvas/90 px-4 py-2.5 sm:px-5">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <span className="text-xs font-medium text-studio-ink">Preview</span>
+              <span
+                data-testid="one-page-lock"
+                className={`font-mono text-[0.7rem] ${
+                  onePageLock ? "text-emerald-700" : "text-studio-muted"
+                }`}
+              >
+                {onePageLock
+                  ? `${pageCount ?? 1} page · locked`
+                  : `${pageCount ?? "?"} page${pageCount === 1 ? "" : "s"}`}
+              </span>
+            </div>
             <LineOptimizerToggle
               enabled={heatmapOn}
               orphanCount={orphanCount}
@@ -1127,68 +1172,27 @@ export function EditorClient({
               ready={heatmapReady}
               compact
             />
-            <span
-              data-testid="one-page-lock"
-              className={`font-mono text-[0.7rem] ${
-                onePageLock ? "text-emerald-700" : "text-studio-muted"
-              }`}
-            >
-              <span className="sm:hidden">
-                {onePageLock
-                  ? `${pageCount ?? 1} page locked`
-                  : `${pageCount ?? "?"} page`}
-              </span>
-              <span className="hidden sm:inline">
-                {onePageLock
-                  ? `${pageCount ?? 1}-PAGE LOCK ACTIVE`
-                  : `${pageCount ?? "?"} pages · fit pending`}
-              </span>
-            </span>
           </div>
-        </div>
 
-        <div className="flex flex-1 flex-col items-center gap-3 overflow-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:gap-4 sm:p-6 md:p-10">
-          {compileError &&
-          (mode === "source" || mobilePane === "preview") ? (
-            <div
-              className={`w-full max-w-3xl ${
-                mode === "vibe" ? "lg:hidden" : ""
-              }`}
-            >
-              <CompileErrorBanner
-                error={compileError}
-                pending={busy}
-                onDismiss={() => setCompileError(null)}
-                onFix={() => {
-                  if (!compileError) return;
-                  setMode("vibe");
-                  setMobilePane("edit");
-                  runVibeEdit({
-                    prompt: COMPILE_FIX_PROMPT,
-                    compilerError: compileError,
-                    clearPrompt: false,
-                  });
-                }}
-              />
-            </div>
-          ) : null}
-          <PDFPreview
-            pdfBase64={pdfBase64}
-            pageCount={pageCount}
-            ghostActive={ghostActive}
-            pendingLatex={latex}
-            compiling={compiling || busy}
-          />
-          <OrphanHeatmapPanel
-            latex={latex}
-            enabled={heatmapOn && heatmapReady}
-            shorteningIndex={shorteningIndex}
-            onShorten={(bullet) => {
-              void onShortenOrphan(bullet);
-            }}
-          />
-        </div>
-      </section>
+          <div className="flex flex-1 flex-col items-center gap-4 overflow-auto px-4 py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-6">
+            <PDFPreview
+              pdfBase64={pdfBase64}
+              pageCount={pageCount}
+              ghostActive={ghostActive}
+              pendingLatex={latex}
+              compiling={compiling || busy}
+            />
+            <OrphanHeatmapPanel
+              latex={latex}
+              enabled={heatmapOn && heatmapReady}
+              shorteningIndex={shorteningIndex}
+              onShorten={(bullet) => {
+                void onShortenOrphan(bullet);
+              }}
+            />
+          </div>
+        </section>
+      </div>
 
       <QuotaModal
         open={quotaOpen}
@@ -1201,7 +1205,7 @@ export function EditorClient({
       <TemplatePicker
         open={templatePickerOpen}
         title="Switch template"
-        confirmLabel="Apply template"
+        confirmLabel="Replace source"
         initialTemplateId={templateId}
         hideTitle
         onClose={() => setTemplatePickerOpen(false)}

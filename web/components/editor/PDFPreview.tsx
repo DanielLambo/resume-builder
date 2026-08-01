@@ -13,7 +13,7 @@ type PDFPreviewProps = {
 
 /**
  * Floating paper sheet — real PDF via blob URL iframe.
- * Ghost overlay flashes emerald during vibe-edit updates.
+ * Ghost overlay flashes emerald during AI edit updates.
  * Orphan heatmap is a sibling panel (OrphanHeatmapPanel) so toggle never
  * recreates this blob URL.
  */
@@ -77,7 +77,7 @@ export function PDFPreview({
             {statusLabel ?? "No PDF yet"}
           </p>
           <p className="max-w-sm text-sm text-studio-muted">
-            Run Compile or a vibe edit to typeset the floating paper sheet.
+            Run Compile or ask AI to typeset your resume.
           </p>
           {pendingLatex ? (
             <p className="mt-4 max-h-24 overflow-hidden font-mono text-[0.65rem] text-studio-muted/50">
