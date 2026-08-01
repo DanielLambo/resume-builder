@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 import {
+  findIntroducedAiSlop,
+  formatAiSlopError,
+} from "@/lib/ai/anti-slop";
+import {
   buildHealHint,
   buildVibeSystemPrompt,
   buildVibeUserPayload,
@@ -173,6 +177,11 @@ async function callGroqOnce(input: {
     throw new Error(`LATEX_INVALID: ${latexError}`);
   }
 
+  const slopHits = findIntroducedAiSlop(modelLatex, context.latex);
+  if (slopHits.length > 0) {
+    throw new Error(formatAiSlopError(slopHits));
+  }
+
   const mergedData = mergePreservingMeta(
     input.dataJson,
     output.data_json,
@@ -246,6 +255,7 @@ export async function invokeGroqVibeEdit(input: {
       const healable =
         message.startsWith("INVALID_JSON") ||
         message.startsWith("LATEX_INVALID") ||
+        message.startsWith("AI_SLOP") ||
         message.includes("Zod") ||
         message.includes("non-JSON");
 
