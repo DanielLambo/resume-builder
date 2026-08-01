@@ -9,19 +9,29 @@ import {
   useState,
   useTransition,
   type KeyboardEvent,
+  type SyntheticEvent,
 } from "react";
 import { toast } from "sonner";
 
+import { selectionEditAction } from "@/app/actions/selection-edit";
 import { vibeEditAction } from "@/app/actions/vibe-edit";
 import { shortenBulletAction } from "@/app/actions/shorten-bullet";
 import { saveResumeLatexAction } from "@/app/actions/resumes";
+import { CompileErrorBanner } from "@/components/editor/CompileErrorBanner";
 import { LineOptimizerToggle, useLineOptimizerPreference } from "@/components/editor/LineOptimizerToggle";
 import { OrphanHeatmapPanel } from "@/components/editor/OrphanHeatmapPanel";
 import { PDFPreview } from "@/components/editor/PDFPreview";
+import { PromptRecipes } from "@/components/editor/PromptRecipes";
 import { QuotaModal } from "@/components/editor/QuotaModal";
 import { ResumeReviewPanel } from "@/components/editor/ResumeReviewPanel";
 import { StatusLog } from "@/components/editor/StatusLog";
+import { VersionStepper } from "@/components/editor/VersionStepper";
+import { WritingProfileModal } from "@/components/editor/WritingProfileModal";
 import { TemplatePicker } from "@/components/templates/TemplatePicker";
+import {
+  appendLocalSnapshot,
+  type LocalAiSnapshot,
+} from "@/lib/ai-history";
 import { analyzeOrphans, type OrphanBullet } from "@/lib/analyzer/orphanDetector";
 import { isResumeReviewPrompt, type ResumeReview } from "@/lib/resume-review";
 import {
@@ -29,6 +39,10 @@ import {
   type ResumeTemplateId,
 } from "@/lib/resume-template";
 import { useTokenUsage } from "@/lib/token-usage";
+import {
+  EMPTY_WRITING_PROFILE,
+  type WritingProfile,
+} from "@/lib/writing-profile";
 
 type EditorClientProps = {
   resumeId: string;
@@ -39,10 +53,28 @@ type EditorClientProps = {
   initialPageCount?: number | null;
   /** When set, this sheet was tailored for a specific job application. */
   jobLabel?: string | null;
+  initialWritingProfile?: WritingProfile;
 };
 
 type StudioMode = "vibe" | "source";
 type MobilePane = "edit" | "preview";
+
+type SourceSelection = {
+  start: number;
+  end: number;
+  text: string;
+};
+
+type VibeEditOverrides = {
+  prompt?: string;
+  compilerError?: string;
+  clearPrompt?: boolean;
+};
+
+type VersionState = {
+  stack: LocalAiSnapshot[];
+  index: number;
+};
 
 const CLIENT_STEPS = [
   "[1/4] Parsing prompt and extracting Zod schema...",
@@ -50,14 +82,24 @@ const CLIENT_STEPS = [
   "[3/4] Compiling LaTeX via 1-Page Lock engine...",
 ] as const;
 
-const PROMPT_EXAMPLES = [
-  "Tighten my experience bullets",
-  "Review my resume for SWE intern",
-  "Add AWS and Docker to skills",
-] as const;
+const COMPILE_FIX_PROMPT =
+  "Fix this LaTeX compile error without inventing new experience. Keep facts honest.";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readTextareaSelection(
+  el: HTMLTextAreaElement,
+): SourceSelection | null {
+  const start = el.selectionStart;
+  const end = el.selectionEnd;
+  if (end <= start) return null;
+  return {
+    start,
+    end,
+    text: el.value.slice(start, end),
+  };
 }
 
 export function EditorClient({
@@ -68,17 +110,20 @@ export function EditorClient({
   initialPdfBase64 = null,
   initialPageCount = null,
   jobLabel = null,
+  initialWritingProfile = EMPTY_WRITING_PROFILE,
 }: EditorClientProps) {
   const { applyUsage, used: tokensUsed } = useTokenUsage();
   const [latex, setLatex] = useState(initialLatex);
   const [templateId, setTemplateId] = useState<ResumeTemplateId>(initialTemplateId);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [lastPrompt, setLastPrompt] = useState<string | null>(null);
   const [reply, setReply] = useState<string | null>(null);
   const [review, setReview] = useState<ResumeReview | null>(null);
   const [dirty, setDirty] = useState(false);
   const [pending, startTransition] = useTransition();
   const [compiling, setCompiling] = useState(false);
+  const [compileError, setCompileError] = useState<string | null>(null);
   const [mode, setMode] = useState<StudioMode>("vibe");
   const [mobilePane, setMobilePane] = useState<MobilePane>("edit");
   const [onePageLock, setOnePageLock] = useState(
@@ -93,15 +138,34 @@ export function EditorClient({
   const [quotaBody, setQuotaBody] = useState("");
   const [heatmapOn, setHeatmapOn, heatmapReady] = useLineOptimizerPreference(false);
   const [shorteningIndex, setShorteningIndex] = useState<number | null>(null);
+  const [writingProfile, setWritingProfile] =
+    useState<WritingProfile>(initialWritingProfile);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [selection, setSelection] = useState<SourceSelection | null>(null);
+  const [selectionPrompt, setSelectionPrompt] = useState("");
+  const [versions, setVersions] = useState<VersionState>(() => ({
+    stack: [
+      {
+        latex: initialLatex,
+        reply: null,
+        prompt: "",
+        at: Date.now(),
+      },
+    ],
+    index: 0,
+  }));
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const sourceRef = useRef<HTMLTextAreaElement>(null);
   const runId = useRef(0);
   const compileGen = useRef(0);
   const latexRef = useRef(latex);
+  const replyRef = useRef(reply);
   const templateIdRef = useRef(templateId);
   const savingRef = useRef(false);
   const pendingResaveRef = useRef(false);
   const didInitialCompile = useRef(false);
   latexRef.current = latex;
+  replyRef.current = reply;
   templateIdRef.current = templateId;
 
   const orphanCount = useMemo(
@@ -162,6 +226,34 @@ export function EditorClient({
     return () => window.clearTimeout(t);
   }, [ghostActive]);
 
+  const pushMutatingSnapshot = useCallback(
+    (args: {
+      priorLatex: string;
+      priorReply: string | null;
+      nextLatex: string;
+      nextReply: string | null;
+      prompt: string;
+    }) => {
+      setVersions((prev) => {
+        const stack = prev.stack.slice();
+        const current = stack[prev.index];
+        stack[prev.index] = {
+          latex: args.priorLatex,
+          reply: args.priorReply,
+          prompt: current?.prompt ?? "",
+          at: current?.at ?? Date.now(),
+        };
+        return appendLocalSnapshot(stack, prev.index, {
+          latex: args.nextLatex,
+          reply: args.nextReply,
+          prompt: args.prompt,
+          at: Date.now(),
+        });
+      });
+    },
+    [],
+  );
+
   const compilePdf = useCallback(
     async (source: string, { quiet = false } = {}) => {
       const gen = ++compileGen.current;
@@ -187,12 +279,19 @@ export function EditorClient({
           pageCount?: number;
           lockedToOnePage?: boolean;
           error?: string;
+          hint?: string;
           elapsedMs?: number;
         };
         if (!res.ok || !data.success || !data.pdfBase64) {
-          throw new Error(data.error || "Compile failed");
+          const message =
+            data.hint?.trim() || data.error?.trim() || "Compile failed";
+          if (gen === compileGen.current) {
+            setCompileError(message);
+          }
+          throw new Error(message);
         }
         if (gen !== compileGen.current) return data; // stale response
+        setCompileError(null);
         setPdfBase64(data.pdfBase64);
         setPageCount(data.pageCount ?? null);
         setOnePageLock(Boolean(data.lockedToOnePage ?? data.pageCount === 1));
@@ -206,6 +305,7 @@ export function EditorClient({
       } catch (err) {
         if (gen === compileGen.current) {
           const message = err instanceof Error ? err.message : "Compile failed";
+          setCompileError(message);
           if (!quiet) toast.error(message);
         }
         throw err;
@@ -236,17 +336,40 @@ export function EditorClient({
 
   const promptIsReview = isResumeReviewPrompt(prompt);
 
-  function runVibeEdit() {
-    const text = prompt.trim();
+  function stopVibeEdit() {
+    runId.current += 1;
+    setStatusLines(["Stopped"]);
+  }
+
+  function restoreVersion(nextIndex: number) {
+    const snap = versions.stack[nextIndex];
+    if (!snap || pending || compiling) return;
+    setVersions((prev) => ({ ...prev, index: nextIndex }));
+    setLatex(snap.latex);
+    setReply(snap.reply);
+    setReview(null);
+    setDirty(true);
+    setGhostActive(true);
+    void compilePdf(snap.latex, { quiet: true }).catch(() => undefined);
+  }
+
+  function syncSourceSelection(e: SyntheticEvent<HTMLTextAreaElement>) {
+    setSelection(readTextareaSelection(e.currentTarget));
+  }
+
+  function runVibeEdit(overrides?: VibeEditOverrides) {
+    const text = (overrides?.prompt ?? prompt).trim();
     if (!text || pending) {
       if (!text) toast.message("Describe an edit or ask for a review");
       return;
     }
 
     const priorLatex = latex;
+    const priorReply = reply;
     const id = ++runId.current;
     const signal = { cancelled: false };
     const reviewing = isResumeReviewPrompt(text);
+    const clearPrompt = overrides?.clearPrompt !== false;
     setStatusLines([]);
     setQuotaOpen(false);
 
@@ -256,7 +379,13 @@ export function EditorClient({
       }
 
       try {
-        const result = await vibeEditAction({ resumeId, prompt: text });
+        const result = await vibeEditAction({
+          resumeId,
+          prompt: text,
+          ...(overrides?.compilerError
+            ? { compilerError: overrides.compilerError }
+            : {}),
+        });
         signal.cancelled = true;
         if (id !== runId.current) return;
 
@@ -291,7 +420,10 @@ export function EditorClient({
         }
 
         applyUsage(result.dailyTokensUsed, result.dailyTokensRemaining);
-        setPrompt("");
+        setLastPrompt(text);
+        if (clearPrompt) {
+          setPrompt("");
+        }
 
         if (result.mode === "review" && result.review) {
           setReview(result.review);
@@ -316,6 +448,14 @@ export function EditorClient({
             ? result.data_json.latex
             : priorLatex;
 
+        pushMutatingSnapshot({
+          priorLatex,
+          priorReply,
+          nextLatex,
+          nextReply: result.reply,
+          prompt: text,
+        });
+
         setLatex(nextLatex);
         setDirty(true);
         setReview(null);
@@ -323,14 +463,17 @@ export function EditorClient({
         setGhostActive(true);
 
         if (result.pdfBase64) {
+          setCompileError(null);
           setPdfBase64(result.pdfBase64);
           setPageCount(result.pageCount);
           setOnePageLock(result.lockedToOnePage);
           setMobilePane("preview");
         } else if (result.compileWarning) {
+          setCompileError(result.compileWarning);
           // Edit saved; try a client recompile so the preview can still recover.
           void compilePdf(nextLatex, { quiet: true }).catch(() => undefined);
         } else {
+          setCompileError(null);
           setMobilePane("preview");
         }
 
@@ -361,6 +504,88 @@ export function EditorClient({
         }
       } catch {
         signal.cancelled = true;
+        if (id !== runId.current) return;
+        setQuotaTitle("Network interrupted");
+        setQuotaBody(
+          "We couldn't reach the typesetter. Your draft is intact — export .tex as a backup.",
+        );
+        setQuotaOpen(true);
+      }
+    });
+  }
+
+  function runSelectionEdit() {
+    const sel = selection;
+    const text = selectionPrompt.trim() || prompt.trim();
+    if (!sel || !sel.text.trim()) {
+      toast.message("Select a span in the source first");
+      return;
+    }
+    if (!text || pending) {
+      if (!text) toast.message("Describe how to change the selection");
+      return;
+    }
+
+    const priorLatex = latex;
+    const priorReply = reply;
+    const id = ++runId.current;
+    setStatusLines([]);
+    setQuotaOpen(false);
+
+    startTransition(async () => {
+      try {
+        const result = await selectionEditAction({
+          resumeId,
+          latex: priorLatex,
+          start: sel.start,
+          end: sel.end,
+          selectedText: sel.text,
+          prompt: text,
+        });
+        if (id !== runId.current) return;
+
+        if (!result.ok) {
+          if (result.status === 429 || result.code === "AI_DAILY_LIMIT") {
+            if (typeof result.used === "number") {
+              applyUsage(result.used, undefined, result.limit);
+            }
+            setQuotaTitle("Daily AI token limit reached");
+            setQuotaBody(
+              `${result.error} Quota resets at UTC midnight. Your current resume draft is safe.`,
+            );
+            setQuotaOpen(true);
+            return;
+          }
+          toast.error(result.error);
+          return;
+        }
+
+        applyUsage(result.dailyTokensUsed, result.dailyTokensRemaining);
+        setLastPrompt(text);
+        setSelectionPrompt("");
+        setSelection(null);
+
+        pushMutatingSnapshot({
+          priorLatex,
+          priorReply,
+          nextLatex: result.latex,
+          nextReply: result.reply,
+          prompt: text,
+        });
+
+        setLatex(result.latex);
+        setDirty(true);
+        setReview(null);
+        setReply(result.reply);
+        setGhostActive(true);
+        setMode("vibe");
+        setStatusLines([`Selection updated · ${result.tokensUsed} tokens`]);
+        toast.success("Selection updated", {
+          description: "Recompiling preview…",
+        });
+        void compilePdf(result.latex, { quiet: true }).catch(() => undefined);
+      } catch {
+        if (id !== runId.current) return;
         setQuotaTitle("Network interrupted");
         setQuotaBody(
           "We couldn't reach the typesetter. Your draft is intact — export .tex as a backup.",
@@ -447,6 +672,8 @@ export function EditorClient({
       setShorteningIndex(null);
     }
   }
+
+  const hasSelection = Boolean(selection && selection.text.length > 0);
 
   return (
     <div
@@ -570,6 +797,14 @@ export function EditorClient({
           <div className="flex items-center gap-1 text-xs text-studio-muted">
             <button
               type="button"
+              className="min-h-8 px-2 transition hover:text-studio-ink"
+              data-testid="writing-profile-open"
+              onClick={() => setProfileOpen(true)}
+            >
+              Profile
+            </button>
+            <button
+              type="button"
               className="min-h-8 max-w-[10rem] truncate px-2 transition hover:text-studio-ink sm:max-w-[14rem]"
               onClick={() => setTemplatePickerOpen(true)}
               data-testid="template-switch"
@@ -589,21 +824,74 @@ export function EditorClient({
         </div>
 
         {mode === "source" ? (
-          <textarea
-            className="min-h-0 flex-1 resize-none border-t border-studio-border bg-studio-paper px-4 py-3 font-mono text-[0.8rem] leading-relaxed text-studio-ink outline-none focus:bg-white disabled:opacity-60 sm:px-5 sm:py-4"
-            value={latex}
-            spellCheck={false}
-            disabled={pending}
-            onChange={(e) => {
-              setLatex(e.target.value);
-              setDirty(true);
-            }}
-          />
+          <>
+            {hasSelection ? (
+              <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-studio-border bg-studio-paper px-4 py-2 sm:px-5">
+                <span className="text-[0.7rem] font-medium text-studio-ink">
+                  Edit selection
+                </span>
+                <input
+                  type="text"
+                  value={selectionPrompt}
+                  disabled={pending}
+                  placeholder="e.g. Tighten this bullet"
+                  onChange={(e) => setSelectionPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      runSelectionEdit();
+                    }
+                  }}
+                  className="min-h-8 min-w-0 flex-1 border border-studio-border bg-studio-bg px-2 py-1 text-xs text-studio-ink outline-none placeholder:text-studio-muted/70 focus:border-studio-ink/30 disabled:opacity-60"
+                />
+                <button
+                  type="button"
+                  data-testid="selection-edit-submit"
+                  disabled={
+                    pending ||
+                    !(selectionPrompt.trim() || prompt.trim())
+                  }
+                  onClick={runSelectionEdit}
+                  className="min-h-8 bg-studio-vermilion px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45"
+                >
+                  {pending ? "Editing…" : "Apply"}
+                </button>
+              </div>
+            ) : null}
+            <textarea
+              ref={sourceRef}
+              className="min-h-0 flex-1 resize-none border-t border-studio-border bg-studio-paper px-4 py-3 font-mono text-[0.8rem] leading-relaxed text-studio-ink outline-none focus:bg-white disabled:opacity-60 sm:px-5 sm:py-4"
+              value={latex}
+              spellCheck={false}
+              disabled={pending}
+              onChange={(e) => {
+                setLatex(e.target.value);
+                setDirty(true);
+                setSelection(readTextareaSelection(e.currentTarget));
+              }}
+              onSelect={syncSourceSelection}
+              onKeyUp={syncSourceSelection}
+              onMouseUp={syncSourceSelection}
+            />
+          </>
         ) : (
           <>
             <div className="min-h-0 flex-1 overflow-auto border-t border-studio-border px-4 py-4 sm:px-5">
+              {versions.stack.length > 1 ? (
+                <div className="mb-3">
+                  <VersionStepper
+                    index={versions.index}
+                    total={versions.stack.length}
+                    disabled={pending || compiling}
+                    onPrev={() => restoreVersion(versions.index - 1)}
+                    onNext={() => restoreVersion(versions.index + 1)}
+                  />
+                </div>
+              ) : null}
               {review ? (
-                <ResumeReviewPanel review={review} />
+                <div data-testid="resume-review">
+                  <ResumeReviewPanel review={review} />
+                </div>
               ) : reply ? (
                 <p className="text-[0.95rem] leading-relaxed text-studio-ink">{reply}</p>
               ) : (
@@ -611,27 +899,38 @@ export function EditorClient({
                   <p className="text-sm text-studio-muted">
                     Ask for an edit, a role review, or paste a job description.
                   </p>
-                  <div className="mt-4 flex flex-col items-start gap-2">
-                    {PROMPT_EXAMPLES.map((example) => (
-                      <button
-                        key={example}
-                        type="button"
-                        disabled={pending}
-                        onClick={() => {
-                          setPrompt(example);
-                          promptRef.current?.focus();
-                        }}
-                        className="text-left text-sm text-studio-ink underline decoration-studio-border underline-offset-4 transition hover:decoration-studio-ink disabled:opacity-50"
-                      >
-                        {example}
-                      </button>
-                    ))}
-                  </div>
+                  <p className="mt-2 text-sm text-studio-muted">
+                    Try a recipe below
+                  </p>
                 </div>
               )}
             </div>
 
             <div className="shrink-0 border-t border-studio-border bg-studio-bg px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4">
+              {compileError ? (
+                <div className="mb-2">
+                  <CompileErrorBanner
+                    error={compileError}
+                    pending={pending}
+                    onDismiss={() => setCompileError(null)}
+                    onFix={() => {
+                      if (!compileError) return;
+                      runVibeEdit({
+                        prompt: COMPILE_FIX_PROMPT,
+                        compilerError: compileError,
+                        clearPrompt: false,
+                      });
+                    }}
+                  />
+                </div>
+              ) : null}
+              <PromptRecipes
+                disabled={pending}
+                onPick={(recipePrompt) => {
+                  setPrompt(recipePrompt);
+                  promptRef.current?.focus();
+                }}
+              />
               <div className="border border-studio-border bg-studio-paper focus-within:border-studio-ink/30">
                 <textarea
                   ref={promptRef}
@@ -644,25 +943,52 @@ export function EditorClient({
                   onChange={(e) => setPrompt(e.target.value)}
                   onKeyDown={onPromptKeyDown}
                 />
-                <div className="flex items-center justify-between gap-3 border-t border-studio-border/80 px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-studio-border/80 px-3 py-2">
                   <p className="hidden text-[0.7rem] text-studio-muted sm:block">
                     ⌘/Ctrl + Enter
                   </p>
-                  <button
-                    type="button"
-                    data-testid="vibe-submit"
-                    disabled={pending || !prompt.trim()}
-                    onClick={runVibeEdit}
-                    className="min-h-9 flex-1 bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45 sm:flex-none sm:min-w-[7.5rem]"
-                  >
-                    {pending
-                      ? promptIsReview
-                        ? "Reviewing…"
-                        : "Working…"
-                      : promptIsReview
-                        ? "Review"
-                        : "Run"}
-                  </button>
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none">
+                    {pending ? (
+                      <button
+                        type="button"
+                        data-testid="vibe-stop"
+                        onClick={stopVibeEdit}
+                        className="min-h-9 border border-studio-border bg-studio-paper px-3 py-2 text-sm font-medium text-studio-ink transition hover:border-studio-ink/30"
+                      >
+                        Stop
+                      </button>
+                    ) : null}
+                    {!pending && lastPrompt ? (
+                      <button
+                        type="button"
+                        data-testid="vibe-regenerate"
+                        onClick={() =>
+                          runVibeEdit({
+                            prompt: lastPrompt,
+                            clearPrompt: false,
+                          })
+                        }
+                        className="min-h-9 border border-studio-border bg-studio-paper px-3 py-2 text-sm font-medium text-studio-ink transition hover:border-studio-ink/30"
+                      >
+                        Regenerate
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      data-testid="vibe-submit"
+                      disabled={pending || !prompt.trim()}
+                      onClick={() => runVibeEdit()}
+                      className="min-h-9 flex-1 bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45 sm:flex-none sm:min-w-[7.5rem]"
+                    >
+                      {pending
+                        ? promptIsReview
+                          ? "Reviewing…"
+                          : "Working…"
+                        : promptIsReview
+                          ? "Review"
+                          : "Run"}
+                    </button>
+                  </div>
                 </div>
               </div>
               <StatusLog lines={statusLines} active={pending} />
@@ -709,6 +1035,24 @@ export function EditorClient({
         </div>
 
         <div className="flex flex-1 flex-col items-center gap-3 overflow-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:gap-4 sm:p-6 md:p-10">
+          {compileError && mode === "source" ? (
+            <div className="w-full max-w-3xl">
+              <CompileErrorBanner
+                error={compileError}
+                pending={pending}
+                onDismiss={() => setCompileError(null)}
+                onFix={() => {
+                  if (!compileError) return;
+                  setMode("vibe");
+                  runVibeEdit({
+                    prompt: COMPILE_FIX_PROMPT,
+                    compilerError: compileError,
+                    clearPrompt: false,
+                  });
+                }}
+              />
+            </div>
+          ) : null}
           <PDFPreview
             pdfBase64={pdfBase64}
             pageCount={pageCount}
@@ -743,6 +1087,15 @@ export function EditorClient({
         hideTitle
         onClose={() => setTemplatePickerOpen(false)}
         onConfirm={(id) => applyTemplate(id)}
+      />
+      <WritingProfileModal
+        open={profileOpen}
+        profile={writingProfile}
+        onClose={() => setProfileOpen(false)}
+        onSaved={(profile) => {
+          setWritingProfile(profile);
+          toast.success("Writing profile saved");
+        }}
       />
     </div>
   );
