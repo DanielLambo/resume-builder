@@ -287,14 +287,20 @@ export function EditorClient({
           typeof result.data_json.latex === "string"
             ? result.data_json.latex
             : priorLatex;
+        const isReview = result.mode === "review";
 
         setLatex(nextLatex);
-        setDirty(true);
+        if (result.latexChanged) {
+          setDirty(true);
+          setGhostActive(true);
+        }
         setReply(result.reply);
         setPrompt("");
-        setGhostActive(true);
 
-        if (result.pdfBase64) {
+        if (isReview) {
+          // Keep the advice visible on the edit pane.
+          setMobilePane("edit");
+        } else if (result.pdfBase64) {
           setPdfBase64(result.pdfBase64);
           setPageCount(result.pageCount);
           setOnePageLock(result.lockedToOnePage);
@@ -313,16 +319,30 @@ export function EditorClient({
         const hasCompileSkip = serverLines.some((l) =>
           l.includes("PDF compile skipped"),
         );
+        const hasReviewReady = serverLines.some((l) =>
+          l.includes("Resume review ready"),
+        );
         setStatusLines(
-          hasRender || hasCompileSkip
+          hasRender || hasCompileSkip || hasReviewReady
             ? serverLines
-            : [
-                ...CLIENT_STEPS,
-                `[4/4] PDF rendered successfully (${result.pageCount ?? "?"} page) in ${result.elapsedMs}ms.`,
-              ],
+            : isReview
+              ? [
+                  "[1/4] Parsing prompt and extracting Zod schema...",
+                  "[2/4] Checking Upstash Redis daily token limit...",
+                  "[3/4] Reviewing resume against the target role...",
+                  "[4/4] Resume review ready.",
+                ]
+              : [
+                  ...CLIENT_STEPS,
+                  `[4/4] PDF rendered successfully (${result.pageCount ?? "?"} page) in ${result.elapsedMs}ms.`,
+                ],
         );
 
-        if (result.compileWarning) {
+        if (isReview) {
+          toast.success("Resume review ready", {
+            description: `${result.tokensUsed.toLocaleString()} tokens · advice only (TeX unchanged)`,
+          });
+        } else if (result.compileWarning) {
           toast.success("Vibe edit saved", {
             description: `AI applied · preview unavailable: ${result.compileWarning}`,
           });
@@ -570,13 +590,16 @@ export function EditorClient({
           <>
             <div className="min-h-0 flex-1 space-y-3 overflow-auto p-3 sm:p-4">
               {reply ? (
-                <div className="border border-studio-border bg-studio-paper p-3 text-sm leading-relaxed text-studio-ink">
+                <div
+                  className="border border-studio-border bg-studio-paper p-3 text-sm leading-relaxed text-studio-ink whitespace-pre-wrap"
+                  data-testid="vibe-reply"
+                >
                   {reply}
                 </div>
               ) : (
                 <div className="border border-dashed border-studio-border bg-studio-paper/60 p-3 font-mono text-xs text-studio-muted sm:p-4">
-                  Vibe-code the TeX — rewrite bullets, rename fields, or paste a
-                  JD to tailor. Surgical edits, honest facts, PDF-ready source.
+                  Vibe-code the TeX — rewrite bullets, rename fields, paste a JD
+                  to tailor, or ask “review my resume for SWE intern”.
                   <span className="mt-2 hidden text-studio-muted/80 sm:block">
                     Shortcut: ⌘/Ctrl + Enter
                   </span>
@@ -593,7 +616,7 @@ export function EditorClient({
                 data-testid="vibe-prompt"
                 className="mb-1 w-full resize-none border border-studio-border bg-white px-3 py-2.5 font-mono text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion disabled:cursor-not-allowed disabled:opacity-60"
                 rows={3}
-                placeholder="e.g. Make the Northstar bullets sharper — or paste a full job description…"
+                placeholder="e.g. Review my resume for a SWE intern role — or paste a JD to tailor…"
                 value={prompt}
                 disabled={pending}
                 onChange={(e) => setPrompt(e.target.value)}

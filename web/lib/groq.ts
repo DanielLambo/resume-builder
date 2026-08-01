@@ -13,6 +13,7 @@ import {
   extractLatexFromDataJson,
   validateResumeLatex,
 } from "@/lib/ai/latex-guard";
+import { reviewWantsFixes } from "@/lib/ai/review";
 import {
   buildResumeEditContext,
   detectEditIntent,
@@ -119,7 +120,8 @@ async function callGroqOnce(input: {
 }): Promise<GroqVibeEditResult> {
   const context = buildResumeEditContext(input.dataJson);
   const intent = detectEditIntent(input.prompt);
-  const system = buildVibeSystemPrompt(intent);
+  const adviceOnlyReview = intent === "review" && !reviewWantsFixes(input.prompt);
+  const system = buildVibeSystemPrompt(intent, input.prompt);
   const userPayload = buildVibeUserPayload({
     prompt: input.prompt,
     dataJson: input.dataJson,
@@ -135,7 +137,12 @@ async function callGroqOnce(input: {
     },
     body: JSON.stringify({
       model: input.model,
-      temperature: input.healHint ? 0.15 : input.temperature,
+      // Reviews benefit from a touch more evaluative range than renames.
+      temperature: input.healHint
+        ? 0.15
+        : intent === "review"
+          ? Math.min(0.45, input.temperature + 0.05)
+          : input.temperature,
       max_tokens: input.maxTokens,
       response_format: { type: "json_object" },
       messages: [
@@ -171,29 +178,43 @@ async function callGroqOnce(input: {
     throw new Error(`INVALID_JSON: ${detail}`);
   }
 
-  const modelLatex = extractLatexFromDataJson(output.data_json);
+  const reply = output.reply.trim();
+  if (intent === "review" && reply.length < 280) {
+    throw new Error(
+      "INVALID_JSON: Review reply too thin — expand into the required structured review.",
+    );
+  }
+
+  // Advice-only reviews must not mutate TeX (models love to "helpfully" rewrite).
+  const modelLatex = adviceOnlyReview
+    ? context.latex
+    : extractLatexFromDataJson(output.data_json);
   const latexError = validateResumeLatex(modelLatex, context.latex);
   if (latexError) {
     throw new Error(`LATEX_INVALID: ${latexError}`);
   }
 
-  const slopHits = findIntroducedAiSlop(modelLatex, context.latex);
-  if (slopHits.length > 0) {
-    throw new Error(formatAiSlopError(slopHits));
+  if (!adviceOnlyReview) {
+    const slopHits = findIntroducedAiSlop(modelLatex, context.latex);
+    if (slopHits.length > 0) {
+      throw new Error(formatAiSlopError(slopHits));
+    }
   }
 
   const mergedData = mergePreservingMeta(
     input.dataJson,
-    output.data_json,
+    adviceOnlyReview ? input.dataJson : output.data_json,
     modelLatex,
   );
 
   return {
     output: {
       data_json: mergedData,
-      reply: output.reply.trim(),
+      reply,
     },
     totalTokens: completion.usage.total_tokens,
+    intent,
+    latexChanged: modelLatex !== context.latex,
   };
 }
 
@@ -209,7 +230,15 @@ export async function invokeGroqVibeEdit(input: {
   onHeal?: (attempt: number, reason: string) => void;
 }): Promise<GroqVibeEditResult> {
   if (isMockAiEnabled()) {
-    return mockVibeEdit(input);
+    const mocked = mockVibeEdit(input);
+    const intent = detectEditIntent(input.prompt);
+    const prior = extractLatexFromDataJson(input.dataJson);
+    const next = extractLatexFromDataJson(mocked.output.data_json);
+    return {
+      ...mocked,
+      intent,
+      latexChanged: next !== prior,
+    };
   }
 
   const { apiKey, baseUrl, model, maxTokens, temperature } = groqConfig();
