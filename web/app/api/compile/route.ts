@@ -104,7 +104,12 @@ export async function POST(request: Request) {
       }
     }
     return NextResponse.json(
-      { success: false, error: message },
+      {
+        success: false,
+        error: message,
+        /** Short heal hint for “Fix with AI” — already sanitized. */
+        hint: message,
+      },
       { status: 500 },
     );
   }

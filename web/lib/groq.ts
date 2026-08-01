@@ -78,6 +78,7 @@ async function callGroqOnce(input: {
   prompt: string;
   dataJson: Record<string, unknown>;
   healHint?: string;
+  writingProfileNote?: string;
   apiKey: string;
   baseUrl: string;
   model: string;
@@ -88,7 +89,10 @@ async function callGroqOnce(input: {
     '{"data_json": object, "reply": string}',
     "data_json MUST include a full compilable LaTeX string in the `latex` field.",
     "Update data_json based on the user prompt. Keep facts honest. Do not invent employers or metrics.",
-  ].join(" ");
+    input.writingProfileNote?.trim() || "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const userPayload: Record<string, unknown> = {
     prompt: input.prompt,
@@ -161,6 +165,9 @@ async function callGroqOnce(input: {
 export async function invokeGroqVibeEdit(input: {
   prompt: string;
   dataJson: Record<string, unknown>;
+  /** Seed heal path with a known compile/validation error. */
+  healHint?: string;
+  writingProfileNote?: string;
   maxRetries?: number;
   maxHealRetries?: number;
   onHeal?: (attempt: number, reason: string) => void;
@@ -173,8 +180,8 @@ export async function invokeGroqVibeEdit(input: {
   const maxRetries = input.maxRetries ?? 3;
   const maxHealRetries = input.maxHealRetries ?? 2;
 
-  let healHint: string | undefined;
-  let healed = false;
+  let healHint: string | undefined = input.healHint?.trim() || undefined;
+  let healed = Boolean(healHint);
   let transportAttempt = 0;
 
   for (let heal = 0; heal <= maxHealRetries; heal += 1) {
@@ -185,6 +192,7 @@ export async function invokeGroqVibeEdit(input: {
             prompt: input.prompt,
             dataJson: input.dataJson,
             healHint,
+            writingProfileNote: input.writingProfileNote,
             apiKey,
             baseUrl,
             model,
