@@ -105,8 +105,8 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
   const isLogin = mode === "login";
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-studio-bg px-4 py-10">
-      <div className="w-full max-w-md border border-studio-border bg-studio-paper p-6 shadow-paper-sheet sm:p-8">
+    <main className="grid min-h-dvh place-items-center bg-studio-bg px-3 py-8 sm:px-4 sm:py-10">
+      <div className="w-full max-w-md border border-studio-border bg-studio-paper p-5 shadow-paper-sheet sm:p-8">
         <p className="font-mono text-xs tracking-wide text-studio-muted">
           TYPESETTER / RESUME ENGINE
         </p>
@@ -123,7 +123,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
           type="button"
           onClick={onGoogle}
           disabled={pending}
-          className="mt-6 w-full border border-studio-border bg-white px-4 py-2.5 text-sm font-medium text-studio-ink transition hover:bg-studio-canvas disabled:opacity-60"
+          className="mt-6 min-h-11 w-full border border-studio-border bg-white px-4 py-2.5 text-sm font-medium text-studio-ink transition hover:bg-studio-canvas disabled:opacity-60"
         >
           Continue with Google
         </button>
@@ -165,7 +165,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
           <button
             type="submit"
             disabled={pending}
-            className="mt-1 bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-60"
+            className="mt-1 min-h-11 bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-60"
           >
             {pending ? (isLogin ? "Signing in…" : "Creating…") : isLogin ? "Sign in" : "Sign up"}
           </button>

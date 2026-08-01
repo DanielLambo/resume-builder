@@ -30,11 +30,11 @@ export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-studio-border bg-studio-bg/95 backdrop-blur-sm">
-      <div className="mx-auto flex w-full max-w-none items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-6">
+      <div className="mx-auto flex w-full max-w-none items-center justify-between gap-2 px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-6">
           <Link
             href="/dashboard"
-            className="text-sm font-semibold tracking-tight text-studio-ink"
+            className="shrink-0 text-sm font-semibold tracking-tight text-studio-ink"
           >
             Resumate
           </Link>
@@ -49,11 +49,16 @@ export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           {showMeter ? (
-            <div className="hidden md:block">
-              <TokenMeter />
-            </div>
+            <>
+              <div className="md:hidden">
+                <TokenMeter compact />
+              </div>
+              <div className="hidden md:block">
+                <TokenMeter />
+              </div>
+            </>
           ) : null}
           {email ? (
             <span className="hidden max-w-[160px] truncate font-mono text-[0.65rem] text-studio-muted lg:inline">
@@ -64,17 +69,12 @@ export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
             type="button"
             onClick={onSignOut}
             disabled={pending}
-            className="border border-studio-border bg-studio-paper px-3 py-1.5 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-60"
+            className="min-h-9 shrink-0 border border-studio-border bg-studio-paper px-2.5 py-1.5 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-60 sm:px-3"
           >
             {pending ? "…" : "Sign out"}
           </button>
         </div>
       </div>
-      {showMeter ? (
-        <div className="border-t border-studio-border px-4 py-2 md:hidden">
-          <TokenMeter />
-        </div>
-      ) : null}
     </header>
   );
 }

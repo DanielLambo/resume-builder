@@ -147,7 +147,7 @@ export function DashboardClient({
           type="button"
           onClick={openPicker}
           disabled={pending}
-          className="inline-flex items-center justify-center bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white hover:bg-studio-vermilion-hover disabled:opacity-60"
+          className="inline-flex min-h-11 w-full items-center justify-center bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white hover:bg-studio-vermilion-hover disabled:opacity-60 sm:w-auto"
           data-testid="create-resume"
         >
           {pending && !busyId ? "Creating…" : "Create New Resume"}
@@ -200,7 +200,7 @@ export function DashboardClient({
                   <div className="mt-auto grid grid-cols-2 gap-2">
                     <Link
                       href={`/editor/${resume.id}`}
-                      className="col-span-2 bg-studio-vermilion px-3 py-2 text-center text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
+                      className="col-span-2 inline-flex min-h-11 items-center justify-center bg-studio-vermilion px-3 py-2.5 text-center text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
                     >
                       Edit in Vibe Coder
                     </Link>
@@ -208,7 +208,7 @@ export function DashboardClient({
                       type="button"
                       disabled={busy || pending}
                       onClick={() => onDuplicate(resume.id)}
-                      className="border border-studio-border px-3 py-2 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-50"
+                      className="min-h-10 border border-studio-border px-3 py-2 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-50"
                     >
                       Duplicate
                     </button>
@@ -216,7 +216,7 @@ export function DashboardClient({
                       type="button"
                       disabled={busy || pending}
                       onClick={() => onDownload(resume.id)}
-                      className="border border-studio-border px-3 py-2 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-50"
+                      className="min-h-10 border border-studio-border px-3 py-2 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-50"
                     >
                       Download PDF
                     </button>
@@ -224,7 +224,7 @@ export function DashboardClient({
                       type="button"
                       disabled={busy || pending}
                       onClick={() => onDelete(resume.id)}
-                      className="col-span-2 border border-studio-border px-3 py-2 text-xs font-medium text-studio-vermilion hover:bg-red-50 disabled:opacity-50"
+                      className="col-span-2 min-h-10 border border-studio-border px-3 py-2 text-xs font-medium text-studio-vermilion hover:bg-red-50 disabled:opacity-50"
                     >
                       Delete
                     </button>

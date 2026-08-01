@@ -50,7 +50,7 @@ export function TemplatePicker({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-studio-ink/35 p-4"
+      className="fixed inset-0 z-50 grid place-items-end bg-studio-ink/35 p-0 sm:place-items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="template-picker-title"
@@ -58,7 +58,7 @@ export function TemplatePicker({
       onClick={onClose}
     >
       <div
-        className="max-h-[90dvh] w-full max-w-3xl overflow-auto border border-studio-border bg-studio-paper p-5 shadow-paper-sheet"
+        className="max-h-[92dvh] w-full max-w-3xl overflow-auto border border-studio-border bg-studio-paper p-4 shadow-paper-sheet sm:p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
@@ -139,18 +139,18 @@ export function TemplatePicker({
           })}
         </ul>
 
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <div className="sticky bottom-0 mt-5 flex flex-col-reverse gap-2 bg-studio-paper pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-2 sm:flex-row sm:flex-wrap sm:justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="border border-studio-border px-3 py-2 text-sm text-studio-ink hover:bg-studio-canvas"
+            className="min-h-11 border border-studio-border px-3 py-2.5 text-sm text-studio-ink hover:bg-studio-canvas sm:min-h-0"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={() => onConfirm(selected, resumeTitle.trim() || "My Resume")}
-            className="bg-studio-vermilion px-4 py-2 text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
+            className="min-h-11 bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white hover:bg-studio-vermilion-hover sm:min-h-0"
             data-testid="template-picker-confirm"
           >
             {confirmLabel}

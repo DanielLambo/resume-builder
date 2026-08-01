@@ -20,6 +20,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type MobilePane = "edit" | "preview";
+
 export function HarnessClient() {
   const { applyUsage, used } = useTokenUsage();
   const [latex, setLatex] = useState(DEFAULT_RESUME_LATEX);
@@ -30,6 +32,7 @@ export function HarnessClient() {
   const [onePageLock, setOnePageLock] = useState(true);
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
+  const [mobilePane, setMobilePane] = useState<MobilePane>("edit");
 
   function run() {
     const text = prompt.trim();
@@ -75,6 +78,7 @@ export function HarnessClient() {
         setPageCount(data.pageCount ?? 1);
         setGhostActive(true);
         setOnePageLock(Boolean(data.lockedToOnePage ?? data.pageCount === 1));
+        setMobilePane("preview");
         applyUsage(startUsed + result.totalTokens);
         setStatusLines((prev) => [
           ...prev,
@@ -100,20 +104,73 @@ export function HarnessClient() {
   }
 
   return (
-    <div className="min-h-dvh bg-studio-bg" data-testid="vibe-harness" data-token-used={used}>
+    <div
+      className="flex min-h-dvh flex-col bg-studio-bg"
+      data-testid="vibe-harness"
+      data-token-used={used}
+    >
       {pending ? (
         <div className="h-0.5 animate-pulse bg-studio-vermilion" data-testid="vermilion-loader" />
       ) : null}
-      <header className="flex items-center justify-between border-b border-studio-border px-4 py-3">
-        <p className="font-mono text-xs text-studio-muted">TYPESETTER / MOCK HARNESS</p>
-        <TokenMeter />
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-studio-border px-3 py-2.5 sm:px-4 sm:py-3">
+        <p className="min-w-0 truncate font-mono text-[0.65rem] text-studio-muted sm:text-xs">
+          TYPESETTER / MOCK HARNESS
+        </p>
+        <div className="shrink-0">
+          <span className="md:hidden">
+            <TokenMeter compact />
+          </span>
+          <span className="hidden md:block">
+            <TokenMeter />
+          </span>
+        </div>
       </header>
-      <div className="grid gap-0 lg:grid-cols-2">
-        <section className="border-r border-studio-border p-4">
+
+      <div
+        className="flex shrink-0 border-b border-studio-border lg:hidden"
+        role="tablist"
+        aria-label="Harness panes"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobilePane === "edit"}
+          onClick={() => setMobilePane("edit")}
+          className={`flex-1 px-3 py-3 text-center text-sm font-semibold ${
+            mobilePane === "edit"
+              ? "border-b-2 border-studio-vermilion text-studio-ink"
+              : "text-studio-muted"
+          }`}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobilePane === "preview"}
+          onClick={() => setMobilePane("preview")}
+          className={`flex-1 px-3 py-3 text-center text-sm font-semibold ${
+            mobilePane === "preview"
+              ? "border-b-2 border-studio-vermilion text-studio-ink"
+              : "text-studio-muted"
+          }`}
+        >
+          Preview
+        </button>
+      </div>
+
+      <div className="grid min-h-0 flex-1 lg:grid-cols-2">
+        <section
+          className={[
+            "flex min-h-0 flex-col border-studio-border p-3 sm:p-4 lg:border-r",
+            mobilePane === "edit" ? "flex" : "hidden",
+            "lg:flex",
+          ].join(" ")}
+        >
           <textarea
             data-testid="vibe-prompt"
             className="mb-3 w-full border border-studio-border bg-white p-3 font-mono text-sm disabled:opacity-60"
-            rows={5}
+            rows={4}
             disabled={pending}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -126,7 +183,7 @@ export function HarnessClient() {
             data-testid="vibe-submit"
             disabled={pending}
             onClick={run}
-            className="mt-3 w-full bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="mt-3 min-h-11 w-full bg-studio-vermilion px-3 py-3 text-sm font-semibold text-white disabled:opacity-60 sm:min-h-0 sm:py-2"
           >
             Run vibe edit
           </button>
@@ -138,13 +195,24 @@ export function HarnessClient() {
             {/Docker/i.test(latex) ? " Docker" : ""}
           </p>
         </section>
-        <section className="bg-studio-canvas p-6">
+        <section
+          className={[
+            "min-h-0 overflow-auto bg-studio-canvas p-3 sm:p-6",
+            mobilePane === "preview" ? "block" : "hidden",
+            "lg:block",
+          ].join(" ")}
+        >
           <div className="mb-3 flex justify-end">
             <span
               data-testid="one-page-lock"
-              className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 font-mono text-xs text-emerald-700"
+              className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 font-mono text-[0.65rem] text-emerald-700 sm:text-xs"
             >
-              {onePageLock ? "[ 100% 1-PAGE LOCK ACTIVE ]" : "[ FIT PENDING ]"}
+              <span className="sm:hidden">
+                {onePageLock ? "[ 1-PG LOCK ]" : "[ FIT PENDING ]"}
+              </span>
+              <span className="hidden sm:inline">
+                {onePageLock ? "[ 100% 1-PAGE LOCK ACTIVE ]" : "[ FIT PENDING ]"}
+              </span>
             </span>
           </div>
           <PDFPreview
