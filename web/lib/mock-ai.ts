@@ -2,11 +2,18 @@ import { extractTargetRole, type GroqResumeReviewResult } from "@/lib/resume-rev
 import type { GroqVibeEditResult, VibeEditModelOutput } from "@/lib/vibe-types";
 import { getLatexFromDataJson } from "@/lib/resume-template";
 
+import { isProductionRuntime } from "@/lib/prod-runtime";
+
 export function isMockAiEnabled(): boolean {
-  return (
+  const requested =
     process.env.NEXT_PUBLIC_USE_MOCK_AI === "true" ||
-    process.env.USE_MOCK_AI === "true"
-  );
+    process.env.USE_MOCK_AI === "true";
+  if (!requested) return false;
+  // Never ship mock AI (quota bypass) to production unless explicitly forced.
+  if (isProductionRuntime() && process.env.ALLOW_MOCK_AI_IN_PROD !== "1") {
+    return false;
+  }
+  return true;
 }
 
 function ensureSkillsWithAwsDocker(latex: string): string {

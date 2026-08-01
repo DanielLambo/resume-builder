@@ -46,7 +46,7 @@ export function OnboardingWizard() {
       } catch {
         /* confetti is optional polish */
       }
-      toast.success("Welcome to Typesetter");
+      toast.success("Welcome to Resumate");
       router.replace("/dashboard");
       router.refresh();
     } catch (err) {

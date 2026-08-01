@@ -68,7 +68,7 @@ function looksLikeLatex(dataJson: Record<string, unknown>): string | null {
   if (!/\\begin\{document\}/.test(latex) || !/\\end\{document\}/.test(latex)) {
     return "LaTeX missing document environment";
   }
-  if (/\\write18|\\immediate\\s*\\write|\\openout/.test(latex)) {
+  if (/\\write18|\\immediate\s*\\write|\\openout|\\input\b|\\include\b/.test(latex)) {
     return "LaTeX contains blocked shell escapes";
   }
   return null;

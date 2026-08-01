@@ -1,6 +1,6 @@
 "use server";
 
-import { injectLaTeXConfig } from "@resumate/one-page-lock";
+import { injectLaTeXConfig, sanitizeLatex } from "@resumate/one-page-lock";
 import { z } from "zod";
 
 import type { Json } from "@/lib/database.types";
@@ -11,6 +11,7 @@ import { getJobTargetFromDataJson } from "@/lib/job-target";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import { persistResumePdf } from "@/lib/persist-resume-pdf";
 import {
+  AiQuotaUnavailableError,
   AiRateLimitError,
   assertWithinDailyAiLimit,
   DAILY_AI_TOKEN_LIMIT,
@@ -74,6 +75,7 @@ export type VibeEditFailure = {
   error: string;
   code?:
     | "AI_DAILY_LIMIT"
+    | "AI_QUOTA_UNAVAILABLE"
     | "UNAUTHORIZED"
     | "VALIDATION"
     | "NOT_FOUND"
@@ -164,6 +166,15 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
             used: payload.used,
             limit: payload.limit,
             resetHint: utcMidnightResetHint(),
+            steps,
+          };
+        }
+        if (err instanceof AiQuotaUnavailableError) {
+          return {
+            ok: false,
+            status: 500,
+            code: "AI_QUOTA_UNAVAILABLE",
+            error: err.message,
             steps,
           };
         }
@@ -275,7 +286,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     });
     if (groqResult.healed) healed = true;
 
-    const editedLatex =
+    let editedLatex =
       typeof groqResult.output.data_json.latex === "string"
         ? groqResult.output.data_json.latex
         : "";
@@ -289,6 +300,18 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
         steps,
       };
     }
+
+    const sanitizedEdit = sanitizeLatex(editedLatex);
+    if (!sanitizedEdit.ok) {
+      return {
+        ok: false,
+        status: 500,
+        code: "INTERNAL",
+        error: sanitizedEdit.error,
+        steps,
+      };
+    }
+    editedLatex = sanitizedEdit.content;
 
     push("Compiling LaTeX via 1-Page Lock engine...");
 
@@ -424,6 +447,15 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
         steps,
       };
     }
+    if (err instanceof AiQuotaUnavailableError) {
+      return {
+        ok: false,
+        status: 500,
+        code: "AI_QUOTA_UNAVAILABLE",
+        error: err.message,
+        steps,
+      };
+    }
 
     const message = err instanceof Error ? err.message : "Unexpected server error";
     const network = /fetch failed|network|ECONNREFUSED|timeout/i.test(message);
@@ -433,7 +465,11 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       ok: false,
       status: 500,
       code: network ? "NETWORK" : "INTERNAL",
-      error: compileRelated ? sanitizeCompileError(err) : message,
+      error: compileRelated
+        ? sanitizeCompileError(err)
+        : network
+          ? message
+          : "Something went wrong while editing. Your draft is intact.",
       resetHint: network
         ? "Network dropped mid-edit. Your current draft is intact — export .tex as a backup."
         : undefined,

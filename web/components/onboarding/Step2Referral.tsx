@@ -33,7 +33,7 @@ export function Step2Referral({
           How did you hear about us?
         </h1>
         <p className="max-w-xl text-sm leading-relaxed text-studio-muted sm:text-base">
-          Select the option that best describes where you found Typesetter.
+          Select the option that best describes where you found Resumate.
         </p>
       </header>
 

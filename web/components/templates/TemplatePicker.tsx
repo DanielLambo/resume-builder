@@ -62,7 +62,7 @@ export function TemplatePicker({
         onClick={(e) => e.stopPropagation()}
       >
         <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
-          Typesetter / templates
+          Resumate / templates
         </p>
         <h2
           id="template-picker-title"

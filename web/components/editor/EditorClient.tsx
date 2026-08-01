@@ -163,6 +163,7 @@ export function EditorClient({
   const compileGen = useRef(0);
   const latexRef = useRef(latex);
   const replyRef = useRef(reply);
+  const dirtyRef = useRef(dirty);
   const templateIdRef = useRef(templateId);
   const cancelSignalRef = useRef<{ cancelled: boolean }>({ cancelled: false });
   const savingRef = useRef(false);
@@ -170,6 +171,7 @@ export function EditorClient({
   const didInitialCompile = useRef(false);
   latexRef.current = latex;
   replyRef.current = reply;
+  dirtyRef.current = dirty;
   templateIdRef.current = templateId;
 
   const orphanCount = useMemo(
@@ -177,52 +179,80 @@ export function EditorClient({
     [heatmapOn, latex],
   );
 
-  const flushSave = useCallback(async () => {
-    if (savingRef.current) {
-      pendingResaveRef.current = true;
-      return;
-    }
-    savingRef.current = true;
-    try {
-      let passes = 0;
-      do {
-        pendingResaveRef.current = false;
-        passes += 1;
-        const snapshot = latexRef.current;
-        const snapshotTemplate = templateIdRef.current;
-        const result = await saveResumeLatexAction(
-          resumeId,
-          snapshot,
-          title,
-          snapshotTemplate,
-        );
-        if (!result.ok) {
-          toast.error(result.error);
-          return;
-        }
-        const drifted =
-          latexRef.current !== snapshot ||
-          templateIdRef.current !== snapshotTemplate ||
-          pendingResaveRef.current;
-        if (drifted && passes < 5) {
-          continue;
-        }
-        if (!drifted) setDirty(false);
-        toast.success("Resume saved to your account", { duration: 2200 });
+  const flushSave = useCallback(
+    async ({ quiet = true }: { quiet?: boolean } = {}) => {
+      if (savingRef.current) {
+        pendingResaveRef.current = true;
         return;
-      } while (passes < 5);
-    } finally {
-      savingRef.current = false;
-    }
-  }, [resumeId, title]);
+      }
+      savingRef.current = true;
+      try {
+        let passes = 0;
+        do {
+          pendingResaveRef.current = false;
+          passes += 1;
+          const snapshot = latexRef.current;
+          const snapshotTemplate = templateIdRef.current;
+          const result = await saveResumeLatexAction(
+            resumeId,
+            snapshot,
+            title,
+            snapshotTemplate,
+          );
+          if (!result.ok) {
+            toast.error(result.error);
+            return;
+          }
+          const drifted =
+            latexRef.current !== snapshot ||
+            templateIdRef.current !== snapshotTemplate ||
+            pendingResaveRef.current;
+          if (drifted && passes < 5) {
+            continue;
+          }
+          if (!drifted) setDirty(false);
+          if (!quiet) {
+            toast.success("Resume saved to your account", { duration: 2200 });
+          }
+          return;
+        } while (passes < 5);
+      } finally {
+        savingRef.current = false;
+      }
+    },
+    [resumeId, title],
+  );
 
   useEffect(() => {
     if (!dirty) return;
     const t = window.setTimeout(() => {
-      void flushSave();
+      void flushSave({ quiet: true });
     }, 1600);
     return () => window.clearTimeout(t);
   }, [dirty, flushSave, latex, templateId]);
+
+  // Flush pending edits when leaving the editor so Library navigation can't drop them.
+  useEffect(() => {
+    return () => {
+      if (!dirtyRef.current) return;
+      void saveResumeLatexAction(
+        resumeId,
+        latexRef.current,
+        title,
+        templateIdRef.current,
+      );
+    };
+  }, [resumeId, title]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   useEffect(() => {
     if (!ghostActive) return;
@@ -299,8 +329,9 @@ export function EditorClient({
         setPdfBase64(data.pdfBase64);
         setPageCount(data.pageCount ?? null);
         setOnePageLock(Boolean(data.lockedToOnePage ?? data.pageCount === 1));
-        setMobilePane("preview");
+        // Only yank mobile users to Preview on an explicit Compile.
         if (!quiet) {
+          setMobilePane("preview");
           toast.success("Preview ready", {
             description: `${data.pageCount ?? "?"} page · ${data.elapsedMs ?? 0}ms`,
           });
@@ -571,7 +602,7 @@ export function EditorClient({
 
   function runSelectionEdit() {
     const sel = selection;
-    const text = selectionPrompt.trim() || prompt.trim();
+    const text = selectionPrompt.trim();
     if (!sel || !sel.text.trim()) {
       toast.message("Select a span in the source first");
       return;
@@ -840,6 +871,11 @@ export function EditorClient({
           <Link
             href="/dashboard"
             className="shrink-0 text-xs text-studio-muted transition hover:text-studio-ink"
+            onClick={() => {
+              if (dirtyRef.current) {
+                void flushSave({ quiet: true });
+              }
+            }}
           >
             Library
           </Link>
@@ -927,10 +963,7 @@ export function EditorClient({
                 <button
                   type="button"
                   data-testid="selection-edit-submit"
-                  disabled={
-                    busy ||
-                    !(selectionPrompt.trim() || prompt.trim())
-                  }
+                  disabled={busy || !selectionPrompt.trim()}
                   onClick={runSelectionEdit}
                   className="min-h-8 bg-studio-vermilion px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45"
                 >
@@ -940,6 +973,7 @@ export function EditorClient({
             ) : null}
             <textarea
               ref={sourceRef}
+              aria-label="Resume LaTeX source"
               className="min-h-0 flex-1 resize-none border-t border-studio-border bg-studio-paper px-4 py-3 font-mono text-[0.8rem] leading-relaxed text-studio-ink outline-none focus:bg-white disabled:opacity-60 sm:px-5 sm:py-4"
               value={latex}
               spellCheck={false}
@@ -1013,6 +1047,7 @@ export function EditorClient({
                 <textarea
                   ref={promptRef}
                   data-testid="vibe-prompt"
+                  aria-label="AI edit prompt"
                   className="w-full resize-none bg-transparent px-3 py-3 text-sm leading-relaxed text-studio-ink outline-none placeholder:text-studio-muted/70 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[0.9rem]"
                   rows={3}
                   placeholder="What should change?"
