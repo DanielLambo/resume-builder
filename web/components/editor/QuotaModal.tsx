@@ -54,7 +54,7 @@ export function QuotaModal({
         onClick={(e) => e.stopPropagation()}
       >
         <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
-          Typesetter notice
+          Resumate notice
         </p>
         <h2 id="quota-modal-title" className="mt-1 text-lg font-semibold text-studio-ink">
           {title}

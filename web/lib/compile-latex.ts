@@ -1,6 +1,7 @@
-import { compileLatexWithPdflatex } from "@resumate/one-page-lock";
+import { compileLatexWithPdflatex, sanitizeLatex } from "@resumate/one-page-lock";
 
 import type { CompileLatexFn } from "@resumate/one-page-lock";
+import { isProductionRuntime } from "@/lib/prod-runtime";
 
 /** Per-compile hard timeout (remote TeX). Override with LATEX_COMPILE_TIMEOUT_MS. */
 export const COMPILE_TIMEOUT_MS = Number(
@@ -8,14 +9,6 @@ export const COMPILE_TIMEOUT_MS = Number(
 );
 
 const LATEX_ONLINE_DEFAULT = "https://latexonline.cc/compile";
-
-function isProductionRuntime(): boolean {
-  return (
-    process.env.NODE_ENV === "production" ||
-    process.env.VERCEL === "1" ||
-    process.env.VERCEL_ENV === "production"
-  );
-}
 
 /**
  * Third-party latexonline.cc receives the full TeX document (names, emails,
@@ -147,10 +140,16 @@ function canUseLocalPdflatex(): boolean {
  * 3. latexonline.cc — only when ALLOW_LATEX_ONLINE=1 (never default in prod)
  */
 export const compileLatexRemote: CompileLatexFn = async (tex: string) => {
+  const sanitized = sanitizeLatex(tex);
+  if (!sanitized.ok) {
+    throw new Error(sanitized.error);
+  }
+  const safeTex = sanitized.content;
+
   const fastapi = process.env.LATEX_COMPILE_URL?.trim();
   if (fastapi) {
     return withTimeout(
-      compileViaFastapi(tex, fastapi),
+      compileViaFastapi(safeTex, fastapi),
       COMPILE_TIMEOUT_MS + 500,
       "LATEX_COMPILE_URL",
     );
@@ -159,7 +158,7 @@ export const compileLatexRemote: CompileLatexFn = async (tex: string) => {
   if (canUseLocalPdflatex()) {
     try {
       return await withTimeout(
-        compileLatexWithPdflatex(tex),
+        compileLatexWithPdflatex(safeTex),
         COMPILE_TIMEOUT_MS + 2_000,
         "pdflatex",
       );
@@ -178,7 +177,7 @@ export const compileLatexRemote: CompileLatexFn = async (tex: string) => {
   }
 
   return withTimeout(
-    compileViaLatexOnline(tex),
+    compileViaLatexOnline(safeTex),
     COMPILE_TIMEOUT_MS + 500,
     "latexonline",
   );

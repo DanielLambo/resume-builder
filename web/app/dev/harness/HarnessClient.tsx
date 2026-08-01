@@ -114,7 +114,7 @@ export function HarnessClient() {
       ) : null}
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-studio-border px-3 py-2.5 sm:px-4 sm:py-3">
         <p className="min-w-0 truncate font-mono text-[0.65rem] text-studio-muted sm:text-xs">
-          TYPESETTER / MOCK HARNESS
+          RESUMATE / MOCK HARNESS
         </p>
         <div className="shrink-0">
           <span className="md:hidden">

@@ -6,12 +6,14 @@ import { z } from "zod";
 import type { Json } from "@/lib/database.types";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import {
+  AiQuotaUnavailableError,
   AiRateLimitError,
   assertWithinDailyAiLimit,
   DAILY_AI_TOKEN_LIMIT,
   incrementDailyAiTokens,
   rateLimitExceededPayload,
 } from "@/lib/ratelimit";
+import { pushAiHistory } from "@/lib/ai-history";
 import { createClient } from "@/lib/supabase/server";
 import {
   formatWritingProfileForPrompt,
@@ -52,6 +54,7 @@ export type SelectionEditResult =
       status?: number;
       code?:
         | "AI_DAILY_LIMIT"
+        | "AI_QUOTA_UNAVAILABLE"
         | "UNAUTHORIZED"
         | "VALIDATION"
         | "NOT_FOUND"
@@ -215,6 +218,14 @@ export async function selectionEditAction(
             limit: payload.limit,
           };
         }
+        if (err instanceof AiQuotaUnavailableError) {
+          return {
+            ok: false,
+            status: 503,
+            code: "AI_QUOTA_UNAVAILABLE",
+            error: err.message,
+          };
+        }
         throw err;
       }
     }
@@ -254,10 +265,19 @@ export async function selectionEditAction(
       typeof prev.version === "number" && Number.isFinite(prev.version)
         ? prev.version + 1
         : 1;
+    const nextHistory = pushAiHistory(prev.ai_history, {
+      latex: nextLatex,
+      reply: edited.reply,
+      prompt,
+      at: new Date().toISOString(),
+    });
     const nextData = {
       ...prev,
       latex: nextLatex,
       version,
+      ai_history: nextHistory,
+      last_ai_reply: edited.reply,
+      last_ai_prompt: prompt,
       template:
         (typeof prev.template === "string" && prev.template) || "new-grad",
     };
@@ -315,11 +335,19 @@ export async function selectionEditAction(
         limit: payload.limit,
       };
     }
+    if (err instanceof AiQuotaUnavailableError) {
+      return {
+        ok: false,
+        status: 503,
+        code: "AI_QUOTA_UNAVAILABLE",
+        error: err.message,
+      };
+    }
     return {
       ok: false,
       status: 500,
       code: "INTERNAL",
-      error: err instanceof Error ? err.message : "Selection edit failed",
+      error: "Selection edit failed. Your draft is intact.",
     };
   }
 }

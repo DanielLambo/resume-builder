@@ -42,13 +42,20 @@ export function TokenUsageProvider({ children }: { children: ReactNode }) {
         setWarning(null);
         return;
       }
-      if (!res.ok) return;
-      const data = (await res.json()) as {
+      const data = (await res.json().catch(() => ({}))) as {
         used?: number;
         remaining?: number;
         limit?: number;
         warning?: string;
+        unavailable?: boolean;
       };
+      if (!res.ok || data.unavailable) {
+        setUsed(Number(data.used ?? 0));
+        setLimit(Number(data.limit ?? DAILY_AI_TOKEN_LIMIT));
+        setRemaining(Number(data.remaining ?? 0));
+        setWarning("Quota unavailable");
+        return;
+      }
       setUsed(Number(data.used ?? 0));
       setLimit(Number(data.limit ?? DAILY_AI_TOKEN_LIMIT));
       setRemaining(

@@ -21,6 +21,8 @@ export function LineOptimizerToggle({
   ready = true,
   compact = false,
 }: LineOptimizerToggleProps) {
+  const label = compact ? "Lines" : "Line fit";
+
   return (
     <div
       className="inline-flex items-center gap-2 select-none"
@@ -28,42 +30,32 @@ export function LineOptimizerToggle({
     >
       <span
         id="line-optimizer-label"
-        className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted"
+        className="text-xs text-studio-muted"
       >
-        {compact ? (
-          <>
-            <span className="sm:hidden">Lines</span>
-            <span className="hidden sm:inline">Line fit</span>
-          </>
-        ) : (
-          "Line fit"
-        )}
+        {label}
       </span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={ready ? enabled : false}
+      <div
+        className="inline-flex border border-studio-border bg-studio-paper p-0.5"
+        role="group"
         aria-labelledby="line-optimizer-label"
-        disabled={!ready}
-        onClick={() => onChange(!enabled)}
-        className={[
-          "relative h-6 w-10 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-studio-vermilion disabled:opacity-50 sm:h-5 sm:w-9",
-          ready && enabled ? "bg-amber-500" : "bg-studio-border",
-        ].join(" ")}
       >
-        <span
+        <button
+          type="button"
+          role="switch"
+          aria-checked={ready ? enabled : false}
+          disabled={!ready}
+          onClick={() => onChange(!enabled)}
           className={[
-            "absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform sm:top-0.5",
+            "min-h-7 px-2.5 text-[0.7rem] font-medium transition disabled:opacity-50",
             ready && enabled
-              ? "translate-x-[1.35rem] sm:translate-x-4"
-              : "translate-x-0.5",
+              ? "bg-studio-ink text-white"
+              : "text-studio-muted hover:text-studio-ink",
           ].join(" ")}
-        />
-      </button>
-      <span className="font-mono text-[0.65rem] text-studio-muted" aria-live="polite">
-        {!ready ? "…" : enabled ? "ON" : "OFF"}
-        {ready && enabled && orphanCount > 0 ? ` · ${orphanCount}` : ""}
-      </span>
+        >
+          {!ready ? "…" : enabled ? "On" : "Off"}
+          {ready && enabled && orphanCount > 0 ? ` · ${orphanCount}` : ""}
+        </button>
+      </div>
     </div>
   );
 }

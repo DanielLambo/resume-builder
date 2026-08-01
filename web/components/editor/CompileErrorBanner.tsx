@@ -40,7 +40,7 @@ export function CompileErrorBanner({
         data-testid="compile-fix-ai"
         disabled={pending}
         onClick={onFix}
-        className="mt-2 min-h-9 bg-studio-vermilion px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-50"
+        className="mt-2 min-h-9 bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-50"
       >
         {pending ? "Fixing…" : "Fix with AI"}
       </button>

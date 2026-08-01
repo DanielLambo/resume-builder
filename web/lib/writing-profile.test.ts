@@ -25,6 +25,17 @@ describe("writingProfileFromMetadata", () => {
     const profile = writingProfileFromMetadata(null);
     assert.equal(writingProfileHasSignal(profile), false);
   });
+
+  it("truncates oversized fields instead of throwing", () => {
+    const profile = writingProfileFromMetadata({
+      full_name: "A".repeat(200),
+      writing_instructions: "x".repeat(2_000),
+      job_types: ["internship"],
+    });
+    assert.equal(profile.fullName?.length, 80);
+    assert.equal(profile.instructions?.length, 500);
+    assert.equal(writingProfileHasSignal(profile), true);
+  });
 });
 
 describe("formatWritingProfileForPrompt", () => {

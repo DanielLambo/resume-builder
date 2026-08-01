@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 
+import { isProductionRuntime } from "@/lib/prod-runtime";
 import { DAILY_AI_TOKEN_LIMIT } from "@/lib/ratelimit-constants";
 
 export { DAILY_AI_TOKEN_LIMIT } from "@/lib/ratelimit-constants";
@@ -28,6 +29,17 @@ export class AiRateLimitError extends Error {
   }
 }
 
+export class AiQuotaUnavailableError extends Error {
+  readonly status = 503 as const;
+
+  constructor() {
+    super(
+      "AI usage tracking is unavailable. Configure Upstash Redis, then try again.",
+    );
+    this.name = "AiQuotaUnavailableError";
+  }
+}
+
 function utcDayKey(date = new Date()): string {
   return date.toISOString().slice(0, 10);
 }
@@ -49,8 +61,19 @@ function openUsage(userId: string): RateLimitStatus {
   };
 }
 
+function closedUsage(userId: string): RateLimitStatus {
+  return {
+    allowed: false,
+    used: DAILY_AI_TOKEN_LIMIT,
+    remaining: 0,
+    limit: DAILY_AI_TOKEN_LIMIT,
+    dayKey: utcDayKey(),
+    redisKey: aiLimitRedisKey(userId),
+  };
+}
+
 /**
- * Returns Redis when configured; null when env is missing (local/demo soft-open).
+ * Returns Redis when configured; null when env is missing.
  */
 export function getRedis(): Redis | null {
   if (redisSingleton) return redisSingleton;
@@ -68,11 +91,14 @@ export function getRedis(): Redis | null {
 
 /**
  * Read current daily token usage. Does not increment.
- * Soft-opens (allows AI) when Upstash is unavailable so demos do not hard-fail.
+ * Soft-opens locally when Upstash is unavailable; fail-closed in production.
  */
 export async function getDailyAiUsage(userId: string): Promise<RateLimitStatus> {
   const redis = getRedis();
-  if (!redis) return openUsage(userId);
+  if (!redis) {
+    if (isProductionRuntime()) return closedUsage(userId);
+    return openUsage(userId);
+  }
 
   try {
     const redisKey = aiLimitRedisKey(userId);
@@ -89,6 +115,7 @@ export async function getDailyAiUsage(userId: string): Promise<RateLimitStatus> 
       redisKey,
     };
   } catch {
+    if (isProductionRuntime()) return closedUsage(userId);
     return openUsage(userId);
   }
 }
@@ -96,10 +123,19 @@ export async function getDailyAiUsage(userId: string): Promise<RateLimitStatus> 
 /**
  * Enforce the daily cap before calling Groq.
  * Throws AiRateLimitError when the user is already at/over 20,000 tokens.
+ * Throws AiQuotaUnavailableError when Redis is required but unavailable.
  */
 export async function assertWithinDailyAiLimit(userId: string): Promise<RateLimitStatus> {
+  const redis = getRedis();
+  if (!redis && isProductionRuntime()) {
+    throw new AiQuotaUnavailableError();
+  }
+
   const status = await getDailyAiUsage(userId);
   if (!status.allowed) {
+    if (!redis && isProductionRuntime()) {
+      throw new AiQuotaUnavailableError();
+    }
     throw new AiRateLimitError(status.used, status.limit);
   }
   return status;
@@ -108,7 +144,7 @@ export async function assertWithinDailyAiLimit(userId: string): Promise<RateLimi
 /**
  * Increment the user's daily token counter after a successful Groq call.
  * TTL ≈ 48h so keys self-expire across day boundaries.
- * Soft-opens when Redis is down — AI still succeeds for demos.
+ * Soft-opens locally when Redis is down; fail-closed in production.
  */
 export async function incrementDailyAiTokens(
   userId: string,
@@ -117,6 +153,9 @@ export async function incrementDailyAiTokens(
   const amount = Math.max(0, Math.floor(tokens));
   const redis = getRedis();
   if (!redis) {
+    if (isProductionRuntime()) {
+      throw new AiQuotaUnavailableError();
+    }
     return {
       ...openUsage(userId),
       used: amount,
@@ -144,7 +183,11 @@ export async function incrementDailyAiTokens(
       dayKey: utcDayKey(),
       redisKey,
     };
-  } catch {
+  } catch (err) {
+    if (err instanceof AiQuotaUnavailableError) throw err;
+    if (isProductionRuntime()) {
+      throw new AiQuotaUnavailableError();
+    }
     return {
       ...openUsage(userId),
       used: amount,

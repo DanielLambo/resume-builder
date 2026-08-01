@@ -1,10 +1,17 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
+import { safeNextPath } from "@/lib/auth-redirect";
 import type { Database } from "@/lib/database.types";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/editor", "/api/ai", "/onboarding"] as const;
-const AUTH_ROUTES = ["/login", "/signup"] as const;
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/editor",
+  "/api/ai",
+  "/onboarding",
+  "/reset-password",
+] as const;
+const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"] as const;
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(
@@ -70,10 +77,14 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && isAuthRoute(pathname)) {
-    const dash = request.nextUrl.clone();
-    dash.pathname = "/dashboard";
-    dash.search = "";
-    const redirect = NextResponse.redirect(dash);
+    const dest = safeNextPath(
+      request.nextUrl.searchParams.get("next"),
+      "/dashboard",
+    );
+    const target = request.nextUrl.clone();
+    target.pathname = dest;
+    target.search = "";
+    const redirect = NextResponse.redirect(target);
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirect.cookies.set(cookie.name, cookie.value);
     });

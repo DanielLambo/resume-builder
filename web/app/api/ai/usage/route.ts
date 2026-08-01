@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { DAILY_AI_TOKEN_LIMIT, getDailyAiUsage } from "@/lib/ratelimit";
+import { isProductionRuntime } from "@/lib/prod-runtime";
+import { DAILY_AI_TOKEN_LIMIT, getDailyAiUsage, getRedis } from "@/lib/ratelimit";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -14,6 +15,18 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (isProductionRuntime() && !getRedis()) {
+      return NextResponse.json(
+        {
+          used: 0,
+          remaining: 0,
+          limit: DAILY_AI_TOKEN_LIMIT,
+          unavailable: true,
+        },
+        { status: 503 },
+      );
+    }
+
     const usage = await getDailyAiUsage(user.id);
     return NextResponse.json({
       used: usage.used,
@@ -21,15 +34,25 @@ export async function GET() {
       limit: usage.limit ?? DAILY_AI_TOKEN_LIMIT,
       dayKey: usage.dayKey,
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to load usage";
+  } catch {
+    if (isProductionRuntime()) {
+      return NextResponse.json(
+        {
+          used: 0,
+          remaining: 0,
+          limit: DAILY_AI_TOKEN_LIMIT,
+          unavailable: true,
+        },
+        { status: 503 },
+      );
+    }
     // Soft-fail for local/dev without Upstash so the UI still renders.
     return NextResponse.json(
       {
         used: 0,
         remaining: DAILY_AI_TOKEN_LIMIT,
         limit: DAILY_AI_TOKEN_LIMIT,
-        warning: message,
+        unavailable: true,
       },
       { status: 200 },
     );

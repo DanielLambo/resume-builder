@@ -45,7 +45,7 @@ export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
             <span aria-hidden="true" className="px-1">
               |
             </span>
-            <span className="text-studio-muted/80">Typesetter Studio</span>
+            <span className="text-studio-muted/80">Resumate</span>
           </nav>
         </div>
 

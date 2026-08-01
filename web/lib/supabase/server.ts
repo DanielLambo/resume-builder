@@ -4,14 +4,15 @@ import { cookies } from "next/headers";
 import type { Database } from "@/lib/database.types";
 
 export async function createClient() {
+  // Call cookies() before env checks so Next can track dynamic usage even when
+  // env is missing during local/preview boots.
+  const cookieStore = await cookies();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
-
-  const cookieStore = await cookies();
 
   return createServerClient<Database>(url, anonKey, {
     cookies: {

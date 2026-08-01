@@ -43,12 +43,14 @@ export function writingProfileFromMetadata(meta: UserMetadata): WritingProfile {
       ? record.writing_instructions
       : "";
 
-  return WritingProfileSchema.parse({
-    fullName,
+  // Truncate then safeParse — never throw on oversized / odd metadata.
+  const parsed = WritingProfileSchema.safeParse({
+    fullName: fullName.slice(0, 80),
     jobTypes: asStringArray(record.job_types),
     targetFields: asStringArray(record.target_fields),
-    instructions,
+    instructions: instructions.slice(0, 500),
   });
+  return parsed.success ? parsed.data : EMPTY_WRITING_PROFILE;
 }
 
 export function writingProfileHasSignal(profile: WritingProfile): boolean {

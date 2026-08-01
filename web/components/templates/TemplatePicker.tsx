@@ -62,7 +62,7 @@ export function TemplatePicker({
         onClick={(e) => e.stopPropagation()}
       >
         <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
-          Typesetter / templates
+          Resumate / templates
         </p>
         <h2
           id="template-picker-title"
@@ -71,8 +71,9 @@ export function TemplatePicker({
           {title}
         </h2>
         <p className="mt-1 text-sm text-studio-muted">
-          Built for new grads — education, internships, and projects with
-          measurable outcomes.
+          {hideTitle
+            ? "Replacing the template overwrites the current source. Unsaved wording in this draft will be lost."
+            : "Built for new grads — education, internships, and projects with measurable outcomes."}
         </p>
 
         {!hideTitle ? (

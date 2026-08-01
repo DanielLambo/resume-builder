@@ -33,6 +33,15 @@ export function WritingProfileModal({
     }
   }, [open, profile.instructions]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const jobLabels = labelsForJobTypes(profile.jobTypes);
@@ -40,60 +49,56 @@ export function WritingProfileModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-studio-ink/30 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-studio-ink/35 p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="writing-profile-title"
       data-testid="writing-profile-modal"
+      onClick={onClose}
     >
-      <div className="w-full max-w-md border border-studio-border bg-studio-bg p-4 shadow-paper-sheet sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2
-              id="writing-profile-title"
-              className="text-base font-semibold text-studio-ink"
-            >
-              Writing profile
-            </h2>
-            <p className="mt-1 text-xs text-studio-muted">
-              Applied silently to every AI edit and review.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-xs text-studio-muted hover:text-studio-ink"
-          >
-            Close
-          </button>
-        </div>
+      <div
+        className="w-full max-w-md border border-studio-border bg-studio-paper p-4 shadow-paper-sheet sm:p-5"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
+          Resumate / writing profile
+        </p>
+        <h2
+          id="writing-profile-title"
+          className="mt-1 text-xl font-semibold tracking-tight text-studio-ink"
+        >
+          Writing profile
+        </h2>
+        <p className="mt-1 text-sm text-studio-muted">
+          Applied silently to every AI edit and review.
+        </p>
 
-        <dl className="mt-4 space-y-2 text-xs text-studio-muted">
+        <dl className="mt-4 space-y-2 text-sm text-studio-muted">
           {profile.fullName ? (
             <div>
-              <dt className="font-medium text-studio-ink">Name</dt>
+              <dt className="text-xs font-medium text-studio-ink">Name</dt>
               <dd>{profile.fullName}</dd>
             </div>
           ) : null}
           {jobLabels.length ? (
             <div>
-              <dt className="font-medium text-studio-ink">Job types</dt>
+              <dt className="text-xs font-medium text-studio-ink">Job types</dt>
               <dd>{jobLabels.join(" · ")}</dd>
             </div>
           ) : null}
           {fieldLabels.length ? (
             <div>
-              <dt className="font-medium text-studio-ink">Fields</dt>
+              <dt className="text-xs font-medium text-studio-ink">Fields</dt>
               <dd>{fieldLabels.join(" · ")}</dd>
             </div>
           ) : null}
         </dl>
 
-        <label className="mt-4 block text-xs font-medium text-studio-ink">
+        <label className="mt-4 block text-sm font-medium text-studio-ink">
           Voice & preferences
           <textarea
             data-testid="writing-profile-instructions"
-            className="mt-1.5 w-full resize-none border border-studio-border bg-studio-paper px-3 py-2 text-sm text-studio-ink outline-none focus:border-studio-ink/30"
+            className="mt-1.5 w-full resize-none border border-studio-border bg-white px-3 py-2 text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion/30"
             rows={4}
             maxLength={500}
             value={instructions}
@@ -107,28 +112,37 @@ export function WritingProfileModal({
         </p>
 
         {error ? (
-          <p className="mt-2 text-xs text-studio-vermilion">{error}</p>
+          <p className="mt-2 text-sm text-studio-vermilion">{error}</p>
         ) : null}
 
-        <button
-          type="button"
-          data-testid="writing-profile-save"
-          disabled={pending}
-          className="mt-3 min-h-10 w-full bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-          onClick={() => {
-            startTransition(async () => {
-              const result = await saveWritingProfileAction({ instructions });
-              if (!result.ok) {
-                setError(result.error);
-                return;
-              }
-              onSaved(result.profile);
-              onClose();
-            });
-          }}
-        >
-          {pending ? "Saving…" : "Save profile"}
-        </button>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 border border-studio-border px-3 py-2.5 text-sm text-studio-ink transition hover:bg-studio-canvas sm:min-h-9"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            data-testid="writing-profile-save"
+            disabled={pending}
+            className="min-h-11 bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-50 sm:min-h-9"
+            onClick={() => {
+              startTransition(async () => {
+                const result = await saveWritingProfileAction({ instructions });
+                if (!result.ok) {
+                  setError(result.error);
+                  return;
+                }
+                onSaved(result.profile);
+                onClose();
+              });
+            }}
+          >
+            {pending ? "Saving…" : "Save profile"}
+          </button>
+        </div>
       </div>
     </div>
   );

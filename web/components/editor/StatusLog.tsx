@@ -23,9 +23,12 @@ export function StatusLog({ lines, active }: StatusLogProps) {
           <li key={`${i}-${line}`}>{line}</li>
         ))}
       </ul>
-      {latest ? <p className="truncate">{latest.replace(/^\[\d+\/\d+\]\s*/, "")}</p> : null}
-      {active ? (
-        <p className="mt-0.5 animate-pulse text-studio-vermilion">Working…</p>
+      {latest ? (
+        <p className={`truncate ${active ? "animate-pulse text-studio-vermilion" : ""}`}>
+          {latest.replace(/^\[\d+\/\d+\]\s*/, "")}
+        </p>
+      ) : active ? (
+        <p className="animate-pulse text-studio-vermilion">Working…</p>
       ) : null}
     </div>
   );
