@@ -1161,7 +1161,7 @@ export function EditorClient({
                 }`}
               >
                 {onePageLock
-                  ? `${pageCount ?? 1} page · locked`
+                  ? `${pageCount ?? 1} page locked`
                   : `${pageCount ?? "?"} page${pageCount === 1 ? "" : "s"}`}
               </span>
             </div>
