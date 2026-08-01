@@ -44,6 +44,13 @@ function ensureSkillsWithAwsDocker(latex: string): string {
   );
 }
 
+function extractJobLabel(prompt: string): string | null {
+  const company = prompt.match(/company:\s*(.+)/i)?.[1]?.trim();
+  const role = prompt.match(/role:\s*(.+)/i)?.[1]?.trim();
+  if (company && role) return `${role} @ ${company}`;
+  return null;
+}
+
 /**
  * Offline / CI synthetic vibe-edit — never calls Groq or Upstash.
  */
@@ -65,6 +72,21 @@ export function mockVibeEdit(input: {
   ) {
     nextLatex = ensureSkillsWithAwsDocker(latex);
     reply = "Mock AI: added AWS and Docker to technical skills.";
+  }
+
+  if (prompt.includes("tailor this resume") || prompt.includes("job description:")) {
+    nextLatex = ensureSkillsWithAwsDocker(nextLatex);
+    const label = extractJobLabel(input.prompt);
+    // Soft marker in the document comment region — keeps compile stable.
+    if (!/% tailored-for:/i.test(nextLatex)) {
+      nextLatex = nextLatex.replace(
+        /\\begin\{document\}/i,
+        `\\begin{document}\n% tailored-for: ${label ?? "job application"}`,
+      );
+    }
+    reply = label
+      ? `Mock AI: tailored bullets and skills for ${label}.`
+      : "Mock AI: tailored resume toward the pasted job description.";
   }
 
   const output: VibeEditModelOutput = {

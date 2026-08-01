@@ -11,8 +11,14 @@ import {
   duplicateResumeAction,
   getResumePdfSignedUrlAction,
 } from "@/app/actions/resumes";
+import { tailorResumeForJobAction } from "@/app/actions/tailor-job";
+import { TailorForJobModal } from "@/components/dashboard/TailorForJobModal";
 import { TemplatePicker } from "@/components/templates/TemplatePicker";
 import type { ResumeRow } from "@/lib/database.types";
+import {
+  formatJobTargetLabel,
+  getJobTargetFromDataJson,
+} from "@/lib/job-target";
 import type { ResumeTemplateId } from "@/lib/resume-template";
 
 function formatDate(iso: string): string {
@@ -47,6 +53,8 @@ export function DashboardClient({
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [tailorSource, setTailorSource] = useState<ResumeRow | null>(null);
+  const [tailoring, setTailoring] = useState(false);
 
   function openPicker() {
     setPickerOpen(true);
@@ -128,6 +136,42 @@ export function DashboardClient({
     });
   }
 
+  function onTailorConfirm(input: {
+    company: string;
+    role: string;
+    jobDescription: string;
+  }) {
+    if (!tailorSource) return;
+    const sourceId = tailorSource.id;
+    setTailoring(true);
+    setBusyId(sourceId);
+    startTransition(async () => {
+      const toastId = toast.loading("Tailoring a job-specific resume…", {
+        description: "Duplicating base sheet and rewriting for the posting.",
+      });
+      const result = await tailorResumeForJobAction({
+        sourceResumeId: sourceId,
+        company: input.company,
+        role: input.role,
+        jobDescription: input.jobDescription,
+      });
+      setTailoring(false);
+      setBusyId(null);
+      if (!result.ok) {
+        toast.error(result.error, { id: toastId });
+        return;
+      }
+      setTailorSource(null);
+      toast.success("Job resume ready", {
+        id: toastId,
+        description: result.compileWarning
+          ? `${result.title} · preview pending: ${result.compileWarning}`
+          : `${result.title} · ${result.tokensUsed.toLocaleString()} tokens`,
+      });
+      router.push(`/editor/${result.id}`);
+    });
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="mb-8 flex flex-col gap-4 border-b border-studio-border pb-6 sm:flex-row sm:items-end sm:justify-between">
@@ -139,8 +183,7 @@ export function DashboardClient({
             Your resumes
           </h1>
           <p className="mt-1 max-w-xl text-sm text-studio-muted">
-            Start from a new-grad industry template, then tailor each sheet per
-            application.
+            Keep one base sheet, then tailor a copy for each job application.
           </p>
         </div>
         <button
@@ -161,7 +204,7 @@ export function DashboardClient({
           </h2>
           <p className="max-w-md text-sm text-studio-muted">
             Pick a template built for new grads — PM, SWE, EE, MechE, or a
-            clean general layout — then open the typesetter.
+            clean general layout — then tailor a copy for each posting.
           </p>
           <button
             type="button"
@@ -175,6 +218,7 @@ export function DashboardClient({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {resumes.map((resume) => {
             const busy = busyId === resume.id;
+            const job = getJobTargetFromDataJson(resume.data_json);
             return (
               <article
                 key={resume.id}
@@ -187,6 +231,11 @@ export function DashboardClient({
                     <div className="mb-1.5 h-1.5 w-5/6 bg-studio-border" />
                     <div className="h-1.5 w-2/3 bg-studio-border" />
                   </div>
+                  {job ? (
+                    <span className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)] truncate border border-studio-border bg-white/95 px-2 py-0.5 font-mono text-[0.6rem] text-studio-ink">
+                      JOB · {formatJobTargetLabel(job)}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="flex flex-1 flex-col gap-3 p-4">
                   <div>
@@ -204,6 +253,15 @@ export function DashboardClient({
                     >
                       Edit in Vibe Coder
                     </Link>
+                    <button
+                      type="button"
+                      disabled={busy || pending}
+                      onClick={() => setTailorSource(resume)}
+                      className="col-span-2 min-h-10 border border-studio-ink/20 bg-studio-canvas px-3 py-2 text-xs font-semibold text-studio-ink hover:bg-studio-border/40 disabled:opacity-50"
+                      data-testid="tailor-for-job"
+                    >
+                      Tailor for job
+                    </button>
                     <button
                       type="button"
                       disabled={busy || pending}
@@ -240,6 +298,15 @@ export function DashboardClient({
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onConfirm={createFromTemplate}
+      />
+      <TailorForJobModal
+        open={Boolean(tailorSource)}
+        sourceTitle={tailorSource?.title ?? "this resume"}
+        busy={tailoring}
+        onClose={() => {
+          if (!tailoring) setTailorSource(null);
+        }}
+        onConfirm={onTailorConfirm}
       />
     </div>
   );
