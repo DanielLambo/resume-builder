@@ -4,6 +4,7 @@ import { injectLaTeXConfig } from "@resumate/one-page-lock";
 import { z } from "zod";
 
 import type { Json } from "@/lib/database.types";
+import { detectEditIntent } from "@/lib/ai/resume-context";
 import { sanitizeCompileError } from "@/lib/compile-latex";
 import { fitResumeToSinglePage } from "@/lib/fit-resume";
 import { invokeGroqVibeEdit } from "@/lib/groq";
@@ -45,6 +46,9 @@ export type VibeEditSuccess = {
   pageCount: number | null;
   lockedToOnePage: boolean;
   compileWarning?: string;
+  /** review = advice-first; edit = latex mutation path. */
+  mode: "review" | "edit";
+  latexChanged: boolean;
 };
 
 export type VibeEditFailure = {
@@ -177,9 +181,19 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     }
 
     let healed = false;
+    const priorData = asRecord(resume.data_json);
+    const priorLatex =
+      typeof priorData.latex === "string" ? priorData.latex : "";
+    const promptIntent = detectEditIntent(prompt);
+    push(
+      promptIntent === "review"
+        ? "Reviewing resume against the target role..."
+        : "Running Typesetter vibe edit...",
+    );
+
     const groqResult = await invokeGroqVibeEdit({
       prompt,
-      dataJson: asRecord(resume.data_json),
+      dataJson: priorData,
       maxHealRetries: 2,
       onHeal: () => {
         healed = true;
@@ -202,7 +216,10 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       };
     }
 
-    push("Compiling LaTeX via 1-Page Lock engine...");
+    const latexChanged =
+      groqResult.latexChanged ?? editedLatex !== priorLatex;
+    const mode: "review" | "edit" =
+      groqResult.intent === "review" && !latexChanged ? "review" : "edit";
 
     let fittedLatex = editedLatex;
     let pdfBase64: string | null = null;
@@ -212,21 +229,26 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     let layout: unknown = undefined;
     let fitElapsedMs = 0;
 
-    try {
-      const fit = await fitResumeToSinglePage(editedLatex, {
-        allowGroqCondense: true,
-      });
-      fittedLatex = injectLaTeXConfig(editedLatex, fit.finalConfig);
-      pdfBase64 = fit.compiledPdf.toString("base64");
-      pageCount = fit.pageCount;
-      lockedToOnePage = fit.lockedToOnePage;
-      layout = fit.finalConfig;
-      fitElapsedMs = fit.elapsedMs;
-      await persistResumePdf(supabase, user.id, resumeId, fit.compiledPdf);
-    } catch (compileErr) {
-      // Persist the AI edit even when TeX host is down — demo must not look broken.
-      compileWarning = sanitizeCompileError(compileErr);
-      push(`PDF compile skipped: ${compileWarning}`);
+    if (latexChanged) {
+      push("Compiling LaTeX via 1-Page Lock engine...");
+      try {
+        const fit = await fitResumeToSinglePage(editedLatex, {
+          allowGroqCondense: true,
+        });
+        fittedLatex = injectLaTeXConfig(editedLatex, fit.finalConfig);
+        pdfBase64 = fit.compiledPdf.toString("base64");
+        pageCount = fit.pageCount;
+        lockedToOnePage = fit.lockedToOnePage;
+        layout = fit.finalConfig;
+        fitElapsedMs = fit.elapsedMs;
+        await persistResumePdf(supabase, user.id, resumeId, fit.compiledPdf);
+      } catch (compileErr) {
+        // Persist the AI edit even when TeX host is down — demo must not look broken.
+        compileWarning = sanitizeCompileError(compileErr);
+        push(`PDF compile skipped: ${compileWarning}`);
+      }
+    } else {
+      push("Skipped compile — review kept source TeX unchanged.");
     }
 
     const usage = isMockAiEnabled()
@@ -243,17 +265,24 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
         })()
       : await incrementDailyAiTokens(user.id, groqResult.totalTokens);
 
-    const prevData = asRecord(resume.data_json);
     const modelData = asRecord(groqResult.output.data_json as Json);
     const nextDataJson: Record<string, unknown> = {
-      ...prevData,
+      ...priorData,
       ...modelData,
       latex: fittedLatex,
       // Preserve template id from the existing resume when the model omits it.
       template:
-        (typeof prevData.template === "string" && prevData.template) ||
+        (typeof priorData.template === "string" && priorData.template) ||
         (typeof modelData.template === "string" && modelData.template) ||
         "new-grad",
+      lastReview:
+        mode === "review"
+          ? {
+              at: new Date().toISOString(),
+              prompt,
+              reply: groqResult.output.reply,
+            }
+          : priorData.lastReview,
     };
     if (layout !== undefined) {
       nextDataJson.layout = layout;
@@ -283,10 +312,12 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     }
 
     const elapsedMs = Date.now() - started;
-    if (!compileWarning) {
+    if (latexChanged && !compileWarning) {
       push(
         `PDF rendered successfully (${pageCount} page${pageCount === 1 ? "" : "s"}) in ${fitElapsedMs}ms.`,
       );
+    } else if (mode === "review") {
+      push("Resume review ready.");
     }
 
     return {
@@ -304,6 +335,8 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       pageCount,
       lockedToOnePage,
       compileWarning,
+      mode,
+      latexChanged,
     };
   } catch (err) {
     if (err instanceof AiRateLimitError) {

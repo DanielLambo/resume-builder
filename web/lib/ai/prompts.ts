@@ -1,5 +1,10 @@
 import { AI_SLOP_PROMPT_BANLIST } from "@/lib/ai/anti-slop";
 import {
+  extractReviewTarget,
+  RESUME_REVIEW_PLAYBOOK,
+  reviewWantsFixes,
+} from "@/lib/ai/review";
+import {
   detectEditIntent,
   type EditIntent,
   type ResumeEditContext,
@@ -42,8 +47,19 @@ export const LATEX_EDIT_CONTRACT = `## LaTeX contract
 - NEVER emit \\write18, \\input{...}, \\immediate, \\openout, or shell escapes.
 - Do not wrap JSON in markdown fences.`;
 
-function intentPlaybook(intent: EditIntent): string {
+function intentPlaybook(intent: EditIntent, prompt?: string): string {
   switch (intent) {
+    case "review": {
+      const target = prompt ? extractReviewTarget(prompt) : null;
+      const apply = prompt ? reviewWantsFixes(prompt) : false;
+      return [
+        RESUME_REVIEW_PLAYBOOK,
+        target ? `Target inferred from prompt: ${target}` : "Target: infer from prompt, or review for a general competitive screen.",
+        apply
+          ? "User also asked to apply fixes: after the review in reply, apply ONLY the highest-ROI honest edits to latex (still no invented facts)."
+          : "Advice only: latex must remain unchanged from the input document.",
+      ].join("\n");
+    }
     case "tailor":
       return `## Mode: JOB TAILOR
 - Mirror the posting's language only where the candidate already has honest evidence.
@@ -87,22 +103,28 @@ function intentPlaybook(intent: EditIntent): string {
   }
 }
 
-export function buildVibeSystemPrompt(intent: EditIntent): string {
+export function buildVibeSystemPrompt(intent: EditIntent, prompt = ""): string {
+  const reviewMode = intent === "review";
   return [
-    "You are Typesetter — a specialist vibe coder for LaTeX resumes.",
+    "You are Typesetter — a specialist vibe coder and resume reviewer for LaTeX resumes.",
     "You ship surgical, compilable TeX that reads like a sharp human wrote it — not ChatGPT.",
     "Recruiters reject AI-slop resumes in seconds. Your job is to avoid that tell.",
+    reviewMode
+      ? "In review mode you are a tough hiring manager: specific, honest, actionable advice."
+      : "In edit mode prefer the smallest correct diff.",
     "",
     "Return JSON only with this exact shape:",
-    '{"data_json":{"latex":"<FULL LaTeX document>", "...optional other fields"},"reply":"<short editor note>"}',
-    "data_json.latex is required and must be the complete updated .tex source.",
-    "reply: 1–3 sentences, specific about what changed (no fluff, no markdown fences).",
+    '{"data_json":{"latex":"<FULL LaTeX document>", "...optional other fields"},"reply":"<editor note or full review>"}',
+    "data_json.latex is required and must be a complete .tex source.",
+    reviewMode
+      ? "reply: the FULL structured review (not a one-liner). Use ## headings and line breaks."
+      : "reply: 1–3 sentences, specific about what changed (no fluff, no markdown fences).",
     "",
     RESUME_VOICE_RULES,
     "",
     LATEX_EDIT_CONTRACT,
     "",
-    intentPlaybook(intent),
+    intentPlaybook(intent, prompt),
   ].join("\n");
 }
 
@@ -118,8 +140,15 @@ export function buildVibeUserPayload(input: {
     intent,
     prompt: input.prompt,
     editor_brief: {
-      goal: "Apply the user prompt with minimal, honest, human-sounding, compilable edits.",
+      goal:
+        intent === "review"
+          ? "Produce a high-signal resume review for the target role; keep latex unchanged unless fixes were requested."
+          : "Apply the user prompt with minimal, honest, human-sounding, compilable edits.",
       job_target: input.context.jobHint,
+      review_target:
+        intent === "review" ? extractReviewTarget(input.prompt) : null,
+      apply_fixes:
+        intent === "review" ? reviewWantsFixes(input.prompt) : undefined,
       sections: input.context.outline,
       flags: {
         has_skills: input.context.hasSkills,

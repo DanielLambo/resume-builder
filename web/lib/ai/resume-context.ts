@@ -85,6 +85,7 @@ export function buildResumeEditContext(
 }
 
 export type EditIntent =
+  | "review"
   | "tailor"
   | "rewrite_bullets"
   | "add_content"
@@ -96,6 +97,14 @@ export type EditIntent =
 /** Cheap intent router so prompts can specialize without a second model call. */
 export function detectEditIntent(prompt: string): EditIntent {
   const p = prompt.toLowerCase();
+  // Review before tailor — "review for X role" should not become a silent rewrite.
+  if (
+    /\b(review|critique|feedback|assess|evaluate|roast)\b/.test(p) ||
+    /\bhow (does|do|is|are) (this|my) resume\b/.test(p) ||
+    /\b(rate|score) (this|my) resume\b/.test(p)
+  ) {
+    return "review";
+  }
   if (
     p.includes("tailor this resume") ||
     p.includes("job description:") ||
