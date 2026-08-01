@@ -6,7 +6,8 @@ import { z } from "zod";
 import type { Json } from "@/lib/database.types";
 import { sanitizeCompileError } from "@/lib/compile-latex";
 import { fitResumeToSinglePage } from "@/lib/fit-resume";
-import { invokeGroqVibeEdit } from "@/lib/groq";
+import { invokeGroqResumeReview, invokeGroqVibeEdit } from "@/lib/groq";
+import { getJobTargetFromDataJson } from "@/lib/job-target";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import { persistResumePdf } from "@/lib/persist-resume-pdf";
 import {
@@ -16,6 +17,11 @@ import {
   incrementDailyAiTokens,
   rateLimitExceededPayload,
 } from "@/lib/ratelimit";
+import {
+  extractTargetRole,
+  isResumeReviewPrompt,
+  type ResumeReview,
+} from "@/lib/resume-review";
 import { createClient } from "@/lib/supabase/server";
 
 const VibeEditInputSchema = z.object({
@@ -31,9 +37,12 @@ export type VibeEditStep = {
 
 export type VibeEditSuccess = {
   ok: true;
+  /** `review` returns advice without mutating LaTeX. */
+  mode: "edit" | "review";
   resumeId: string;
   data_json: Record<string, unknown>;
   reply: string;
+  review?: ResumeReview;
   tokensUsed: number;
   dailyTokensUsed: number;
   dailyTokensRemaining: number;
@@ -176,10 +185,68 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       };
     }
 
+    const dataJson = asRecord(resume.data_json);
+    const job = getJobTargetFromDataJson(dataJson);
+
+    // Review path: structured advice only — never mutates or recompiles.
+    if (isResumeReviewPrompt(prompt)) {
+      push("Reviewing resume against target role...");
+      const targetRole =
+        extractTargetRole(prompt) ?? (job ? `${job.role} @ ${job.company}` : null);
+      const reviewResult = await invokeGroqResumeReview({
+        prompt,
+        dataJson,
+        targetRole,
+        jobContext: job
+          ? {
+              company: job.company,
+              role: job.role,
+              description: job.description,
+            }
+          : null,
+      });
+
+      const usage = isMockAiEnabled()
+        ? await (async () => {
+            try {
+              return await incrementDailyAiTokens(user.id, reviewResult.totalTokens);
+            } catch {
+              return {
+                used: reviewResult.totalTokens,
+                remaining: Math.max(0, DAILY_AI_TOKEN_LIMIT - reviewResult.totalTokens),
+                limit: DAILY_AI_TOKEN_LIMIT,
+              };
+            }
+          })()
+        : await incrementDailyAiTokens(user.id, reviewResult.totalTokens);
+
+      push("Structured feedback ready — resume unchanged.");
+      const pageCount =
+        typeof dataJson.pageCount === "number" ? dataJson.pageCount : null;
+
+      return {
+        ok: true,
+        mode: "review",
+        resumeId: resume.id,
+        data_json: dataJson,
+        reply: reviewResult.review.reply,
+        review: reviewResult.review,
+        tokensUsed: reviewResult.totalTokens,
+        dailyTokensUsed: usage.used,
+        dailyTokensRemaining: usage.remaining,
+        elapsedMs: Date.now() - started,
+        healed: false,
+        steps,
+        pdfBase64: null,
+        pageCount,
+        lockedToOnePage: pageCount === 1,
+      };
+    }
+
     let healed = false;
     const groqResult = await invokeGroqVibeEdit({
       prompt,
-      dataJson: asRecord(resume.data_json),
+      dataJson,
       maxHealRetries: 2,
       onHeal: () => {
         healed = true;
@@ -243,7 +310,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
         })()
       : await incrementDailyAiTokens(user.id, groqResult.totalTokens);
 
-    const prevData = asRecord(resume.data_json);
+    const prevData = dataJson;
     const modelData = asRecord(groqResult.output.data_json as Json);
     const nextDataJson: Record<string, unknown> = {
       ...prevData,
@@ -291,6 +358,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
 
     return {
       ok: true,
+      mode: "edit",
       resumeId: updated.id,
       data_json: asRecord(updated.data_json),
       reply: groqResult.output.reply,

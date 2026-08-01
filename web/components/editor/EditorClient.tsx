@@ -19,9 +19,11 @@ import { LineOptimizerToggle, useLineOptimizerPreference } from "@/components/ed
 import { OrphanHeatmapPanel } from "@/components/editor/OrphanHeatmapPanel";
 import { PDFPreview } from "@/components/editor/PDFPreview";
 import { QuotaModal } from "@/components/editor/QuotaModal";
+import { ResumeReviewPanel } from "@/components/editor/ResumeReviewPanel";
 import { StatusLog } from "@/components/editor/StatusLog";
 import { TemplatePicker } from "@/components/templates/TemplatePicker";
 import { analyzeOrphans, type OrphanBullet } from "@/lib/analyzer/orphanDetector";
+import { isResumeReviewPrompt, type ResumeReview } from "@/lib/resume-review";
 import {
   getTemplate,
   type ResumeTemplateId,
@@ -67,6 +69,7 @@ export function EditorClient({
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [reply, setReply] = useState<string | null>(null);
+  const [review, setReview] = useState<ResumeReview | null>(null);
   const [dirty, setDirty] = useState(false);
   const [pending, startTransition] = useTransition();
   const [compiling, setCompiling] = useState(false);
@@ -225,21 +228,26 @@ export function EditorClient({
     }
   }
 
+  const promptIsReview = isResumeReviewPrompt(prompt);
+
   function runVibeEdit() {
     const text = prompt.trim();
     if (!text || pending) {
-      if (!text) toast.message("Describe the edit first");
+      if (!text) toast.message("Describe an edit or ask for a review");
       return;
     }
 
     const priorLatex = latex;
     const id = ++runId.current;
     const signal = { cancelled: false };
+    const reviewing = isResumeReviewPrompt(text);
     setStatusLines([]);
     setQuotaOpen(false);
 
     startTransition(async () => {
-      void streamClientSteps(signal);
+      if (!reviewing) {
+        void streamClientSteps(signal);
+      }
 
       try {
         const result = await vibeEditAction({ resumeId, prompt: text });
@@ -276,13 +284,27 @@ export function EditorClient({
           return;
         }
 
+        applyUsage(result.dailyTokensUsed, result.dailyTokensRemaining);
+        setPrompt("");
+
+        if (result.mode === "review" && result.review) {
+          setReview(result.review);
+          setReply(result.reply);
+          setStatusLines(
+            result.steps.map((s) => `[${s.index}/${s.total}] ${s.message}`),
+          );
+          toast.success("Resume review ready", {
+            description: `${result.review.fitScore}/10 fit · resume unchanged`,
+          });
+          return;
+        }
+
         if (result.healed) {
           toast.warning("Syntax tweak detected, auto-healing LaTeX...", {
             duration: 2800,
           });
         }
 
-        applyUsage(result.dailyTokensUsed, result.dailyTokensRemaining);
         const nextLatex =
           typeof result.data_json.latex === "string"
             ? result.data_json.latex
@@ -290,8 +312,8 @@ export function EditorClient({
 
         setLatex(nextLatex);
         setDirty(true);
+        setReview(null);
         setReply(result.reply);
-        setPrompt("");
         setGhostActive(true);
 
         if (result.pdfBase64) {
@@ -569,15 +591,17 @@ export function EditorClient({
         ) : (
           <>
             <div className="min-h-0 flex-1 space-y-3 overflow-auto p-3 sm:p-4">
-              {reply ? (
+              {review ? (
+                <ResumeReviewPanel review={review} />
+              ) : reply ? (
                 <div className="border border-studio-border bg-studio-paper p-3 text-sm leading-relaxed text-studio-ink">
                   {reply}
                 </div>
               ) : (
                 <div className="border border-dashed border-studio-border bg-studio-paper/60 p-3 font-mono text-xs text-studio-muted sm:p-4">
-                  Ask for a clean edit, or paste a job description to tailor.
+                  Ask for a clean edit, a review for a role, or paste a JD to tailor.
                   <span className="mt-2 hidden text-studio-muted/80 sm:block">
-                    Shortcut: ⌘/Ctrl + Enter
+                    Try “review my resume for backend SWE intern”. Shortcut: ⌘/Ctrl + Enter
                   </span>
                 </div>
               )}
@@ -592,7 +616,7 @@ export function EditorClient({
                 data-testid="vibe-prompt"
                 className="mb-1 w-full resize-none border border-studio-border bg-white px-3 py-2.5 font-mono text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion disabled:cursor-not-allowed disabled:opacity-60"
                 rows={3}
-                placeholder="Describe an edit, or paste a job description to tailor…"
+                placeholder="Describe an edit, ask for a review, or paste a job description…"
                 value={prompt}
                 disabled={pending}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -606,7 +630,13 @@ export function EditorClient({
                 onClick={runVibeEdit}
                 className="mt-3 min-h-11 w-full bg-studio-vermilion px-3 py-3 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-60 sm:min-h-0 sm:py-2.5"
               >
-                {pending ? "Typesetting…" : "Run vibe edit"}
+                {pending
+                  ? promptIsReview
+                    ? "Reviewing…"
+                    : "Typesetting…"
+                  : promptIsReview
+                    ? "Run resume review"
+                    : "Run vibe edit"}
               </button>
             </div>
           </>
