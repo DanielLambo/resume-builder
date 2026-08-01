@@ -22,6 +22,10 @@ const nextConfig: NextConfig = {
     ];
   },
   serverExternalPackages: ["pdf-lib"],
+  // Keep the external LaTeX skill markdown inside serverless traces.
+  outputFileTracingIncludes: {
+    "/*": ["./lib/ai/skills/**/*.md"],
+  },
 };
 
 export default nextConfig;
