@@ -57,8 +57,6 @@ export GROQ_API_KEY=...
 python run.py
 ```
 
-**Rotate any Groq key that was ever committed to git history before sharing a deploy.**
-
 ## Tests
 
 ```bash
