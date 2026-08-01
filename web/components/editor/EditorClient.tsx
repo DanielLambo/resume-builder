@@ -159,13 +159,11 @@ export function EditorClient({
   const runId = useRef(0);
   const compileGen = useRef(0);
   const latexRef = useRef(latex);
-  const replyRef = useRef(reply);
   const templateIdRef = useRef(templateId);
   const savingRef = useRef(false);
   const pendingResaveRef = useRef(false);
   const didInitialCompile = useRef(false);
   latexRef.current = latex;
-  replyRef.current = reply;
   templateIdRef.current = templateId;
 
   const orphanCount = useMemo(
