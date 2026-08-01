@@ -9,6 +9,7 @@ import {
   type EditIntent,
   type ResumeEditContext,
 } from "@/lib/ai/resume-context";
+import { loadLatexResumeCodingSkill } from "@/lib/ai/skills/load-skill";
 
 /** Voice + craft rules that make Typesetter feel sharper than a generic chat model. */
 export const RESUME_VOICE_RULES = `## Voice (non-negotiable)
@@ -105,6 +106,7 @@ function intentPlaybook(intent: EditIntent, prompt?: string): string {
 
 export function buildVibeSystemPrompt(intent: EditIntent, prompt = ""): string {
   const reviewMode = intent === "review";
+  const latexSkill = loadLatexResumeCodingSkill();
   return [
     "You are Typesetter — a specialist vibe coder and resume reviewer for LaTeX resumes.",
     "You ship surgical, compilable TeX that reads like a sharp human wrote it — not ChatGPT.",
@@ -123,6 +125,10 @@ export function buildVibeSystemPrompt(intent: EditIntent, prompt = ""): string {
     RESUME_VOICE_RULES,
     "",
     LATEX_EDIT_CONTRACT,
+    "",
+    "## External skill: LaTeX resume coding",
+    "Follow this skill strictly when editing or repairing TeX:",
+    latexSkill,
     "",
     intentPlaybook(intent, prompt),
   ].join("\n");
@@ -206,6 +212,9 @@ export function buildCondenseSystemPrompt(): string {
     "Do not invent metrics. Preserve preamble and macros. Keep compilable LaTeX.",
     "Do not introduce AI resume sludge while condensing.",
     AI_SLOP_PROMPT_BANLIST,
+    "",
+    "## External skill: LaTeX resume coding",
+    loadLatexResumeCodingSkill(),
   ].join("\n");
 }
 
@@ -214,6 +223,7 @@ export function buildHealHint(message: string, latexSnippet?: string): string {
     message,
     "Fix validation failures with the smallest possible TeX/JSON correction.",
     "If AI_SLOP was flagged, rewrite those phrases into plain human resume voice without changing facts.",
+    "Re-apply the LaTeX resume coding skill: escape specials, preserve preamble/macros, keep a full compilable document.",
   ];
   if (latexSnippet) {
     parts.push(`Current latex head: ${latexSnippet.slice(0, 280)}`);
