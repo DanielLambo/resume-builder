@@ -121,9 +121,12 @@ export function EditorClient({
   const [reply, setReply] = useState<string | null>(null);
   const [review, setReview] = useState<ResumeReview | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  /** Own busy flag so Stop can unlock the UI before the server action settles. */
+  const [aiBusy, setAiBusy] = useState(false);
   const [compiling, setCompiling] = useState(false);
   const [compileError, setCompileError] = useState<string | null>(null);
+  const busy = aiBusy;
   const [mode, setMode] = useState<StudioMode>("vibe");
   const [mobilePane, setMobilePane] = useState<MobilePane>("edit");
   const [onePageLock, setOnePageLock] = useState(
@@ -336,12 +339,13 @@ export function EditorClient({
 
   function stopVibeEdit() {
     runId.current += 1;
+    setAiBusy(false);
     setStatusLines(["Stopped"]);
   }
 
   function restoreVersion(nextIndex: number) {
     const snap = versions.stack[nextIndex];
-    if (!snap || pending || compiling) return;
+    if (!snap || busy || compiling) return;
     setVersions((prev) => ({ ...prev, index: nextIndex }));
     setLatex(snap.latex);
     setReply(snap.reply);
@@ -357,7 +361,7 @@ export function EditorClient({
 
   function runVibeEdit(overrides?: VibeEditOverrides) {
     const text = (overrides?.prompt ?? prompt).trim();
-    if (!text || pending) {
+    if (!text || busy) {
       if (!text) toast.message("Describe an edit or ask for a review");
       return;
     }
@@ -370,6 +374,7 @@ export function EditorClient({
     const clearPrompt = overrides?.clearPrompt !== false;
     setStatusLines([]);
     setQuotaOpen(false);
+    setAiBusy(true);
 
     startTransition(async () => {
       if (!reviewing) {
@@ -508,6 +513,10 @@ export function EditorClient({
           "We couldn't reach the typesetter. Your draft is intact — export .tex as a backup.",
         );
         setQuotaOpen(true);
+      } finally {
+        if (id === runId.current) {
+          setAiBusy(false);
+        }
       }
     });
   }
@@ -519,7 +528,7 @@ export function EditorClient({
       toast.message("Select a span in the source first");
       return;
     }
-    if (!text || pending) {
+    if (!text || busy) {
       if (!text) toast.message("Describe how to change the selection");
       return;
     }
@@ -529,6 +538,7 @@ export function EditorClient({
     const id = ++runId.current;
     setStatusLines([]);
     setQuotaOpen(false);
+    setAiBusy(true);
 
     startTransition(async () => {
       try {
@@ -589,6 +599,10 @@ export function EditorClient({
           "We couldn't reach the typesetter. Your draft is intact — export .tex as a backup.",
         );
         setQuotaOpen(true);
+      } finally {
+        if (id === runId.current) {
+          setAiBusy(false);
+        }
       }
     });
   }
@@ -679,7 +693,7 @@ export function EditorClient({
       data-testid="vibe-harness"
       data-token-used={tokensUsed}
     >
-      {(pending || compiling) && (
+      {(busy || compiling) && (
         <div
           className="pointer-events-none absolute inset-x-0 top-0 z-30 h-0.5 overflow-hidden"
           data-testid="vermilion-loader"
@@ -814,7 +828,7 @@ export function EditorClient({
               type="button"
               className="min-h-8 px-2 transition hover:text-studio-ink disabled:opacity-50"
               onClick={onCompile}
-              disabled={compiling || pending}
+              disabled={compiling || busy}
             >
               {compiling ? "Compiling…" : "Compile"}
             </button>
@@ -831,7 +845,7 @@ export function EditorClient({
                 <input
                   type="text"
                   value={selectionPrompt}
-                  disabled={pending}
+                  disabled={busy}
                   placeholder="e.g. Tighten this bullet"
                   onChange={(e) => setSelectionPrompt(e.target.value)}
                   onKeyDown={(e) => {
@@ -846,13 +860,13 @@ export function EditorClient({
                   type="button"
                   data-testid="selection-edit-submit"
                   disabled={
-                    pending ||
+                    busy ||
                     !(selectionPrompt.trim() || prompt.trim())
                   }
                   onClick={runSelectionEdit}
                   className="min-h-8 bg-studio-vermilion px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45"
                 >
-                  {pending ? "Editing…" : "Apply"}
+                  {busy ? "Editing…" : "Apply"}
                 </button>
               </div>
             ) : null}
@@ -861,7 +875,7 @@ export function EditorClient({
               className="min-h-0 flex-1 resize-none border-t border-studio-border bg-studio-paper px-4 py-3 font-mono text-[0.8rem] leading-relaxed text-studio-ink outline-none focus:bg-white disabled:opacity-60 sm:px-5 sm:py-4"
               value={latex}
               spellCheck={false}
-              disabled={pending}
+              disabled={busy}
               onChange={(e) => {
                 setLatex(e.target.value);
                 setDirty(true);
@@ -880,7 +894,7 @@ export function EditorClient({
                   <VersionStepper
                     index={versions.index}
                     total={versions.stack.length}
-                    disabled={pending || compiling}
+                    disabled={busy || compiling}
                     onPrev={() => restoreVersion(versions.index - 1)}
                     onNext={() => restoreVersion(versions.index + 1)}
                   />
@@ -907,7 +921,7 @@ export function EditorClient({
                 <div className="mb-2">
                   <CompileErrorBanner
                     error={compileError}
-                    pending={pending}
+                    pending={busy}
                     onDismiss={() => setCompileError(null)}
                     onFix={() => {
                       if (!compileError) return;
@@ -921,7 +935,7 @@ export function EditorClient({
                 </div>
               ) : null}
               <PromptRecipes
-                disabled={pending}
+                disabled={busy}
                 onPick={(recipePrompt) => {
                   setPrompt(recipePrompt);
                   promptRef.current?.focus();
@@ -935,7 +949,7 @@ export function EditorClient({
                   rows={3}
                   placeholder="What should change?"
                   value={prompt}
-                  disabled={pending}
+                  disabled={busy}
                   onChange={(e) => setPrompt(e.target.value)}
                   onKeyDown={onPromptKeyDown}
                 />
@@ -944,7 +958,7 @@ export function EditorClient({
                     ⌘/Ctrl + Enter
                   </p>
                   <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none">
-                    {pending ? (
+                    {busy ? (
                       <button
                         type="button"
                         data-testid="vibe-stop"
@@ -954,7 +968,7 @@ export function EditorClient({
                         Stop
                       </button>
                     ) : null}
-                    {!pending && lastPrompt ? (
+                    {!busy && lastPrompt ? (
                       <button
                         type="button"
                         data-testid="vibe-regenerate"
@@ -972,11 +986,11 @@ export function EditorClient({
                     <button
                       type="button"
                       data-testid="vibe-submit"
-                      disabled={pending || !prompt.trim()}
+                      disabled={busy || !prompt.trim()}
                       onClick={() => runVibeEdit()}
                       className="min-h-9 flex-1 bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45 sm:flex-none sm:min-w-[7.5rem]"
                     >
-                      {pending
+                      {busy
                         ? promptIsReview
                           ? "Reviewing…"
                           : "Working…"
@@ -987,7 +1001,7 @@ export function EditorClient({
                   </div>
                 </div>
               </div>
-              <StatusLog lines={statusLines} active={pending} />
+              <StatusLog lines={statusLines} active={busy} />
             </div>
           </>
         )}
@@ -1035,7 +1049,7 @@ export function EditorClient({
             <div className="w-full max-w-3xl">
               <CompileErrorBanner
                 error={compileError}
-                pending={pending}
+                pending={busy}
                 onDismiss={() => setCompileError(null)}
                 onFix={() => {
                   if (!compileError) return;
@@ -1054,7 +1068,7 @@ export function EditorClient({
             pageCount={pageCount}
             ghostActive={ghostActive}
             pendingLatex={latex}
-            compiling={compiling || pending}
+            compiling={compiling || busy}
           />
           <OrphanHeatmapPanel
             latex={latex}

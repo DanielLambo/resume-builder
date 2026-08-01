@@ -241,6 +241,7 @@ async function callGroqReviewOnce(input: {
   targetRole: string | null;
   jobContext: { company: string; role: string; description: string } | null;
   healHint?: string;
+  writingProfileNote?: string;
   apiKey: string;
   baseUrl: string;
   model: string;
@@ -253,6 +254,7 @@ async function callGroqReviewOnce(input: {
     "Score fitScore from 1–10 for the stated role (or general new-grad SWE if none).",
     "bulletAdvice must quote real phrases from the resume when possible.",
     "actionItems must be concrete next steps (not vague 'network more').",
+    input.writingProfileNote?.trim() || "",
     "Return JSON only matching:",
     JSON.stringify({
       targetRole: "string|null",
@@ -265,7 +267,9 @@ async function callGroqReviewOnce(input: {
       actionItems: ["string"],
       reply: "short UI blurb",
     }),
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const userPayload: Record<string, unknown> = {
     prompt: input.prompt,
@@ -342,6 +346,7 @@ export async function invokeGroqResumeReview(input: {
   dataJson: Record<string, unknown>;
   targetRole?: string | null;
   jobContext?: { company: string; role: string; description: string } | null;
+  writingProfileNote?: string;
   maxRetries?: number;
   maxHealRetries?: number;
 }): Promise<GroqResumeReviewResult> {
@@ -374,6 +379,7 @@ export async function invokeGroqResumeReview(input: {
             resumeBody,
             targetRole,
             jobContext: input.jobContext ?? null,
+            writingProfileNote: input.writingProfileNote,
             healHint,
             apiKey,
             baseUrl,
