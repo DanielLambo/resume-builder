@@ -3,39 +3,80 @@
  */
 
 export function isReviewPrompt(prompt: string): boolean {
-  const p = prompt.toLowerCase();
+  const p = prompt.toLowerCase().trim();
+  if (!p) return false;
+
+  // Surgical edits that happen to say "review" / "feedback" must stay edit-mode.
+  // e.g. "review the Skills section and add Docker", "feedback on this bullet".
+  const scopedToFragment =
+    /\b(section|bullet|bullets|line|item|entry|heading)\b/.test(p) &&
+    !/\b(resume|cv)\b/.test(p);
+  if (scopedToFragment) return false;
+
+  // Strong signals tied to resume review language.
   if (
-    /\b(review|critique|critiquing|feedback|assess|evaluate|roast)\b/.test(p)
+    /\b(review|critique|critiquing|assess|evaluate|roast)\b.{0,40}\b(resume|cv)\b/.test(
+      p,
+    ) ||
+    /\b(resume|cv)\b.{0,40}\b(review|critique|feedback|assess|evaluate|roast)\b/.test(
+      p,
+    )
   ) {
     return true;
   }
+
   if (/\bhow (does|do|is|are) (this|my) resume\b/.test(p)) return true;
-  if (/\bwhat('s| is) (missing|weak|wrong|good)\b/.test(p)) return true;
+  if (/\bwhat('s| is) (missing|weak|wrong|good) (with|on|about|in) (this|my) resume\b/.test(p))
+    return true;
   if (/\b(rate|score) (this|my) resume\b/.test(p)) return true;
-  if (/\bhonest (take|opinion|feedback)\b/.test(p)) return true;
+  if (/\bhonest (take|opinion|feedback) on (this|my) resume\b/.test(p)) return true;
+
+  // Shorthand: "review for SWE intern" / "feedback for PM role"
+  if (
+    /^(please\s+)?(review|critique|feedback)\b/.test(p) &&
+    /\b(for|as|targeting)\b/.test(p)
+  ) {
+    return true;
+  }
+
+  // Bare whole-doc review: "please review" / "critique this" (not a section/bullet).
+  if (/^(please\s+)?(review|critique)(\s+this)?\s*$/.test(p)) return true;
+  if (/\bgive (me )?(some )?feedback\b/.test(p) && !/\bon (this|the|my)\b/.test(p)) {
+    return true;
+  }
+
   return false;
 }
 
 /** True when the user also wants edits applied, not just advice. */
 export function reviewWantsFixes(prompt: string): boolean {
-  return /\b(and (then )?(fix|apply|rewrite|improve|update|edit)|apply (the )?(fixes|changes|edits)|make the changes|rewrite (it|the bullets)|fix (it|them|the issues))\b/i.test(
+  return /\b(and (then )?(fix|apply|rewrite|improve|update|edit)|apply (the )?(fixes|changes|edits)|make the changes|rewrite (it|the bullets)|fix (it|them|the issues)|then (fix|apply|rewrite))\b/i.test(
     prompt,
   );
 }
 
 /** Pull a role/company hint from free-text review prompts. */
 export function extractReviewTarget(prompt: string): string | null {
+  const cleaned = prompt.trim().replace(/\s+/g, " ");
   const patterns = [
-    /\b(?:for|as|targeting|towards?)\s+(?:an?\s+|the\s+)?(.{3,80}?)(?:\s+role|\s+position|\s+job)?\s*$/i,
-    /\breview(?:\s+my\s+resume)?\s+for\s+(.+)$/i,
-    /\bfeedback\s+for\s+(.+)$/i,
+    /\breview(?:\s+my\s+resume|\s+this\s+resume|\s+my\s+cv)?\s+for\s+(?:an?\s+|the\s+)?(.+?)(?:\s+please)?[.?!]*$/i,
+    /\bfeedback\s+for\s+(?:an?\s+|the\s+)?(.+?)(?:\s+please)?[.?!]*$/i,
+    /\b(?:for|as|targeting|towards?)\s+(?:an?\s+|the\s+)?(.{3,80}?)(?:\s+role|\s+position|\s+job)?(?:\s+please)?[.?!]*$/i,
   ];
   for (const re of patterns) {
-    const m = prompt.trim().match(re);
-    const raw = m?.[1]?.trim();
-    if (raw && raw.length >= 3 && !/^(me|this|it|please)\b/i.test(raw)) {
-      return raw.replace(/[.?!]+$/, "").slice(0, 120);
-    }
+    const m = cleaned.match(re);
+    let raw = m?.[1]?.trim();
+    if (!raw || raw.length < 2) continue;
+    if (/^(me|this|it|please|my resume|a resume)\b/i.test(raw)) continue;
+    // Drop trailing "and apply the fixes" tails if present.
+    raw = raw
+      .replace(
+        /\s+and\s+(then\s+)?(fix|apply|rewrite|improve|update|edit).*$/i,
+        "",
+      )
+      .replace(/\s+(role|position|job)\s*$/i, "")
+      .trim();
+    if (raw.length >= 2) return raw.slice(0, 120);
   }
   return null;
 }

@@ -233,9 +233,19 @@ export async function invokeGroqVibeEdit(input: {
     const mocked = mockVibeEdit(input);
     const intent = detectEditIntent(input.prompt);
     const prior = extractLatexFromDataJson(input.dataJson);
-    const next = extractLatexFromDataJson(mocked.output.data_json);
+    const adviceOnly = intent === "review" && !reviewWantsFixes(input.prompt);
+    const next = adviceOnly
+      ? prior
+      : extractLatexFromDataJson(mocked.output.data_json);
     return {
       ...mocked,
+      output: {
+        ...mocked.output,
+        data_json: {
+          ...mocked.output.data_json,
+          latex: next,
+        },
+      },
       intent,
       latexChanged: next !== prior,
     };

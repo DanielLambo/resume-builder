@@ -97,7 +97,11 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
   const started = Date.now();
   const steps: VibeEditStep[] = [];
   const push = (message: string) => {
-    steps.push({ index: steps.length + 1, total: 4, message });
+    steps.push({ index: steps.length + 1, total: steps.length + 1, message });
+    // Keep totals honest as steps accumulate.
+    for (const step of steps) {
+      step.total = steps.length;
+    }
   };
 
   const parsed = VibeEditInputSchema.safeParse(rawInput);
@@ -218,8 +222,11 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
 
     const latexChanged =
       groqResult.latexChanged ?? editedLatex !== priorLatex;
+    // Intent wins: review+fixes still returns mode "review" so the UI keeps advice primary.
     const mode: "review" | "edit" =
-      groqResult.intent === "review" && !latexChanged ? "review" : "edit";
+      groqResult.intent === "review" || promptIntent === "review"
+        ? "review"
+        : "edit";
 
     let fittedLatex = editedLatex;
     let pdfBase64: string | null = null;
@@ -247,8 +254,10 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
         compileWarning = sanitizeCompileError(compileErr);
         push(`PDF compile skipped: ${compileWarning}`);
       }
-    } else {
+    } else if (mode === "review") {
       push("Skipped compile — review kept source TeX unchanged.");
+    } else {
+      push("Skipped compile — source TeX unchanged.");
     }
 
     const usage = isMockAiEnabled()
@@ -281,6 +290,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
               at: new Date().toISOString(),
               prompt,
               reply: groqResult.output.reply,
+              appliedFixes: latexChanged,
             }
           : priorData.lastReview,
     };
@@ -312,12 +322,16 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     }
 
     const elapsedMs = Date.now() - started;
-    if (latexChanged && !compileWarning) {
+    if (mode === "review" && !latexChanged) {
+      push("Resume review ready.");
+    } else if (mode === "review" && latexChanged && !compileWarning) {
+      push(
+        `Review + fixes applied (${pageCount} page${pageCount === 1 ? "" : "s"}) in ${fitElapsedMs}ms.`,
+      );
+    } else if (latexChanged && !compileWarning) {
       push(
         `PDF rendered successfully (${pageCount} page${pageCount === 1 ? "" : "s"}) in ${fitElapsedMs}ms.`,
       );
-    } else if (mode === "review") {
-      push("Resume review ready.");
     }
 
     return {

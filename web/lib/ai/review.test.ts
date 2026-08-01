@@ -32,4 +32,15 @@ describe("resume review intent", () => {
     );
     assert.equal(reviewWantsFixes("Review my resume for SWE intern"), false);
   });
+
+  it("keeps section/bullet edit prompts out of review mode", () => {
+    assert.equal(
+      isReviewPrompt("Please review the Skills section and add Docker"),
+      false,
+    );
+    assert.equal(
+      detectEditIntent("Please review the Skills section and add Docker"),
+      "add_content",
+    );
+  });
 });
