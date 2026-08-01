@@ -40,11 +40,9 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
           return;
         }
         toast.success("Welcome back");
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        const needsOnboarding = user?.user_metadata?.onboarding_completed !== true;
-        router.replace(needsOnboarding ? "/onboarding" : next);
+        // Always land on the product; server gates (shouldForceOnboarding)
+        // grandfather existing users who already have resumes.
+        router.replace(next);
         router.refresh();
         return;
       }

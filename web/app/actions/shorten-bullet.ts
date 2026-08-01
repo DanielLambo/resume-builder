@@ -116,9 +116,10 @@ async function shortenWithGroq(bullet: string): Promise<{
   const content = json.choices?.[0]?.message?.content ?? "";
   let text = bullet;
   try {
-    const parsed = JSON.parse(content) as { text?: string };
-    if (typeof parsed.text === "string" && parsed.text.trim()) {
-      text = parsed.text.trim();
+    const raw = JSON.parse(content) as unknown;
+    const parsed = z.object({ text: z.string().min(1) }).safeParse(raw);
+    if (parsed.success) {
+      text = parsed.data.text.trim();
     }
   } catch {
     /* keep original */

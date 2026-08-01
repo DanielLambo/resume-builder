@@ -68,7 +68,7 @@ export function EditorClient({
   const [compiling, setCompiling] = useState(false);
   const [mode, setMode] = useState<StudioMode>("vibe");
   const [onePageLock, setOnePageLock] = useState(
-    initialPageCount == null || initialPageCount === 1,
+    initialPageCount != null && initialPageCount === 1,
   );
   const [pageCount, setPageCount] = useState<number | null>(initialPageCount);
   const [pdfBase64, setPdfBase64] = useState<string | null>(initialPdfBase64);
@@ -161,7 +161,11 @@ export function EditorClient({
         const res = await fetch("/api/compile", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ latex: source, autoFit: true }),
+          body: JSON.stringify({
+            latex: source,
+            autoFit: true,
+            resumeId,
+          }),
         });
         const data = (await res.json()) as {
           success?: boolean;
@@ -196,7 +200,7 @@ export function EditorClient({
         }
       }
     },
-    [],
+    [resumeId],
   );
 
   useEffect(() => {
@@ -282,27 +286,42 @@ export function EditorClient({
         setDirty(true);
         setReply(result.reply);
         setPrompt("");
-        setPdfBase64(result.pdfBase64);
-        setPageCount(result.pageCount);
-        setOnePageLock(result.lockedToOnePage);
         setGhostActive(true);
+
+        if (result.pdfBase64) {
+          setPdfBase64(result.pdfBase64);
+          setPageCount(result.pageCount);
+          setOnePageLock(result.lockedToOnePage);
+        } else if (result.compileWarning) {
+          // Edit saved; try a client recompile so the preview can still recover.
+          void compilePdf(nextLatex, { quiet: true }).catch(() => undefined);
+        }
 
         const serverLines = result.steps.map(
           (s) => `[${s.index}/${s.total}] ${s.message}`,
         );
         const hasRender = serverLines.some((l) => l.includes("PDF rendered"));
+        const hasCompileSkip = serverLines.some((l) =>
+          l.includes("PDF compile skipped"),
+        );
         setStatusLines(
-          hasRender
+          hasRender || hasCompileSkip
             ? serverLines
             : [
                 ...CLIENT_STEPS,
-                `[4/4] PDF rendered successfully (${result.pageCount} page) in ${result.elapsedMs}ms.`,
+                `[4/4] PDF rendered successfully (${result.pageCount ?? "?"} page) in ${result.elapsedMs}ms.`,
               ],
         );
 
-        toast.success("Vibe edit applied", {
-          description: `${result.tokensUsed.toLocaleString()} tokens · ${result.pageCount} page PDF`,
-        });
+        if (result.compileWarning) {
+          toast.success("Vibe edit saved", {
+            description: `AI applied · preview unavailable: ${result.compileWarning}`,
+          });
+        } else {
+          toast.success("Vibe edit applied", {
+            description: `${result.tokensUsed.toLocaleString()} tokens · ${result.pageCount ?? "?"} page PDF`,
+          });
+        }
       } catch {
         signal.cancelled = true;
         setQuotaTitle("Network interrupted");
