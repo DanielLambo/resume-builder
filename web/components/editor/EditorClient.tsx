@@ -889,9 +889,7 @@ export function EditorClient({
                 </div>
               ) : null}
               {review ? (
-                <div data-testid="resume-review">
-                  <ResumeReviewPanel review={review} />
-                </div>
+                <ResumeReviewPanel review={review} />
               ) : reply ? (
                 <p className="text-[0.95rem] leading-relaxed text-studio-ink">{reply}</p>
               ) : (
