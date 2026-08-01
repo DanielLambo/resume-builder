@@ -50,6 +50,12 @@ const CLIENT_STEPS = [
   "[3/4] Compiling LaTeX via 1-Page Lock engine...",
 ] as const;
 
+const PROMPT_EXAMPLES = [
+  "Tighten my experience bullets",
+  "Review my resume for SWE intern",
+  "Add AWS and Docker to skills",
+] as const;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -457,7 +463,6 @@ export function EditorClient({
         </div>
       )}
 
-      {/* Mobile: one pane at a time so edit + preview don't crush each other */}
       <div
         className="flex shrink-0 border-b border-studio-border lg:hidden"
         role="tablist"
@@ -469,7 +474,7 @@ export function EditorClient({
           aria-selected={mobilePane === "edit"}
           data-testid="mobile-pane-edit"
           onClick={() => setMobilePane("edit")}
-          className={`flex-1 px-3 py-3 text-center text-sm font-semibold transition ${
+          className={`flex-1 px-3 py-3 text-center text-sm font-medium transition ${
             mobilePane === "edit"
               ? "border-b-2 border-studio-vermilion text-studio-ink"
               : "text-studio-muted"
@@ -483,7 +488,7 @@ export function EditorClient({
           aria-selected={mobilePane === "preview"}
           data-testid="mobile-pane-preview"
           onClick={() => setMobilePane("preview")}
-          className={`flex-1 px-3 py-3 text-center text-sm font-semibold transition ${
+          className={`flex-1 px-3 py-3 text-center text-sm font-medium transition ${
             mobilePane === "preview"
               ? "border-b-2 border-studio-vermilion text-studio-ink"
               : "text-studio-muted"
@@ -491,8 +496,8 @@ export function EditorClient({
         >
           Preview
           {pageCount != null ? (
-            <span className="ml-1 font-mono text-[0.65rem] font-normal text-studio-muted">
-              · {pageCount}p
+            <span className="ml-1 text-[0.7rem] font-normal text-studio-muted">
+              {pageCount}p
             </span>
           ) : null}
         </button>
@@ -502,73 +507,79 @@ export function EditorClient({
         className={[
           "min-h-0 w-full flex-col overflow-hidden border-studio-border bg-studio-bg lg:border-r",
           mobilePane === "edit" ? "flex flex-1" : "hidden",
-          "lg:flex lg:w-[42%] lg:flex-none xl:w-[38%]",
+          "lg:flex lg:w-[40%] lg:flex-none xl:w-[36%]",
         ].join(" ")}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-studio-border px-3 py-2.5 sm:px-4 sm:py-3">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">
           <div className="min-w-0">
-            <p className="hidden font-mono text-xs tracking-wide text-studio-muted sm:block">
-              TYPESETTER / RESUME ENGINE
-            </p>
-            <div className="flex min-w-0 items-baseline gap-2 sm:mt-1">
-              <h1 className="truncate text-base font-semibold tracking-tight text-studio-ink">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <h1 className="truncate text-[0.95rem] font-semibold tracking-tight text-studio-ink">
                 {title}
               </h1>
-              <span className="shrink-0 font-mono text-[0.65rem] text-studio-muted">
-                {dirty ? "· dirty" : "· saved"}
+              <span className="shrink-0 text-[0.7rem] text-studio-muted">
+                {dirty ? "Unsaved" : "Saved"}
               </span>
             </div>
             {jobLabel ? (
               <p
-                className="mt-1 truncate font-mono text-[0.65rem] text-studio-vermilion"
+                className="mt-0.5 truncate text-[0.7rem] text-studio-vermilion"
                 data-testid="job-target-label"
                 title={jobLabel}
               >
-                Job target · {jobLabel}
+                {jobLabel}
               </p>
             ) : null}
           </div>
           <Link
             href="/dashboard"
-            className="shrink-0 py-1 font-mono text-xs text-studio-muted hover:text-studio-ink"
+            className="shrink-0 text-xs text-studio-muted transition hover:text-studio-ink"
           >
-            ← Library
+            Library
           </Link>
         </div>
 
-        <div className="border-b border-studio-border px-3 py-2 sm:px-4">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 font-mono text-xs text-studio-muted">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3 sm:px-5">
+          <div
+            className="inline-flex border border-studio-border bg-studio-paper p-0.5"
+            role="group"
+            aria-label="Editor mode"
+          >
             <button
               type="button"
-              className={`min-h-9 px-1.5 hover:text-studio-ink ${mode === "vibe" ? "text-studio-ink" : ""}`}
+              className={`min-h-8 px-3 text-xs font-medium transition ${
+                mode === "vibe"
+                  ? "bg-studio-ink text-white"
+                  : "text-studio-muted hover:text-studio-ink"
+              }`}
               onClick={() => setMode("vibe")}
             >
-              Vibe
+              AI
             </button>
-            <span aria-hidden="true">|</span>
             <button
               type="button"
-              className={`min-h-9 px-1.5 hover:text-studio-ink ${mode === "source" ? "text-studio-ink" : ""}`}
+              className={`min-h-8 px-3 text-xs font-medium transition ${
+                mode === "source"
+                  ? "bg-studio-ink text-white"
+                  : "text-studio-muted hover:text-studio-ink"
+              }`}
               onClick={() => setMode("source")}
             >
               Source
             </button>
-            <span aria-hidden="true">|</span>
+          </div>
+          <div className="flex items-center gap-1 text-xs text-studio-muted">
             <button
               type="button"
-              className="min-h-9 max-w-[11rem] truncate px-1.5 hover:text-studio-ink sm:max-w-none"
+              className="min-h-8 max-w-[10rem] truncate px-2 transition hover:text-studio-ink sm:max-w-[14rem]"
               onClick={() => setTemplatePickerOpen(true)}
               data-testid="template-switch"
               title={getTemplate(templateId).description}
             >
-              <span className="sm:hidden">Tpl:</span>
-              <span className="hidden sm:inline">Template:</span>{" "}
               {getTemplate(templateId).name}
             </button>
-            <span aria-hidden="true">|</span>
             <button
               type="button"
-              className="min-h-9 px-1.5 hover:text-studio-ink"
+              className="min-h-8 px-2 transition hover:text-studio-ink disabled:opacity-50"
               onClick={onCompile}
               disabled={compiling || pending}
             >
@@ -579,7 +590,7 @@ export function EditorClient({
 
         {mode === "source" ? (
           <textarea
-            className="min-h-0 flex-1 resize-none bg-studio-paper p-3 font-mono text-[0.8rem] leading-relaxed text-studio-ink outline-none disabled:opacity-60 sm:p-4"
+            className="min-h-0 flex-1 resize-none border-t border-studio-border bg-studio-paper px-4 py-3 font-mono text-[0.8rem] leading-relaxed text-studio-ink outline-none focus:bg-white disabled:opacity-60 sm:px-5 sm:py-4"
             value={latex}
             spellCheck={false}
             disabled={pending}
@@ -590,54 +601,71 @@ export function EditorClient({
           />
         ) : (
           <>
-            <div className="min-h-0 flex-1 space-y-3 overflow-auto p-3 sm:p-4">
+            <div className="min-h-0 flex-1 overflow-auto border-t border-studio-border px-4 py-4 sm:px-5">
               {review ? (
                 <ResumeReviewPanel review={review} />
               ) : reply ? (
-                <div className="border border-studio-border bg-studio-paper p-3 text-sm leading-relaxed text-studio-ink">
-                  {reply}
-                </div>
+                <p className="text-[0.95rem] leading-relaxed text-studio-ink">{reply}</p>
               ) : (
-                <div className="border border-dashed border-studio-border bg-studio-paper/60 p-3 font-mono text-xs text-studio-muted sm:p-4">
-                  Ask for a clean edit, a review for a role, or paste a JD to tailor.
-                  <span className="mt-2 hidden text-studio-muted/80 sm:block">
-                    Try “review my resume for backend SWE intern”. Shortcut: ⌘/Ctrl + Enter
-                  </span>
+                <div className="flex h-full min-h-[10rem] flex-col justify-center">
+                  <p className="text-sm text-studio-muted">
+                    Ask for an edit, a role review, or paste a job description.
+                  </p>
+                  <div className="mt-4 flex flex-col items-start gap-2">
+                    {PROMPT_EXAMPLES.map((example) => (
+                      <button
+                        key={example}
+                        type="button"
+                        disabled={pending}
+                        onClick={() => {
+                          setPrompt(example);
+                          promptRef.current?.focus();
+                        }}
+                        className="text-left text-sm text-studio-ink underline decoration-studio-border underline-offset-4 transition hover:decoration-studio-ink disabled:opacity-50"
+                      >
+                        {example}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
 
-            <div className="shrink-0 border-t border-studio-border bg-studio-canvas/40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
-              <label className="mb-2 block font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
-                AI prompt
-              </label>
-              <textarea
-                ref={promptRef}
-                data-testid="vibe-prompt"
-                className="mb-1 w-full resize-none border border-studio-border bg-white px-3 py-2.5 font-mono text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion disabled:cursor-not-allowed disabled:opacity-60"
-                rows={3}
-                placeholder="Describe an edit, ask for a review, or paste a job description…"
-                value={prompt}
-                disabled={pending}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={onPromptKeyDown}
-              />
+            <div className="shrink-0 border-t border-studio-border bg-studio-bg px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4">
+              <div className="border border-studio-border bg-studio-paper focus-within:border-studio-ink/30">
+                <textarea
+                  ref={promptRef}
+                  data-testid="vibe-prompt"
+                  className="w-full resize-none bg-transparent px-3 py-3 text-sm leading-relaxed text-studio-ink outline-none placeholder:text-studio-muted/70 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[0.9rem]"
+                  rows={3}
+                  placeholder="What should change?"
+                  value={prompt}
+                  disabled={pending}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={onPromptKeyDown}
+                />
+                <div className="flex items-center justify-between gap-3 border-t border-studio-border/80 px-3 py-2">
+                  <p className="hidden text-[0.7rem] text-studio-muted sm:block">
+                    ⌘/Ctrl + Enter
+                  </p>
+                  <button
+                    type="button"
+                    data-testid="vibe-submit"
+                    disabled={pending || !prompt.trim()}
+                    onClick={runVibeEdit}
+                    className="min-h-9 flex-1 bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45 sm:flex-none sm:min-w-[7.5rem]"
+                  >
+                    {pending
+                      ? promptIsReview
+                        ? "Reviewing…"
+                        : "Working…"
+                      : promptIsReview
+                        ? "Review"
+                        : "Run"}
+                  </button>
+                </div>
+              </div>
               <StatusLog lines={statusLines} active={pending} />
-              <button
-                type="button"
-                data-testid="vibe-submit"
-                disabled={pending}
-                onClick={runVibeEdit}
-                className="mt-3 min-h-11 w-full bg-studio-vermilion px-3 py-3 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-60 sm:min-h-0 sm:py-2.5"
-              >
-                {pending
-                  ? promptIsReview
-                    ? "Reviewing…"
-                    : "Typesetting…"
-                  : promptIsReview
-                    ? "Run resume review"
-                    : "Run vibe edit"}
-              </button>
             </div>
           </>
         )}
@@ -650,11 +678,9 @@ export function EditorClient({
           "lg:flex",
         ].join(" ")}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-studio-border bg-studio-canvas/90 px-3 py-2.5 shadow-floating-bar backdrop-blur-sm sm:gap-3 sm:px-4 sm:py-3">
-          <span className="font-mono text-[0.65rem] text-studio-muted sm:text-xs">
-            PREVIEW · LETTER
-          </span>
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-studio-border bg-studio-canvas/90 px-4 py-2.5 backdrop-blur-sm sm:px-5">
+          <span className="text-xs text-studio-muted">Preview</span>
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-3 sm:gap-4">
             <LineOptimizerToggle
               enabled={heatmapOn}
               orphanCount={orphanCount}
@@ -664,21 +690,19 @@ export function EditorClient({
             />
             <span
               data-testid="one-page-lock"
-              className={`rounded border px-2 py-1 font-mono text-[0.65rem] sm:text-xs ${
-                onePageLock
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "border-studio-border bg-white text-studio-muted"
+              className={`font-mono text-[0.7rem] ${
+                onePageLock ? "text-emerald-700" : "text-studio-muted"
               }`}
             >
               <span className="sm:hidden">
                 {onePageLock
-                  ? `[ ${pageCount ?? 1}-PG LOCK ]`
-                  : `[ ${pageCount ?? "?"} PG ]`}
+                  ? `${pageCount ?? 1} page locked`
+                  : `${pageCount ?? "?"} page`}
               </span>
               <span className="hidden sm:inline">
                 {onePageLock
-                  ? `[ ${pageCount ?? 1}-PAGE LOCK ACTIVE ]`
-                  : `[ ${pageCount ?? "?"} PAGES — FIT PENDING ]`}
+                  ? `${pageCount ?? 1}-PAGE LOCK ACTIVE`
+                  : `${pageCount ?? "?"} pages · fit pending`}
               </span>
             </span>
           </div>

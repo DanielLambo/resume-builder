@@ -48,8 +48,7 @@ test.describe("Vibe editor harness (mock AI)", () => {
     await expect(preview.locator("iframe[title='Compiled resume PDF']")).toBeVisible();
     await expect(page.getByTestId("harness-latex-skills")).toContainText(/AWS/i);
     await expect(page.getByTestId("harness-latex-skills")).toContainText(/Docker/i);
-    await expect(page.getByTestId("one-page-lock")).toContainText("1-PAGE LOCK ACTIVE");
-
+    await expect(page.getByTestId("one-page-lock")).toContainText(/1-PAGE LOCK ACTIVE|1 page locked/i);
     await expect(meter).toContainText(/Tokens Used Today/i);
     await expect
       .poll(async () => {
@@ -114,8 +113,7 @@ test.describe("Authenticated vibe editor (optional)", () => {
       "data-page-count",
       "1",
     );
-    await expect(page.getByTestId("one-page-lock")).toContainText("1-PAGE LOCK ACTIVE");
-
+    await expect(page.getByTestId("one-page-lock")).toContainText(/1-PAGE LOCK ACTIVE|1 page locked/i);
     await expect
       .poll(async () => {
         const text = await meter.textContent();

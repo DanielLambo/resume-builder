@@ -5,28 +5,28 @@ type StatusLogProps = {
   active?: boolean;
 };
 
+/** Compact progress trail — only renders when there is something to show. */
 export function StatusLog({ lines, active }: StatusLogProps) {
   if (!lines.length && !active) return null;
 
+  const latest = lines[lines.length - 1];
+
   return (
     <div
-      className="mt-3 max-h-24 overflow-auto border border-studio-border bg-studio-paper px-3 py-2 sm:max-h-36"
+      className="mt-2 font-mono text-[0.7rem] leading-relaxed text-studio-muted"
       data-testid="status-log"
       aria-live="polite"
     >
-      <p className="mb-1 font-mono text-[0.6rem] uppercase tracking-wide text-studio-muted">
-        Engine log
-      </p>
-      <ul className="space-y-1 font-mono text-[0.7rem] leading-relaxed text-studio-ink">
+      {/* Keep full history for tests / a11y; show the latest line visually. */}
+      <ul className="sr-only">
         {lines.map((line, i) => (
-          <li key={`${i}-${line}`}>
-            <span className="text-studio-muted">$</span> {line}
-          </li>
+          <li key={`${i}-${line}`}>{line}</li>
         ))}
-        {active ? (
-          <li className="animate-pulse text-studio-vermilion">▌ awaiting engine…</li>
-        ) : null}
       </ul>
+      {latest ? <p className="truncate">{latest.replace(/^\[\d+\/\d+\]\s*/, "")}</p> : null}
+      {active ? (
+        <p className="mt-0.5 animate-pulse text-studio-vermilion">Working…</p>
+      ) : null}
     </div>
   );
 }

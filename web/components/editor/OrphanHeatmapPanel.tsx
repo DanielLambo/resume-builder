@@ -39,51 +39,44 @@ export function OrphanHeatmapPanel({
 
   return (
     <aside
-      className="w-full max-w-[8.5in] space-y-2"
+      className="w-full max-w-[8.5in] space-y-3"
       data-testid="orphan-heatmap-panel"
       aria-live="polite"
     >
       <div className="flex items-baseline justify-between gap-2">
-        <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
-          Orphan risk bullets
-        </p>
-        <p className="font-mono text-[0.65rem] text-studio-muted">
-          {orphans.length === 0
-            ? "None flagged"
-            : `${orphans.length} need a trim`}
+        <p className="text-xs font-medium text-studio-ink">Line overflow</p>
+        <p className="text-[0.7rem] text-studio-muted">
+          {orphans.length === 0 ? "Clear" : `${orphans.length} to trim`}
         </p>
       </div>
 
       {orphans.length === 0 ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-800">
-          No 1–3 word overflow orphans detected at ~{analysis.lineWidth}{" "}
-          chars/line.
-        </div>
+        <p className="text-xs text-studio-muted">
+          No short overflow lines at ~{analysis.lineWidth} chars.
+        </p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-3">
           {orphans.map((bullet) => {
             const busy = shorteningIndex === bullet.index;
             return (
               <li
                 key={`${bullet.kind}-${bullet.index}-${bullet.start}`}
-                className="rounded-lg border border-amber-500/40 border-l-2 border-l-amber-500 bg-amber-500/10 px-3 py-2.5"
+                className="border-l-2 border-amber-500 pl-3"
                 data-testid="orphan-bullet"
               >
-                <p className="line-clamp-3 font-mono text-[0.7rem] leading-relaxed text-studio-ink">
+                <p className="line-clamp-3 text-[0.8rem] leading-relaxed text-studio-ink">
                   {bullet.text}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-[0.65rem] text-amber-800/80">
+                  <span className="text-[0.7rem] text-studio-muted">
                     ~{bullet.trailingWords} word
-                    {bullet.trailingWords === 1 ? "" : "s"} /{" "}
-                    {bullet.trailingChars} chars on last line ·{" "}
-                    {bullet.estimatedLines} lines
+                    {bullet.trailingWords === 1 ? "" : "s"} over
                   </span>
                   <button
                     type="button"
                     disabled={busy || shorteningIndex !== null}
                     onClick={() => onShorten(bullet)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-600/40 bg-white px-2.5 py-1 text-[0.7rem] font-medium text-amber-900 shadow-sm transition hover:-translate-y-0.5 hover:bg-amber-50 disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 border border-studio-border bg-studio-paper px-2.5 py-1 text-[0.7rem] font-medium text-studio-ink transition hover:border-studio-ink/30 disabled:opacity-60"
                     data-testid="orphan-shorten"
                   >
                     {busy ? (
@@ -94,7 +87,7 @@ export function OrphanHeatmapPanel({
                     ) : (
                       <Sparkles className="h-3 w-3" aria-hidden="true" />
                     )}
-                    {busy ? "Shortening…" : "Shorten by ~3 words"}
+                    {busy ? "Shortening…" : "Shorten"}
                   </button>
                 </div>
               </li>
