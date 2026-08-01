@@ -12,6 +12,7 @@ import {
 } from "@/lib/resume-template";
 import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
+import { writingProfileFromMetadata } from "@/lib/writing-profile";
 
 export const maxDuration = 60;
 
@@ -56,6 +57,7 @@ export default async function EditorPage({ params }: EditorPageProps) {
           initialLatex={getLatexFromDataJson(resume.data_json)}
           initialTemplateId={getTemplateIdFromDataJson(resume.data_json)}
           jobLabel={job ? formatJobTargetLabel(job) : null}
+          initialWritingProfile={writingProfileFromMetadata(user.user_metadata)}
         />
       </div>
     </div>
