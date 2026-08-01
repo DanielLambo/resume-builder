@@ -46,7 +46,9 @@ export async function condenseBulletsWithGroq(latex, options) {
         "Do not change employers, dates, titles, tools, or factual claims.",
         "Do not invent metrics. Preserve preamble, packages, and custom macros.",
         "Keep valid compilable LaTeX with \\documentclass and \\end{document}.",
-        "Ban fluff: leveraged, spearheaded, passionate, results-driven, cutting-edge.",
+        "Never introduce AI resume sludge recruiters catch: leveraged, utilizing, spearheaded,",
+        "orchestrated, passionate, results-driven, cutting-edge, robust, seamless, showcasing,",
+        "actionable insights, or ', resulting in N%' cadences.",
     ].join(" ");
     const user = [
         "Tighten this resume so it is more likely to fit on one page.",
