@@ -1,3 +1,4 @@
+import { isReviewPrompt } from "@/lib/ai/review";
 import { getLatexFromDataJson } from "@/lib/resume-template";
 
 export type ResumeSectionOutline = {
@@ -97,12 +98,16 @@ export type EditIntent =
 /** Cheap intent router so prompts can specialize without a second model call. */
 export function detectEditIntent(prompt: string): EditIntent {
   const p = prompt.toLowerCase();
-  // Review before tailor — "review for X role" should not become a silent rewrite.
+  // Compile/syntax repairs win over review when both are mentioned.
   if (
-    /\b(review|critique|feedback|assess|evaluate|roast)\b/.test(p) ||
-    /\bhow (does|do|is|are) (this|my) resume\b/.test(p) ||
-    /\b(rate|score) (this|my) resume\b/.test(p)
+    /\\[a-zA-Z]|compile error|overfull|undefined control|missing \$|fix (the )?latex|syntax error/.test(
+      p,
+    )
   ) {
+    return "fix_latex";
+  }
+  // Review before tailor — "review for X role" should not become a silent rewrite.
+  if (isReviewPrompt(prompt)) {
     return "review";
   }
   if (
@@ -111,13 +116,6 @@ export function detectEditIntent(prompt: string): EditIntent {
     (p.includes("tailor") && (p.includes("job") || p.includes("role")))
   ) {
     return "tailor";
-  }
-  if (
-    /\\[a-zA-Z]|compile|overfull|undefined control|missing \$|fix (the )?latex|syntax/.test(
-      p,
-    )
-  ) {
-    return "fix_latex";
   }
   if (
     /\b(rename|change (my )?name|update (my )?(email|phone|linkedin|github|school|university|employer|company name))\b/.test(
@@ -133,7 +131,7 @@ export function detectEditIntent(prompt: string): EditIntent {
   }
   if (
     /\b(add|include|insert|put)\b/.test(p) &&
-    /\b(skill|bullet|project|course|award|certificat|experience|internship)\b/.test(
+    /\b(skills?|bullets?|projects?|courses?|awards?|certificat\w*|experience|internship)\b/.test(
       p,
     )
   ) {

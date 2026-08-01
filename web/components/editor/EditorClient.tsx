@@ -18,6 +18,7 @@ import { saveResumeLatexAction } from "@/app/actions/resumes";
 import { LineOptimizerToggle, useLineOptimizerPreference } from "@/components/editor/LineOptimizerToggle";
 import { OrphanHeatmapPanel } from "@/components/editor/OrphanHeatmapPanel";
 import { PDFPreview } from "@/components/editor/PDFPreview";
+import { isReviewPrompt } from "@/lib/ai/review";
 import { QuotaModal } from "@/components/editor/QuotaModal";
 import { StatusLog } from "@/components/editor/StatusLog";
 import { TemplatePicker } from "@/components/templates/TemplatePicker";
@@ -42,10 +43,16 @@ type EditorClientProps = {
 type StudioMode = "vibe" | "source";
 type MobilePane = "edit" | "preview";
 
-const CLIENT_STEPS = [
+const CLIENT_STEPS_EDIT = [
   "[1/4] Parsing prompt and extracting Zod schema...",
   "[2/4] Checking Upstash Redis daily token limit...",
   "[3/4] Compiling LaTeX via 1-Page Lock engine...",
+] as const;
+
+const CLIENT_STEPS_REVIEW = [
+  "[1/4] Parsing prompt and extracting Zod schema...",
+  "[2/4] Checking Upstash Redis daily token limit...",
+  "[3/4] Reviewing resume against the target role...",
 ] as const;
 
 function sleep(ms: number): Promise<void> {
@@ -217,8 +224,12 @@ export function EditorClient({
     });
   }, [compilePdf, initialLatex, pdfBase64]);
 
-  async function streamClientSteps(signal: { cancelled: boolean }) {
-    for (const step of CLIENT_STEPS) {
+  async function streamClientSteps(
+    signal: { cancelled: boolean },
+    reviewPrompt: boolean,
+  ) {
+    const steps = reviewPrompt ? CLIENT_STEPS_REVIEW : CLIENT_STEPS_EDIT;
+    for (const step of steps) {
       if (signal.cancelled) return;
       setStatusLines((prev) => [...prev, step]);
       await sleep(280);
@@ -235,11 +246,12 @@ export function EditorClient({
     const priorLatex = latex;
     const id = ++runId.current;
     const signal = { cancelled: false };
+    const reviewPrompt = isReviewPrompt(text);
     setStatusLines([]);
     setQuotaOpen(false);
 
     startTransition(async () => {
-      void streamClientSteps(signal);
+      void streamClientSteps(signal, reviewPrompt);
 
       try {
         const result = await vibeEditAction({ resumeId, prompt: text });
@@ -297,13 +309,20 @@ export function EditorClient({
         setReply(result.reply);
         setPrompt("");
 
-        if (isReview) {
-          // Keep the advice visible on the edit pane.
-          setMobilePane("edit");
-        } else if (result.pdfBase64) {
+        // Always refresh preview bytes when compile succeeded — including review+fixes.
+        if (result.pdfBase64) {
           setPdfBase64(result.pdfBase64);
           setPageCount(result.pageCount);
           setOnePageLock(result.lockedToOnePage);
+        }
+
+        if (isReview) {
+          // Keep the advice visible on the edit pane; Preview tab still has fresh PDF.
+          setMobilePane("edit");
+          if (result.latexChanged && result.compileWarning) {
+            void compilePdf(nextLatex, { quiet: true }).catch(() => undefined);
+          }
+        } else if (result.pdfBase64) {
           setMobilePane("preview");
         } else if (result.compileWarning) {
           // Edit saved; try a client recompile so the preview can still recover.
@@ -333,14 +352,20 @@ export function EditorClient({
                   "[4/4] Resume review ready.",
                 ]
               : [
-                  ...CLIENT_STEPS,
+                  ...CLIENT_STEPS_EDIT,
                   `[4/4] PDF rendered successfully (${result.pageCount ?? "?"} page) in ${result.elapsedMs}ms.`,
                 ],
         );
 
-        if (isReview) {
+        if (isReview && !result.latexChanged) {
           toast.success("Resume review ready", {
             description: `${result.tokensUsed.toLocaleString()} tokens · advice only (TeX unchanged)`,
+          });
+        } else if (isReview && result.latexChanged) {
+          toast.success("Review + fixes applied", {
+            description: result.compileWarning
+              ? `Advice ready · preview unavailable: ${result.compileWarning}`
+              : `${result.tokensUsed.toLocaleString()} tokens · TeX updated from review`,
           });
         } else if (result.compileWarning) {
           toast.success("Vibe edit saved", {
