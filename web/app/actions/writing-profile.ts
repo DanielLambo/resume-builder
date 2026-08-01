@@ -4,7 +4,6 @@ import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import {
-  WritingProfileSchema,
   writingProfileFromMetadata,
   type WritingProfile,
 } from "@/lib/writing-profile";

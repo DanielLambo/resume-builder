@@ -23,6 +23,28 @@ Do not market the Next.js app as “local-only IndexedDB” — that applies to 
 
 **Production refuses latexonline.cc by default** so resume PII is not sent to a public third-party compiler. Set `LATEX_COMPILE_URL` to a host you control.
 
+## Vercel (GitHub) production checklist
+
+The Next.js app lives in **`web/`** — not the repo root.
+
+1. In the Vercel project → **Settings → General → Root Directory** → set to `web` (and redeploy).
+2. Framework preset: **Next.js**. Install/build can stay default (`npm install` / `npm run build`).
+3. Set these **Production** env vars (Project → Settings → Environment Variables):
+
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Publishable anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | recommended | Server-only; never `NEXT_PUBLIC_` |
+| `GROQ_API_KEY` | yes (live AI) | Server-only |
+| `UPSTASH_REDIS_REST_URL` | recommended | Daily AI quota |
+| `UPSTASH_REDIS_REST_TOKEN` | recommended | Daily AI quota |
+| `LATEX_COMPILE_URL` | yes for PDF | Your TeX compile host (Vercel has no pdflatex) |
+| `NEXT_PUBLIC_USE_MOCK_AI` | set `false` for prod | `true` = offline synthetic AI |
+
+4. Supabase Auth → add your Vercel URL(s) under **Redirect URLs** / site URL.
+5. Do **not** set `ALLOW_LATEX_ONLINE=1` in production unless you accept sending resume PII to latexonline.cc.
+
 ## FastAPI quick start
 
 ```bash
