@@ -162,11 +162,14 @@ export function EditorClient({
   const runId = useRef(0);
   const compileGen = useRef(0);
   const latexRef = useRef(latex);
+  const replyRef = useRef(reply);
   const templateIdRef = useRef(templateId);
+  const cancelSignalRef = useRef<{ cancelled: boolean }>({ cancelled: false });
   const savingRef = useRef(false);
   const pendingResaveRef = useRef(false);
   const didInitialCompile = useRef(false);
   latexRef.current = latex;
+  replyRef.current = reply;
   templateIdRef.current = templateId;
 
   const orphanCount = useMemo(
@@ -339,6 +342,7 @@ export function EditorClient({
 
   function stopVibeEdit() {
     runId.current += 1;
+    cancelSignalRef.current.cancelled = true;
     setAiBusy(false);
     setStatusLines(["Stopped"]);
   }
@@ -346,13 +350,39 @@ export function EditorClient({
   function restoreVersion(nextIndex: number) {
     const snap = versions.stack[nextIndex];
     if (!snap || busy || compiling) return;
-    setVersions((prev) => ({ ...prev, index: nextIndex }));
+    // Commit in-progress manual edits into the current slot before leaving it.
+    setVersions((prev) => {
+      const stack = prev.stack.slice();
+      const current = stack[prev.index];
+      if (current && latexRef.current !== current.latex) {
+        stack[prev.index] = {
+          ...current,
+          latex: latexRef.current,
+          reply: replyRef.current,
+        };
+      }
+      return { stack, index: nextIndex };
+    });
     setLatex(snap.latex);
     setReply(snap.reply);
+    setSelection(null);
     setReview(null);
     setDirty(true);
     setGhostActive(true);
     void compilePdf(snap.latex, { quiet: true }).catch(() => undefined);
+  }
+
+  async function revertStoppedServerWrite(priorLatex: string) {
+    try {
+      await saveResumeLatexAction(
+        resumeId,
+        priorLatex,
+        title,
+        templateIdRef.current,
+      );
+    } catch {
+      /* best-effort undo after Stop */
+    }
   }
 
   function syncSourceSelection(e: SyntheticEvent<HTMLTextAreaElement>) {
@@ -370,8 +400,13 @@ export function EditorClient({
     const priorReply = reply;
     const id = ++runId.current;
     const signal = { cancelled: false };
+    cancelSignalRef.current = signal;
     const reviewing = isResumeReviewPrompt(text);
-    const clearPrompt = overrides?.clearPrompt !== false;
+    // Keep review prompts so users can tweak the target role and re-run.
+    const clearPrompt =
+      overrides?.clearPrompt !== undefined
+        ? overrides.clearPrompt
+        : !reviewing;
     setStatusLines([]);
     setQuotaOpen(false);
     setAiBusy(true);
@@ -385,12 +420,24 @@ export function EditorClient({
         const result = await vibeEditAction({
           resumeId,
           prompt: text,
+          latex: priorLatex,
           ...(overrides?.compilerError
             ? { compilerError: overrides.compilerError }
             : {}),
         });
         signal.cancelled = true;
-        if (id !== runId.current) return;
+        if (id !== runId.current) {
+          // Stop ignored the UI result, but the server may have already saved.
+          if (
+            result.ok &&
+            result.mode === "edit" &&
+            typeof result.data_json.latex === "string" &&
+            result.data_json.latex !== priorLatex
+          ) {
+            void revertStoppedServerWrite(priorLatex);
+          }
+          return;
+        }
 
         if (!result.ok) {
           if (result.steps?.length) {
@@ -460,6 +507,7 @@ export function EditorClient({
         });
 
         setLatex(nextLatex);
+        setSelection(null);
         setDirty(true);
         setReview(null);
         setReply(result.reply);
@@ -536,6 +584,7 @@ export function EditorClient({
     const priorLatex = latex;
     const priorReply = reply;
     const id = ++runId.current;
+    cancelSignalRef.current = { cancelled: false };
     setStatusLines([]);
     setQuotaOpen(false);
     setAiBusy(true);
@@ -550,7 +599,12 @@ export function EditorClient({
           selectedText: sel.text,
           prompt: text,
         });
-        if (id !== runId.current) return;
+        if (id !== runId.current) {
+          if (result.ok && result.latex !== priorLatex) {
+            void revertStoppedServerWrite(priorLatex);
+          }
+          return;
+        }
 
         if (!result.ok) {
           if (result.status === 429 || result.code === "AI_DAILY_LIMIT") {
@@ -632,6 +686,7 @@ export function EditorClient({
     if (!ok) return;
     setTemplateId(next.id);
     setLatex(next.latex);
+    setSelection(null);
     setDirty(true);
     setGhostActive(true);
     setTemplatePickerOpen(false);
@@ -642,11 +697,15 @@ export function EditorClient({
   }
 
   async function onShortenOrphan(bullet: OrphanBullet) {
+    if (busy || shorteningIndex != null) return;
+    const priorLatex = latex;
+    const priorReply = reply;
     setShorteningIndex(bullet.index);
+    setAiBusy(true);
     try {
       const result = await shortenBulletAction({
         resumeId,
-        latex,
+        latex: priorLatex,
         itemStart: bullet.start,
         itemEnd: bullet.end,
         itemText: bullet.text,
@@ -671,7 +730,15 @@ export function EditorClient({
         });
         return;
       }
+      pushMutatingSnapshot({
+        priorLatex,
+        priorReply,
+        nextLatex: result.latex,
+        nextReply: priorReply,
+        prompt: "Tighten orphan bullet",
+      });
       setLatex(result.latex);
+      setSelection(null);
       setDirty(true);
       setGhostActive(true);
       applyUsage(result.dailyTokensUsed, result.dailyTokensRemaining);
@@ -682,6 +749,7 @@ export function EditorClient({
       void compilePdf(result.latex, { quiet: true }).catch(() => undefined);
     } finally {
       setShorteningIndex(null);
+      setAiBusy(false);
     }
   }
 
@@ -1045,8 +1113,13 @@ export function EditorClient({
         </div>
 
         <div className="flex flex-1 flex-col items-center gap-3 overflow-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:gap-4 sm:p-6 md:p-10">
-          {compileError && mode === "source" ? (
-            <div className="w-full max-w-3xl">
+          {compileError &&
+          (mode === "source" || mobilePane === "preview") ? (
+            <div
+              className={`w-full max-w-3xl ${
+                mode === "vibe" ? "lg:hidden" : ""
+              }`}
+            >
               <CompileErrorBanner
                 error={compileError}
                 pending={busy}
@@ -1054,6 +1127,7 @@ export function EditorClient({
                 onFix={() => {
                   if (!compileError) return;
                   setMode("vibe");
+                  setMobilePane("edit");
                   runVibeEdit({
                     prompt: COMPILE_FIX_PROMPT,
                     compilerError: compileError,

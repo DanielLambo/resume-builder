@@ -32,6 +32,11 @@ import {
 const VibeEditInputSchema = z.object({
   resumeId: z.string().uuid(),
   prompt: z.string().trim().min(1).max(4000),
+  /**
+   * Client draft LaTeX. When provided, edits this source instead of a possibly
+   * stale DB copy (unsaved Source-mode changes).
+   */
+  latex: z.string().min(1).max(400_000).optional(),
   /** When set, force the heal path with this compile/validation error. */
   compilerError: z.string().trim().min(1).max(2000).optional(),
 });
@@ -123,7 +128,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     };
   }
 
-  const { resumeId, prompt, compilerError } = parsed.data;
+  const { resumeId, prompt, compilerError, latex: clientLatex } = parsed.data;
   push("Parsing prompt and extracting Zod schema...");
 
   try {
@@ -193,6 +198,9 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     }
 
     const dataJson = asRecord(resume.data_json);
+    if (clientLatex) {
+      dataJson.latex = clientLatex;
+    }
     const job = getJobTargetFromDataJson(dataJson);
     const writingProfileNote = formatWritingProfileForPrompt(
       writingProfileFromMetadata(user.user_metadata),
@@ -329,27 +337,13 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       typeof prevData.version === "number" && Number.isFinite(prevData.version)
         ? prevData.version
         : 0;
-    const priorLatex =
-      typeof prevData.latex === "string" ? prevData.latex : fittedLatex;
-    // Snapshot the pre-edit state, then the post-edit tip for restore UX.
-    const nextHistory = pushAiHistory(
-      pushAiHistory(prevData.ai_history, {
-        latex: priorLatex,
-        reply:
-          typeof prevData.last_ai_reply === "string" ? prevData.last_ai_reply : "",
-        prompt:
-          typeof prevData.last_ai_prompt === "string"
-            ? prevData.last_ai_prompt
-            : "",
-        at: new Date().toISOString(),
-      }),
-      {
-        latex: fittedLatex,
-        reply: groqResult.output.reply,
-        prompt,
-        at: new Date().toISOString(),
-      },
-    );
+    // One tip per edit — prior snapshots already live in ai_history / client stepper.
+    const nextHistory = pushAiHistory(prevData.ai_history, {
+      latex: fittedLatex,
+      reply: groqResult.output.reply,
+      prompt,
+      at: new Date().toISOString(),
+    });
 
     const nextDataJson: Record<string, unknown> = {
       ...prevData,
