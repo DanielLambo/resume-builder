@@ -1,8 +1,5 @@
 "use client";
 
-import { useRef } from "react";
-import { Camera } from "lucide-react";
-
 import { AVATAR_COLORS } from "@/lib/onboarding/schema";
 import type { OnboardingData } from "@/lib/onboarding/schema";
 
@@ -26,23 +23,10 @@ export function Step1Personal({
   onContinue,
   canContinue,
 }: Step1PersonalProps) {
-  const fileRef = useRef<HTMLInputElement>(null);
   const nameError =
     data.fullName.trim().length > 0 && data.fullName.trim().length < 2
       ? "Enter at least 2 characters"
       : null;
-
-  function onFile(file: File | undefined) {
-    if (!file || !file.type.startsWith("image/")) return;
-    if (file.size > 2_000_000) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        onChange({ avatarUrl: reader.result });
-      }
-    };
-    reader.readAsDataURL(file);
-  }
 
   return (
     <div className="space-y-8">
@@ -51,38 +35,20 @@ export function Step1Personal({
           Welcome! Let&apos;s get to know you
         </h1>
         <p className="max-w-xl text-sm leading-relaxed text-studio-muted sm:text-base">
-          Tell us a bit about yourself to personalize your drafting table.
+          Tell us a bit about yourself to personalize your resume workspace.
         </p>
       </header>
 
       <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center">
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="relative grid h-24 w-24 place-items-center overflow-hidden rounded-2xl border border-studio-border shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-studio-vermilion"
-          style={{ backgroundColor: data.avatarUrl ? undefined : data.avatarColor }}
-          aria-label="Upload profile photo"
+        <div
+          className="grid h-24 w-24 place-items-center overflow-hidden rounded-2xl border border-studio-border shadow-sm"
+          style={{ backgroundColor: data.avatarColor }}
+          aria-hidden="true"
         >
-          {data.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={data.avatarUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <span className="text-2xl font-semibold text-white">
-              {initialsFrom(data.displayName || data.fullName)}
-            </span>
-          )}
-          <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/45 py-1 text-[0.65rem] font-medium text-white">
-            <Camera className="h-3 w-3" aria-hidden="true" />
-            Photo
+          <span className="text-2xl font-semibold text-white">
+            {initialsFrom(data.displayName || data.fullName)}
           </span>
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => onFile(e.target.files?.[0])}
-        />
+        </div>
 
         <div className="space-y-2">
           <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
@@ -97,8 +63,8 @@ export function Step1Personal({
                 onClick={() => onChange({ avatarColor: color, avatarUrl: undefined })}
                 className={[
                   "h-8 w-8 rounded-full border-2 transition",
-                  data.avatarColor === color && !data.avatarUrl
-                    ? "border-studio-ink scale-110"
+                  data.avatarColor === color
+                    ? "scale-110 border-studio-ink"
                     : "border-transparent",
                 ].join(" ")}
                 style={{ backgroundColor: color }}

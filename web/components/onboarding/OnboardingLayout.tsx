@@ -40,7 +40,7 @@ export function OnboardingLayout({
               </button>
             ) : (
               <span className="font-mono text-xs tracking-wide text-studio-muted">
-                TYPESETTER / SETUP
+                RESUMATE / SETUP
               </span>
             )}
           </div>
@@ -62,7 +62,14 @@ export function OnboardingLayout({
           )}
         </div>
 
-        <div className="h-1 w-full bg-studio-canvas" role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={totalSteps}>
+        <div
+          className="h-1 w-full bg-studio-canvas"
+          role="progressbar"
+          aria-label="Setup progress"
+          aria-valuenow={step}
+          aria-valuemin={1}
+          aria-valuemax={totalSteps}
+        >
           <div
             className="h-full bg-studio-vermilion transition-[width] duration-500 ease-out"
             style={{ width: `${progress}%` }}

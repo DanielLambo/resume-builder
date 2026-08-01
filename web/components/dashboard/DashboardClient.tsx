@@ -177,7 +177,7 @@ export function DashboardClient({
       <div className="mb-8 flex flex-col gap-4 border-b border-studio-border pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="font-mono text-xs tracking-wide text-studio-muted">
-            TYPESETTER / LIBRARY
+            RESUMATE / LIBRARY
           </p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight text-studio-ink">
             Your resumes
@@ -251,7 +251,7 @@ export function DashboardClient({
                       href={`/editor/${resume.id}`}
                       className="col-span-2 inline-flex min-h-11 items-center justify-center bg-studio-vermilion px-3 py-2.5 text-center text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
                     >
-                      Edit in Vibe Coder
+                      Open editor
                     </Link>
                     <button
                       type="button"

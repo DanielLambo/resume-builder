@@ -104,12 +104,12 @@ export function HomeLanding() {
           <div
             className={`max-w-xl ${motionOn ? "animate-hero-rise" : ""}`}
           >
-            <p className="font-semibold tracking-tight text-studio-ink text-[clamp(2.6rem,8vw,4.5rem)] leading-[0.95]">
+            <h1 className="font-semibold tracking-tight text-studio-ink text-[clamp(2.6rem,8vw,4.5rem)] leading-[0.95]">
               Resumate
-            </p>
-            <h1 className="mt-5 max-w-[18ch] text-[1.55rem] font-semibold leading-snug tracking-tight text-studio-ink sm:text-[2rem]">
-              Get a sharper resume for every job you want.
             </h1>
+            <p className="mt-5 max-w-[18ch] text-[1.55rem] font-semibold leading-snug tracking-tight text-studio-ink sm:text-[2rem]">
+              Get a sharper resume for every job you want.
+            </p>
             <p className="mt-3 max-w-md text-base leading-relaxed text-studio-muted sm:text-[1.05rem]">
               Tailor honestly with AI, get hiring-manager feedback, and lock a
               clean one-page PDF—so you apply faster without inventing a single

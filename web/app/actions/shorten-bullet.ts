@@ -12,6 +12,7 @@ import {
 import type { Json } from "@/lib/database.types";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import {
+  AiQuotaUnavailableError,
   AiRateLimitError,
   assertWithinDailyAiLimit,
   incrementDailyAiTokens,
@@ -215,6 +216,9 @@ export async function shortenBulletAction(
             limit: payload.limit,
           };
         }
+        if (err instanceof AiQuotaUnavailableError) {
+          return { ok: false, status: 503, code: "INTERNAL", error: err.message };
+        }
         throw err;
       }
     }
@@ -297,7 +301,7 @@ export async function shortenBulletAction(
         ok: false,
         status: 500,
         code: "INTERNAL",
-        error: updateError.message,
+        error: "Could not save the shortened bullet.",
       };
     }
 
@@ -313,10 +317,13 @@ export async function shortenBulletAction(
       dailyTokensRemaining: usage.remaining,
     };
   } catch (err) {
+    if (err instanceof AiQuotaUnavailableError) {
+      return { ok: false, status: 503, code: "INTERNAL", error: err.message };
+    }
     return {
       ok: false,
       code: "INTERNAL",
-      error: err instanceof Error ? err.message : "Shorten failed",
+      error: "Could not tighten that bullet. Your draft is intact.",
     };
   }
 }

@@ -65,7 +65,7 @@ export function TailorForJobModal({
         onClick={(e) => e.stopPropagation()}
       >
         <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
-          Typesetter / job application
+          Resumate / job application
         </p>
         <h2
           id="tailor-job-title"

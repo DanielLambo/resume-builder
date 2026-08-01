@@ -17,6 +17,9 @@ describe("safeNextPath", () => {
     assert.equal(safeNextPath("/\\evil"), "/dashboard");
     assert.equal(safeNextPath("/login"), "/dashboard");
     assert.equal(safeNextPath(null), "/dashboard");
+    assert.equal(safeNextPath("/editor/../../../evil"), "/dashboard");
+    assert.equal(safeNextPath("/dashboard/../login"), "/dashboard");
+    assert.equal(safeNextPath("/reset-password"), "/reset-password");
   });
 
   it("honors signup fallback", () => {

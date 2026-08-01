@@ -33,6 +33,15 @@ export function WritingProfileModal({
     }
   }, [open, profile.instructions]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const jobLabels = labelsForJobTypes(profile.jobTypes);
@@ -45,8 +54,12 @@ export function WritingProfileModal({
       aria-modal="true"
       aria-labelledby="writing-profile-title"
       data-testid="writing-profile-modal"
+      onClick={onClose}
     >
-      <div className="w-full max-w-md border border-studio-border bg-studio-bg p-4 shadow-paper-sheet sm:p-5">
+      <div
+        className="w-full max-w-md border border-studio-border bg-studio-bg p-4 shadow-paper-sheet sm:p-5"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2

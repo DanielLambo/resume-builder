@@ -17,6 +17,7 @@ import {
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import { persistResumePdf } from "@/lib/persist-resume-pdf";
 import {
+  AiQuotaUnavailableError,
   AiRateLimitError,
   assertWithinDailyAiLimit,
   DAILY_AI_TOKEN_LIMIT,
@@ -106,6 +107,9 @@ export async function tailorResumeForJobAction(
             used: payload.used,
             limit: payload.limit,
           };
+        }
+        if (err instanceof AiQuotaUnavailableError) {
+          return { ok: false, status: 503, code: "INTERNAL", error: err.message };
         }
         throw err;
       }
@@ -251,7 +255,14 @@ export async function tailorResumeForJobAction(
         limit: payload.limit,
       };
     }
-    const message = err instanceof Error ? err.message : "Could not tailor resume.";
-    return { ok: false, status: 500, code: "INTERNAL", error: message };
+    if (err instanceof AiQuotaUnavailableError) {
+      return { ok: false, status: 503, code: "INTERNAL", error: err.message };
+    }
+    return {
+      ok: false,
+      status: 500,
+      code: "INTERNAL",
+      error: "Could not tailor that resume. Your original draft is intact.",
+    };
   }
 }

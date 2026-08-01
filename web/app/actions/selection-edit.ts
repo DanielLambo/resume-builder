@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { Json } from "@/lib/database.types";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import {
+  AiQuotaUnavailableError,
   AiRateLimitError,
   assertWithinDailyAiLimit,
   DAILY_AI_TOKEN_LIMIT,
@@ -53,6 +54,7 @@ export type SelectionEditResult =
       status?: number;
       code?:
         | "AI_DAILY_LIMIT"
+        | "AI_QUOTA_UNAVAILABLE"
         | "UNAUTHORIZED"
         | "VALIDATION"
         | "NOT_FOUND"
@@ -216,6 +218,14 @@ export async function selectionEditAction(
             limit: payload.limit,
           };
         }
+        if (err instanceof AiQuotaUnavailableError) {
+          return {
+            ok: false,
+            status: 503,
+            code: "AI_QUOTA_UNAVAILABLE",
+            error: err.message,
+          };
+        }
         throw err;
       }
     }
@@ -325,11 +335,19 @@ export async function selectionEditAction(
         limit: payload.limit,
       };
     }
+    if (err instanceof AiQuotaUnavailableError) {
+      return {
+        ok: false,
+        status: 503,
+        code: "AI_QUOTA_UNAVAILABLE",
+        error: err.message,
+      };
+    }
     return {
       ok: false,
       status: 500,
       code: "INTERNAL",
-      error: err instanceof Error ? err.message : "Selection edit failed",
+      error: "Selection edit failed. Your draft is intact.",
     };
   }
 }

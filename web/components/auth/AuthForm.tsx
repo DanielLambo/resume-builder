@@ -232,7 +232,17 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
               />
             </label>
             <label className="grid gap-1.5 text-sm font-medium text-studio-ink">
-              Password
+              <span className="flex items-center justify-between gap-2">
+                Password
+                {isLogin ? (
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs font-normal text-studio-muted underline underline-offset-2 transition hover:text-studio-ink"
+                  >
+                    Forgot password?
+                  </Link>
+                ) : null}
+              </span>
               <input
                 className="min-h-12 border border-studio-border bg-white px-3 py-2.5 text-base text-studio-ink outline-none transition placeholder:text-studio-muted/60 focus:border-studio-ink/30 focus:ring-2 focus:ring-studio-vermilion/30 disabled:opacity-60"
                 type="password"

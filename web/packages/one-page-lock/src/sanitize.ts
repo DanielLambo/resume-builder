@@ -7,8 +7,13 @@ const DANGEROUS_PATTERNS: ReadonlyArray<{ pattern: RegExp; label: string }> = [
   { pattern: /\\immediate\b/gi, label: "\\immediate" },
   { pattern: /\\openout\b/gi, label: "\\openout" },
   { pattern: /\\closeout\b/gi, label: "\\closeout" },
+  { pattern: /\\openin\b/gi, label: "\\openin" },
+  { pattern: /\\read\b/gi, label: "\\read" },
   { pattern: /\\input\s*\{?\s*\|/gi, label: "\\input|" },
+  { pattern: /\\input\b/gi, label: "\\input" },
+  { pattern: /\\include\b/gi, label: "\\include" },
   { pattern: /\\includeonly\b/gi, label: "\\includeonly" },
+  { pattern: /\\InputIfFileExists\b/gi, label: "\\InputIfFileExists" },
 ];
 
 export type SanitizeResult =
