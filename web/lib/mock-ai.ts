@@ -1,3 +1,4 @@
+import { extractTargetRole, type GroqResumeReviewResult } from "@/lib/resume-review";
 import type { GroqVibeEditResult, VibeEditModelOutput } from "@/lib/vibe-types";
 import { getLatexFromDataJson } from "@/lib/resume-template";
 
@@ -102,5 +103,83 @@ export function mockVibeEdit(input: {
   return {
     output,
     totalTokens: 128,
+  };
+}
+
+/**
+ * Offline / CI synthetic resume review — never calls Groq.
+ */
+export function mockResumeReview(input: {
+  prompt: string;
+  dataJson: Record<string, unknown>;
+  targetRole?: string | null;
+}): GroqResumeReviewResult {
+  const latex = getLatexFromDataJson(input.dataJson);
+  const role =
+    input.targetRole?.trim() ||
+    extractTargetRole(input.prompt) ||
+    "general software role";
+  const hasAws = /AWS/i.test(latex);
+  const hasDocker = /Docker/i.test(latex);
+  const hasMetrics = /\d+%|\d+\+|\$\d+/.test(latex);
+
+  const keywordGaps: string[] = [];
+  if (!hasAws) keywordGaps.push("AWS");
+  if (!hasDocker) keywordGaps.push("Docker");
+  if (!/test|pytest|jest|ci\b/i.test(latex)) keywordGaps.push("testing / CI");
+
+  const fitScore = Math.min(
+    9,
+    5 + (hasMetrics ? 2 : 0) + (hasAws || hasDocker ? 1 : 0) + (keywordGaps.length === 0 ? 1 : 0),
+  );
+
+  return {
+    totalTokens: 96,
+    review: {
+      targetRole: role,
+      fitScore,
+      summary: `For ${role}, this resume shows credible project and coursework signal, but several bullets stay task-shaped instead of outcome-shaped. Prioritize sharper impact wording and close the biggest keyword gaps that you can honestly support.`,
+      strengths: [
+        {
+          title: "Concrete stack",
+          detail:
+            "Tools and languages are easy to scan, which helps a recruiter map you to the role quickly.",
+        },
+        {
+          title: hasMetrics ? "Some quantified impact" : "Clear project ownership",
+          detail: hasMetrics
+            ? "Numeric outcomes already present — keep that style across weaker bullets."
+            : "Projects read like work you owned, not class list items.",
+        },
+      ],
+      gaps: [
+        {
+          title: keywordGaps.length
+            ? "Role keyword coverage"
+            : "Impact density",
+          detail: keywordGaps.length
+            ? `Missing or weak signals for: ${keywordGaps.join(", ")}. Only add these if evidenced by real work.`
+            : "A few bullets still describe duties without a measurable result.",
+          severity: keywordGaps.length >= 2 ? "high" : "medium",
+        },
+      ],
+      bulletAdvice: [
+        {
+          quote: "Worked on",
+          issue: "Passive ownership — recruiters cannot tell what you shipped.",
+          suggestion:
+            "Lead with a verb + object + outcome (e.g. 'Shipped X endpoint; cut p95 latency from A to B').",
+        },
+      ],
+      keywordGaps,
+      actionItems: [
+        `Rewrite your weakest Experience/Projects bullet for ${role} with one honest metric or scope marker.`,
+        keywordGaps[0]
+          ? `If true, surface ${keywordGaps[0]} in Skills or a project bullet — do not invent it.`
+          : "Move your strongest role-relevant project above weaker coursework.",
+        "Trim filler adjectives so each bullet is one crisp claim.",
+      ],
+      reply: `Mock review for ${role}: fit ${fitScore}/10 — tighten impact and close honest keyword gaps.`,
+    },
   };
 }
