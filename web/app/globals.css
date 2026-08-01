@@ -19,18 +19,16 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
-/* Prevent iOS Safari zooming focused form fields under 16px */
-input,
-textarea,
-select {
-  font-size: 16px;
-}
-
-@media (min-width: 640px) {
+/*
+ * iOS Safari zooms inputs under 16px. Cap a floor on small screens only.
+ * Do not use `font-size: inherit` on larger breakpoints — labels are often
+ * text-xs/sm, which made desktop auth fields unreadably small.
+ */
+@media (max-width: 639px) {
   input,
   textarea,
   select {
-    font-size: inherit;
+    font-size: 16px;
   }
 }
 
