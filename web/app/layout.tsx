@@ -8,8 +8,9 @@ import { TokenUsageProvider } from "@/lib/token-usage";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Typesetter · Resumate",
-  description: "A bright typography studio for clean, tailored resumes.",
+  title: "Resumate — Tailored resumes that stay honest",
+  description:
+    "Tailor your resume for every job with honest AI edits, hiring-manager reviews, and a one-page lock.",
 };
 
 export const viewport: Viewport = {
