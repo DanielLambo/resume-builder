@@ -131,6 +131,89 @@ function stripTexComments(src: string): string {
     .join("\n");
 }
 
+/** Public for compile-time Jake detection (comments ignored). */
+export function stripLatexComments(src: string): string {
+  return stripTexComments(src);
+}
+
+/**
+ * True when live (non-comment) source looks like Jake’s Resume template.
+ */
+export function looksLikeJakeTemplate(tex: string): boolean {
+  const live = stripTexComments(tex);
+  return (
+    JAKE_MARKERS.test(live) ||
+    /\\newcommand\{\\resumeItem\}/.test(live) ||
+    /\\usepackage\[empty\]\{fullpage\}/.test(live) ||
+    /\\resumeSubHeadingListStart/.test(live)
+  );
+}
+
+function stripLeftoverJakeCommands(body: string): string {
+  let next = body;
+  // Second pass for macros that failed the first braced extract.
+  next = replaceCommand(next, "resumeItem", 1, (text) => `\\item ${text.trim()}`);
+  next = replaceCommand(next, "resumeSubItem", 1, (text) => `\\item ${text.trim()}`);
+  next = replaceCommand(
+    next,
+    "resumeSubheading",
+    4,
+    (org, dates, title, loc) => {
+      const subtitle = [title.trim(), loc.trim()].filter(Boolean).join(" $\\cdot$ ");
+      return `\\entry{${org.trim()}}{${dates.trim()}}{${subtitle}}`;
+    },
+  );
+  next = replaceCommand(next, "resumeProjectHeading", 2, (heading, dates) => {
+    const plain = heading.replace(/\\[a-zA-Z]+\{([^{}]*)\}/g, "$1").replace(/\s+/g, " ").trim();
+    return `\\entry{${plain}}{${dates.trim()}}{}`;
+  });
+  next = next.replace(
+    /\\resume(?:SubHeadingListStart|SubHeadingListEnd|ItemListStart|ItemListEnd|SubItem)\b/g,
+    "",
+  );
+  // Drop any remaining Jake command tokens so pdflatex doesn't choke.
+  next = next.replace(/\\resume[A-Za-z]+\*?/g, "");
+  return next;
+}
+
+function balanceTrailingBraces(tex: string): string {
+  const delta = unescapedBraceDeltaForTex(tex);
+  if (delta <= 0) return tex;
+  return tex.replace(/\\end\{document\}/i, `${"}".repeat(delta)}\n\\end{document}`);
+}
+
+function unescapedBraceDeltaForTex(text: string): number {
+  let opens = 0;
+  let closes = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === "\\" && i + 1 < text.length) {
+      i += 1;
+      continue;
+    }
+    if (text[i] === "{") opens += 1;
+    else if (text[i] === "}") closes += 1;
+  }
+  return opens - closes;
+}
+
+/**
+ * Always produce house-template LaTeX from a Jake paste (best effort).
+ * Prefer this over failing the compile with an opaque error.
+ */
+export function jakeToHouseLatex(raw: string): string {
+  const softened = softenJakeSource(stripTexComments(raw));
+  const body = documentBody(softened) ?? softened;
+  const { header, rest } = headerFromCenterBlock(body);
+  const converted = stripLeftoverJakeCommands(convertJakeBody(rest));
+  const latex = `${HOUSE_LATEX_PREAMBLE}
+\\begin{document}
+${header}
+${converted}
+\\end{document}
+`;
+  return balanceTrailingBraces(latex);
+}
+
 function documentBody(tex: string): string | null {
   const match = tex.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/i);
   return match?.[1]?.trim() ? match[1].trim() : null;
@@ -234,17 +317,22 @@ export function planTexImport(raw: string): TexPlan {
     };
   }
 
-  if (JAKE_MARKERS.test(source)) {
+  if (JAKE_MARKERS.test(source) || looksLikeJakeTemplate(source)) {
     const body = documentBody(softenJakeSource(source)) ?? softenJakeSource(source);
     const { header, rest } = headerFromCenterBlock(body);
-    const converted = convertJakeBody(rest);
-    const latex = `${HOUSE_LATEX_PREAMBLE}
+    const converted = stripLeftoverJakeCommands(convertJakeBody(rest));
+    const latex = balanceTrailingBraces(`${HOUSE_LATEX_PREAMBLE}
 \\begin{document}
 ${header}
 ${converted}
 \\end{document}
-`;
+`);
     if (latexValidationError(latex) || /\\resume[A-Z]/.test(latex)) {
+      // Still try best-effort house output rather than forcing an AI rewrite.
+      const fallback = jakeToHouseLatex(source);
+      if (!latexValidationError(fallback) && !/\\resume[A-Z]/.test(fallback)) {
+        return { mode: "jake", latex: fallback };
+      }
       return {
         mode: "rewrite",
         source,

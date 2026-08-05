@@ -45,14 +45,19 @@ describe("prepareLatexForCompile", () => {
     assert.match(messy, /PyTorch/);
   });
 
-  it("rejects irreparable Jake sources with a short message", () => {
+  it("best-effort converts Jake even with a missing brace", () => {
     const broken = String.raw`\documentclass{article}
+\usepackage[empty]{fullpage}
 \begin{document}
+\begin{center}
+\textbf{\Huge Ada} \\
+ada@ex.com
+\end{center}
 \resumeItem{only one brace
 \end{document}`;
-    assert.throws(
-      () => prepareLatexForCompile(broken),
-      /Jake-style resume has broken braces/,
-    );
+    const { latex, convertedFromJake } = prepareLatexForCompile(broken);
+    assert.equal(convertedFromJake, true);
+    assert.match(latex, /\\headerblock\{Ada\}/);
+    assert.doesNotMatch(latex, /\\resumeItem|fullpage/);
   });
 });

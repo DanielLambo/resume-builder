@@ -330,6 +330,34 @@ export function EditorClient({
         toast.message("Updating preview…");
       }
       try {
+        let compileSource = source;
+        try {
+          const { prepareLatexForCompile } = await import("@/lib/latex-prepare");
+          const prepared = prepareLatexForCompile(source);
+          compileSource = prepared.latex;
+          if (prepared.convertedFromJake && prepared.latex !== source) {
+            setLatex(prepared.latex);
+            latexRef.current = prepared.latex;
+            setDirty(true);
+            if (!quiet) {
+              toast.message("Converted Jake template to Resumate LaTeX");
+            }
+          } else if (prepared.latex !== source) {
+            compileSource = prepared.latex;
+          }
+        } catch (prepErr) {
+          const message =
+            prepErr instanceof Error
+              ? prepErr.message
+              : "Couldn’t prepare LaTeX for compile.";
+          const short =
+            message.length > 140 ? `${message.slice(0, 137)}…` : message;
+          if (gen === compileGen.current) {
+            setCompileError(short);
+          }
+          throw new Error(short);
+        }
+
         const res = await fetch("/api/compile", {
           method: "POST",
           headers: {
@@ -337,7 +365,7 @@ export function EditorClient({
             Accept: "application/pdf",
           },
           body: JSON.stringify({
-            latex: source,
+            latex: compileSource,
             autoFit: true,
             resumeId,
           }),
