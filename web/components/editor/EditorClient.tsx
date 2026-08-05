@@ -427,6 +427,10 @@ export function EditorClient({
               result.steps.map((s) => `[${s.index}/${s.total}] ${s.message}`),
             );
           }
+          if (result.code === "GROQ_BUSY") {
+            toast.error(result.error);
+            return;
+          }
           if (result.status === 429 || result.code === "AI_DAILY_LIMIT") {
             if (typeof result.used === "number") {
               applyUsage(result.used, undefined, result.limit);

@@ -131,7 +131,7 @@ export async function fitToSinglePage(rawTex, options = {}) {
             const condensed = await condenseBulletsWithGroq(workingTex, {
                 apiKey,
                 baseUrl: options.groqBaseUrl ?? process.env.GROQ_BASE_URL,
-                model: options.model ?? "llama-3.3-70b-versatile",
+                model: options.model ?? "openai/gpt-oss-20b",
                 timeoutMs: Math.min(4_000, remainingMs(startedAt, timeoutMs) || 1),
             });
             workingTex = condensed.latex;
