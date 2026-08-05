@@ -92,37 +92,44 @@ export function HomeLanding() {
         />
 
         <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-5 pb-10 pt-5 sm:px-8 sm:pb-16 lg:px-10">
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-between gap-3">
+            <Link
+              href="/"
+              className="font-semibold tracking-tight text-studio-ink transition hover:text-studio-ink/80"
+            >
+              Resumate
+            </Link>
             <Link
               href="/login"
-              className="rounded-lg px-3 py-2 text-sm font-medium text-studio-ink/80 transition hover:bg-studio-paper/70 hover:text-studio-ink"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-studio-ink/70 transition hover:bg-white/55 hover:text-studio-ink"
             >
               Sign in
             </Link>
           </div>
 
-          <div className={`mt-auto max-w-xl sm:mt-0 sm:flex sm:min-h-0 sm:flex-1 sm:flex-col sm:justify-center ${motionOn ? "animate-hero-rise" : ""}`}>
-            <p className="font-semibold tracking-tight text-studio-ink text-[clamp(2.6rem,8vw,4.5rem)] leading-[0.95]">
+          <div
+            className={`mt-auto max-w-xl sm:mt-0 sm:flex sm:min-h-0 sm:flex-1 sm:flex-col sm:justify-center ${motionOn ? "animate-hero-rise" : ""}`}
+          >
+            <p className="font-semibold tracking-tight text-studio-ink text-[clamp(2.75rem,8.2vw,4.65rem)] leading-[0.92]">
               Resumate
             </p>
             <h1 className="mt-5 max-w-[18ch] text-[1.55rem] font-semibold leading-snug tracking-tight text-studio-ink sm:text-[2rem]">
-              Get a sharper resume for every job you want.
+              A sharper resume for every job you want.
             </h1>
-            <p className="mt-3 max-w-md text-base leading-relaxed text-studio-ink/75 sm:text-[1.05rem]">
-              Tailor honestly with AI, get hiring-manager feedback, and lock a
-              clean one-page PDF — so you apply faster without inventing a
-              single detail.
+            <p className="mt-3 max-w-md text-base leading-relaxed text-studio-ink/70 sm:text-[1.05rem]">
+              Honest AI edits, hiring-manager feedback, and a locked one-page
+              PDF. Apply faster without inventing anything.
             </p>
             <div className="mt-7 flex w-full max-w-sm flex-col gap-2.5 sm:max-w-none sm:flex-row sm:gap-3">
               <Link
                 href="/signup"
-                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-studio-vermilion px-5 py-3 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-studio-vermilion px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(229,75,75,0.22)] transition hover:bg-studio-vermilion-hover hover:shadow-[0_10px_24px_rgba(229,75,75,0.3)]"
               >
                 Start free
               </Link>
               <Link
                 href="/import"
-                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-studio-ink/15 bg-studio-paper/80 px-5 py-3 text-sm font-semibold text-studio-ink backdrop-blur-sm transition hover:bg-studio-paper"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-studio-ink/12 bg-white/70 px-5 py-3 text-sm font-semibold text-studio-ink backdrop-blur-sm transition hover:border-studio-ink/20 hover:bg-white"
               >
                 Import resume
               </Link>
@@ -134,8 +141,8 @@ export function HomeLanding() {
             className="pointer-events-none absolute right-[8%] top-[38%] hidden w-[min(18rem,30vw)] lg:block xl:right-[12%] xl:top-[36%]"
             aria-hidden="true"
           >
-            <div className="min-h-[7.5rem] border border-[#d8d2c6] bg-[#FFFEFA]/92 px-4 py-3 font-mono text-[0.7rem] leading-relaxed text-studio-ink shadow-[0_10px_28px_rgba(0,0,0,0.08)]">
-              <p className="mb-2 text-[0.62rem] font-semibold tracking-[0.18em] text-studio-ink/70">
+            <div className="min-h-[7.5rem] rotate-[-1.25deg] border border-[#d8d2c6] bg-[#FFFEFA]/94 px-4 py-3.5 font-mono text-[0.7rem] leading-relaxed text-studio-ink shadow-[0_14px_36px_rgba(0,0,0,0.1)]">
+              <p className="mb-2 text-[0.62rem] font-semibold tracking-[0.18em] text-studio-ink/55">
                 RESUME
               </p>
               {TYPING_LINES.map((line, i) => {
@@ -147,7 +154,7 @@ export function HomeLanding() {
                   <p key={line} className="whitespace-pre-wrap">
                     {shown}
                     {showCaret ? (
-                      <span className="animate-caret-blink ml-0.5 inline-block h-[0.95em] w-[0.45em] translate-y-[0.1em] bg-studio-ink align-middle" />
+                      <span className="animate-caret-blink ml-0.5 inline-block h-[0.95em] w-[0.45em] translate-y-[0.1em] bg-studio-vermilion align-middle" />
                     ) : null}
                   </p>
                 );
@@ -157,7 +164,8 @@ export function HomeLanding() {
 
           {/* Mobile: typewriter strip under CTAs */}
           <div
-            className={`mt-8 max-w-md border-l-2 border-studio-ink/25 pl-3 font-mono text-[0.75rem] leading-relaxed text-studio-ink/80 lg:hidden ${motionOn ? "animate-hero-rise" : ""}`}
+            className={`mt-8 max-w-md border-l-2 border-studio-vermilion/45 pl-3 font-mono text-[0.75rem] leading-relaxed text-studio-ink/80 lg:hidden ${motionOn ? "animate-hero-rise" : ""}`}
+            style={motionOn ? { animationDelay: "120ms" } : undefined}
             aria-live="polite"
           >
             <p className="mb-1 text-[0.62rem] font-semibold tracking-[0.18em] text-studio-muted">
@@ -171,7 +179,7 @@ export function HomeLanding() {
                 <p key={line}>
                   {shown}
                   {showCaret ? (
-                    <span className="animate-caret-blink ml-0.5 inline-block h-[0.9em] w-[0.4em] translate-y-[0.08em] bg-studio-ink align-middle" />
+                    <span className="animate-caret-blink ml-0.5 inline-block h-[0.9em] w-[0.4em] translate-y-[0.08em] bg-studio-vermilion align-middle" />
                   ) : null}
                 </p>
               );
