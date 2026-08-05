@@ -58,11 +58,11 @@ export function TemplatePicker({
       onClick={onClose}
     >
       <div
-        className="max-h-[92dvh] w-full max-w-3xl overflow-auto border border-studio-border bg-studio-paper p-4 shadow-paper-sheet sm:p-5"
+        className="max-h-[92dvh] w-full max-w-3xl overflow-auto rounded-2xl border border-studio-border bg-studio-paper p-4 shadow-paper-sheet sm:p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
-          Typesetter / templates
+        <p className="text-[0.65rem] font-medium uppercase tracking-wide text-studio-muted">
+          Templates
         </p>
         <h2
           id="template-picker-title"

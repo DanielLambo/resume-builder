@@ -55,6 +55,7 @@ export function DashboardClient({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tailorSource, setTailorSource] = useState<ResumeRow | null>(null);
   const [tailoring, setTailoring] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   function openPicker() {
     setPickerOpen(true);
@@ -103,11 +104,15 @@ export function DashboardClient({
   }
 
   function onDelete(id: string) {
-    if (!confirm("Delete this resume permanently?")) return;
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      return;
+    }
     setBusyId(id);
     startTransition(async () => {
       const result = await deleteResumeAction(id);
       setBusyId(null);
+      setConfirmDeleteId(null);
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -176,8 +181,8 @@ export function DashboardClient({
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="mb-8 flex flex-col gap-4 border-b border-studio-border pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="font-mono text-xs tracking-wide text-studio-muted">
-            TYPESETTER / LIBRARY
+          <p className="text-xs font-medium tracking-wide text-studio-muted">
+            Library
           </p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight text-studio-ink">
             Your resumes
@@ -189,7 +194,7 @@ export function DashboardClient({
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <Link
             href="/import"
-            className="inline-flex min-h-11 w-full items-center justify-center border border-studio-ink/15 bg-studio-paper px-4 py-2.5 text-sm font-semibold text-studio-ink hover:bg-studio-canvas sm:w-auto"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-studio-ink/15 bg-studio-paper px-4 py-2.5 text-sm font-semibold text-studio-ink hover:bg-studio-canvas sm:w-auto"
           >
             Import resume
           </Link>
@@ -197,7 +202,7 @@ export function DashboardClient({
             type="button"
             onClick={openPicker}
             disabled={pending}
-            className="inline-flex min-h-11 w-full items-center justify-center bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white hover:bg-studio-vermilion-hover disabled:opacity-60 sm:w-auto"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white hover:bg-studio-vermilion-hover disabled:opacity-60 sm:w-auto"
             data-testid="create-resume"
             data-tour="create-resume"
           >
@@ -209,7 +214,7 @@ export function DashboardClient({
       {resumes.length === 0 ? (
         <div
           data-tour="library"
-          className="grid place-items-center gap-3 border border-studio-border bg-studio-paper px-6 py-16 text-center shadow-paper-sheet"
+          className="grid place-items-center gap-3 rounded-2xl border border-studio-border bg-studio-paper px-6 py-16 text-center shadow-paper-sheet"
         >
           <h2 className="text-lg font-semibold text-studio-ink">
             Nothing on the desk yet
@@ -222,13 +227,13 @@ export function DashboardClient({
             <button
               type="button"
               onClick={openPicker}
-              className="bg-studio-vermilion px-4 py-2 text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
+              className="rounded-xl bg-studio-vermilion px-4 py-2 text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
             >
               Choose a template
             </button>
             <Link
               href="/import"
-              className="border border-studio-ink/15 bg-studio-paper px-4 py-2 text-sm font-semibold text-studio-ink hover:bg-studio-canvas"
+              className="rounded-xl border border-studio-ink/15 bg-studio-paper px-4 py-2 text-sm font-semibold text-studio-ink hover:bg-studio-canvas"
             >
               Import .tex or PDF
             </Link>
@@ -245,7 +250,7 @@ export function DashboardClient({
             return (
               <article
                 key={resume.id}
-                className="flex flex-col overflow-hidden border border-studio-border bg-studio-paper shadow-paper-sheet"
+                className="flex flex-col overflow-hidden rounded-2xl border border-studio-border bg-studio-paper shadow-paper-sheet"
               >
                 <div className="relative h-28 border-b border-studio-border bg-studio-canvas p-4">
                   <div className="h-full border border-studio-border bg-studio-paper p-3 shadow-sm">
@@ -272,15 +277,15 @@ export function DashboardClient({
                   <div className="mt-auto grid grid-cols-2 gap-2">
                     <Link
                       href={`/editor/${resume.id}`}
-                      className="col-span-2 inline-flex min-h-11 items-center justify-center bg-studio-vermilion px-3 py-2.5 text-center text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
+                      className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-xl bg-studio-vermilion px-3 py-2.5 text-center text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
                     >
-                      Edit in Vibe Coder
+                      Open editor
                     </Link>
                     <button
                       type="button"
                       disabled={busy || pending}
                       onClick={() => setTailorSource(resume)}
-                      className="col-span-2 min-h-10 border border-studio-ink/20 bg-studio-canvas px-3 py-2 text-xs font-semibold text-studio-ink hover:bg-studio-border/40 disabled:opacity-50"
+                      className="col-span-2 min-h-10 rounded-lg border border-studio-ink/20 bg-studio-canvas px-3 py-2 text-xs font-semibold text-studio-ink hover:bg-studio-border/40 disabled:opacity-50"
                       data-testid="tailor-for-job"
                     >
                       Tailor for job
@@ -289,7 +294,7 @@ export function DashboardClient({
                       type="button"
                       disabled={busy || pending}
                       onClick={() => onDuplicate(resume.id)}
-                      className="min-h-10 border border-studio-border px-3 py-2 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-50"
+                      className="min-h-10 rounded-lg border border-studio-border px-3 py-2 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-50"
                     >
                       Duplicate
                     </button>
@@ -297,7 +302,7 @@ export function DashboardClient({
                       type="button"
                       disabled={busy || pending}
                       onClick={() => onDownload(resume.id)}
-                      className="min-h-10 border border-studio-border px-3 py-2 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-50"
+                      className="min-h-10 rounded-lg border border-studio-border px-3 py-2 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-50"
                     >
                       Download PDF
                     </button>
@@ -305,9 +310,13 @@ export function DashboardClient({
                       type="button"
                       disabled={busy || pending}
                       onClick={() => onDelete(resume.id)}
-                      className="col-span-2 min-h-10 border border-studio-border px-3 py-2 text-xs font-medium text-studio-vermilion hover:bg-red-50 disabled:opacity-50"
+                      className={`col-span-2 min-h-10 rounded-lg border px-3 py-2 text-xs font-medium disabled:opacity-50 ${
+                        confirmDeleteId === resume.id
+                          ? "border-studio-vermilion bg-red-50 text-studio-vermilion"
+                          : "border-studio-border text-studio-vermilion hover:bg-red-50"
+                      }`}
                     >
-                      Delete
+                      {confirmDeleteId === resume.id ? "Click again to delete" : "Delete"}
                     </button>
                   </div>
                 </div>

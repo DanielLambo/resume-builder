@@ -64,7 +64,7 @@ select {
   }
 
   .studio-panel {
-    @apply border border-studio-border bg-studio-paper;
+    @apply rounded-xl border border-studio-border bg-studio-paper;
   }
 }
 

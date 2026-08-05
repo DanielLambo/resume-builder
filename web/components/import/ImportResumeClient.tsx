@@ -146,7 +146,7 @@ export function ImportResumeClient({ signedIn }: { signedIn: boolean }) {
           setDragOver(false);
           onFiles(event.dataTransfer.files);
         }}
-        className={`mt-8 cursor-pointer border border-dashed px-5 py-10 text-center transition ${
+        className={`mt-8 cursor-pointer rounded-2xl border border-dashed px-5 py-10 text-center transition ${
           dragOver
             ? "border-studio-vermilion bg-studio-paper"
             : "border-studio-border bg-studio-paper/80 hover:border-studio-ink/30"
