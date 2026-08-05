@@ -145,6 +145,11 @@ type BottomDockProps = {
   minHeight?: number;
   maxHeight?: number;
   storageKey?: string;
+  /**
+   * Soft target height (e.g. when the prompt grows).
+   * Raises the dock up to this value without fighting a larger user drag.
+   */
+  preferHeight?: number;
 };
 
 /**
@@ -155,14 +160,16 @@ export function BottomDock({
   children,
   defaultHeight = 132,
   minHeight = 72,
-  maxHeight = 320,
+  maxHeight = 380,
   storageKey = "resumate_editor_dock_px",
+  preferHeight,
 }: BottomDockProps) {
   const [height, setHeight] = useState(defaultHeight);
   const dragging = useRef(false);
   const heightRef = useRef(height);
   const startY = useRef(0);
   const startH = useRef(0);
+  const userSized = useRef(false);
   heightRef.current = height;
 
   useEffect(() => {
@@ -171,11 +178,18 @@ export function BottomDock({
       const parsed = raw ? Number(raw) : Number.NaN;
       if (Number.isFinite(parsed) && parsed >= minHeight && parsed <= maxHeight) {
         setHeight(parsed);
+        userSized.current = true;
       }
     } catch {
       /* ignore */
     }
   }, [storageKey, minHeight, maxHeight]);
+
+  useEffect(() => {
+    if (preferHeight == null || userSized.current) return;
+    const capped = Math.min(maxHeight, Math.max(minHeight, preferHeight));
+    setHeight((prev) => (capped > prev ? capped : prev));
+  }, [preferHeight, minHeight, maxHeight]);
 
   const persist = useCallback(() => {
     try {
@@ -198,6 +212,7 @@ export function BottomDock({
     const onUp = () => {
       if (!dragging.current) return;
       dragging.current = false;
+      userSized.current = true;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       persist();
