@@ -6,29 +6,18 @@ import {
   DashboardClient,
   DashboardSkeleton,
 } from "@/components/dashboard/DashboardClient";
+import { StudioTour } from "@/components/dashboard/StudioTour";
 import { PrivacyNotice } from "@/components/PrivacyNotice";
 import type { ResumeRow } from "@/lib/database.types";
 import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 
-async function DashboardBody() {
+async function DashboardBody({ userId }: { userId: string }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login?next=/dashboard");
-  }
-
-  if (await shouldForceOnboarding(user)) {
-    redirect("/onboarding");
-  }
-
   const { data, error } = await supabase
     .from("resumes")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .order("updated_at", { ascending: false });
 
   if (error) {
@@ -62,18 +51,32 @@ async function DashboardBody() {
   );
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tour?: string }>;
+}) {
+  const params = searchParams ? await searchParams : {};
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) {
+    redirect("/login?next=/dashboard");
+  }
+
+  if (await shouldForceOnboarding(user)) {
+    redirect("/onboarding");
+  }
+
   return (
     <>
-      <AppHeader email={user?.email} />
+      <AppHeader email={user.email} />
       <Suspense fallback={<DashboardSkeleton />}>
-        <DashboardBody />
+        <DashboardBody userId={user.id} />
       </Suspense>
+      <StudioTour welcome={params.tour === "1"} />
     </>
   );
 }

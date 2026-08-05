@@ -56,14 +56,14 @@ export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
 
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           {showMeter ? (
-            <>
+            <div data-tour="ai-quota">
               <div className="md:hidden">
                 <TokenMeter compact />
               </div>
               <div className="hidden md:block">
                 <TokenMeter />
               </div>
-            </>
+            </div>
           ) : null}
           {email ? (
             <span className="hidden max-w-[160px] truncate font-mono text-[0.65rem] text-studio-muted lg:inline">
