@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 
-import { StoreProvider } from "@/components/providers/StoreProvider";
 import { ToasterProvider } from "@/components/ToasterProvider";
 import { TokenUsageProvider } from "@/lib/token-usage";
 
@@ -31,12 +30,10 @@ export default function RootLayout({
       className={`${GeistSans.variable} ${GeistMono.variable}`}
     >
       <body className="bg-studio-bg font-sans text-studio-ink antialiased">
-        <StoreProvider>
-          <TokenUsageProvider>
-            {children}
-            <ToasterProvider />
-          </TokenUsageProvider>
-        </StoreProvider>
+        <TokenUsageProvider>
+          {children}
+          <ToasterProvider />
+        </TokenUsageProvider>
       </body>
     </html>
   );
