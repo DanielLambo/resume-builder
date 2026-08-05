@@ -161,7 +161,7 @@ export function ImportResumeClient({ signedIn }: { signedIn: boolean }) {
             : "Drop .tex or PDF here"}
         </p>
         <p className="mt-2 font-mono text-[0.7rem] text-studio-muted">
-          .tex · .latex · .pdf · max 4 MB
+          .tex ≤ 400 KB · PDF ≤ 4 MB
         </p>
         {fileLabel ? (
           <p className="mt-3 text-sm text-studio-ink">{fileLabel}</p>

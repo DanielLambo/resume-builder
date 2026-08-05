@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { z } from "zod";
 
 import type { Json } from "@/lib/database.types";
+import { SETUP_DONE_COOKIE } from "@/lib/auth-next";
 import {
   createResumeData,
   DEFAULT_RESUME_TITLE,
@@ -211,6 +213,18 @@ export async function getResumePdfSignedUrlAction(
 
 export async function signOutAction(): Promise<ActionResult> {
   const supabase = await createClient();
+  try {
+    const jar = await cookies();
+    jar.set(SETUP_DONE_COOKIE, "", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 0,
+    });
+  } catch {
+    /* cookies() unavailable outside a request */
+  }
   const { error } = await supabase.auth.signOut();
   if (error) {
     return { ok: false, error: error.message };

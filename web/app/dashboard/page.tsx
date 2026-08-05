@@ -9,6 +9,7 @@ import {
 import { StudioTour } from "@/components/dashboard/StudioTour";
 import { PrivacyNotice } from "@/components/PrivacyNotice";
 import type { ResumeRow } from "@/lib/database.types";
+import { onboardingPathWithNext } from "@/lib/auth-next";
 import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 
@@ -76,7 +77,7 @@ export default async function DashboardPage({
   }
 
   if (await shouldForceOnboarding(user)) {
-    redirect("/onboarding");
+    redirect(onboardingPathWithNext("/dashboard"));
   }
 
   return (
