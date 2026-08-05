@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type PDFPreviewProps = {
   pdfBase64: string | null;
@@ -10,9 +10,12 @@ type PDFPreviewProps = {
   zoom?: number | "fit";
 };
 
+const PAGE_WIDTH_PX = 816;
+const PAGE_HEIGHT_PX = 1056;
+
 /**
  * Floating paper sheet — real PDF via blob URL iframe.
- * Ghost overlay flashes emerald during vibe-edit updates.
+ * Zoom is CSS scale (Chrome ignores #zoom= on blob PDFs).
  */
 export function PDFPreview({
   pdfBase64,
@@ -21,7 +24,9 @@ export function PDFPreview({
   compiling = false,
   zoom = "fit",
 }: PDFPreviewProps) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [containerWidth, setContainerWidth] = useState(PAGE_WIDTH_PX);
 
   useEffect(() => {
     if (!pdfBase64) {
@@ -45,12 +50,25 @@ export function PDFPreview({
     }
   }, [pdfBase64]);
 
+  useEffect(() => {
+    const node = scrollerRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width && width > 0) setContainerWidth(width);
+    });
+    observer.observe(node);
+    setContainerWidth(node.clientWidth || PAGE_WIDTH_PX);
+    return () => observer.disconnect();
+  }, []);
+
   const ready = Boolean(objectUrl && pdfBase64);
   const measuredPages = pageCount ?? (ready ? 1 : null);
-  const hash =
-    zoom === "fit"
-      ? "#toolbar=0&navpanes=0&scrollbar=0&view=FitH&zoom=page-width"
-      : `#toolbar=0&navpanes=0&scrollbar=0&zoom=${zoom}`;
+  const pages = Math.max(1, measuredPages ?? 1);
+  const fitScale = Math.max(0.35, (containerWidth - 8) / PAGE_WIDTH_PX);
+  const scale = zoom === "fit" ? Math.min(fitScale, 1) : zoom / 100;
+  const paperWidth = PAGE_WIDTH_PX;
+  const paperHeight = PAGE_HEIGHT_PX * pages;
 
   const statusLabel = useMemo(() => {
     if (compiling) return "Updating preview…";
@@ -60,18 +78,34 @@ export function PDFPreview({
 
   return (
     <article
-      className="relative h-full min-h-0 w-full max-w-[min(100%,8.5in)] overflow-hidden rounded-sm border border-slate-200/60 bg-white shadow-2xl"
+      ref={scrollerRef}
+      className="relative h-full min-h-0 w-full overflow-auto rounded-sm border border-slate-200/60 bg-[#ece8e1] shadow-inner"
       aria-label="Resume paper preview"
       data-testid="pdf-preview-canvas"
       data-page-count={measuredPages != null ? String(measuredPages) : undefined}
       data-pdf-ready={ready ? "true" : "false"}
+      data-zoom={zoom === "fit" ? "fit" : String(zoom)}
     >
       {ready && objectUrl ? (
-        <iframe
-          title="Compiled resume PDF"
-          src={`${objectUrl}${hash}`}
-          className="absolute inset-0 h-full w-full border-0 bg-white"
-        />
+        <div
+          className="mx-auto my-3"
+          style={{
+            width: paperWidth * scale,
+            height: paperHeight * scale,
+          }}
+        >
+          <iframe
+            title="Compiled resume PDF"
+            src={`${objectUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+            className="block border-0 bg-white shadow-2xl"
+            style={{
+              width: paperWidth,
+              height: paperHeight,
+              transform: `scale(${scale})`,
+              transformOrigin: "top left",
+            }}
+          />
+        </div>
       ) : (
         <div className="flex h-full min-h-[28rem] flex-col items-center justify-center gap-3 p-8 text-center">
           <div className="h-40 w-[70%] max-w-sm animate-pulse rounded-sm bg-slate-100" />
