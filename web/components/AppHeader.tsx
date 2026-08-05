@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 import { signOutAction } from "@/app/actions/resumes";
 import { TokenMeter } from "@/components/TokenMeter";
@@ -21,7 +22,11 @@ export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
     startTransition(async () => {
       try {
         await signOutAction();
-      } catch {
+      } catch (err) {
+        if (isRedirectError(err)) {
+          toast.message("Signed out");
+          return;
+        }
         router.replace("/login");
       }
       toast.message("Signed out");
