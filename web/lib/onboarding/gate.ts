@@ -8,10 +8,9 @@ import { createClient } from "@/lib/supabase/server";
 export { metadataNeedsOnboarding } from "@/lib/onboarding/needs-onboarding";
 
 /**
- * Existing accounts that already have resumes should not be locked behind
- * onboarding (grandfather). New signups are flagged `onboarding_required`.
- *
- * On count failure, fail open so a login is never trapped in the wizard.
+ * `/onboarding` shows the wizard only when this account still needs setup
+ * (signup-flagged, unfinished, no resumes yet). Login and product routes
+ * never call this to force a redirect — wizard entry is signup navigation only.
  */
 export async function shouldForceOnboarding(user: User): Promise<boolean> {
   if (!metadataNeedsOnboarding(user)) return false;
