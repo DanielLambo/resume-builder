@@ -13,7 +13,7 @@ export function StatusLog({ lines, active }: StatusLogProps) {
 
   return (
     <div
-      className="mt-2 font-mono text-[0.7rem] leading-relaxed text-studio-muted"
+      className="max-w-[14rem] font-mono text-[0.7rem] leading-relaxed text-studio-muted sm:max-w-xs"
       data-testid="status-log"
       aria-live="polite"
     >

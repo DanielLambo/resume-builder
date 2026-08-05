@@ -15,18 +15,14 @@ import { selectionEditAction } from "@/app/actions/selection-edit";
 import { vibeEditAction } from "@/app/actions/vibe-edit";
 import { shortenBulletAction } from "@/app/actions/shorten-bullet";
 import { saveResumeLatexAction } from "@/app/actions/resumes";
-import { CompileErrorBanner } from "@/components/editor/CompileErrorBanner";
+import { AiComposerDock } from "@/components/editor/AiComposerDock";
 import { LatexSourceEditor } from "@/components/editor/LatexSourceEditor";
 import { LineOptimizerToggle, useLineOptimizerPreference } from "@/components/editor/LineOptimizerToggle";
 import { OrphanHeatmapPanel } from "@/components/editor/OrphanHeatmapPanel";
 import { PDFPreview } from "@/components/editor/PDFPreview";
-import { PromptRecipes } from "@/components/editor/PromptRecipes";
 import { QuotaModal } from "@/components/editor/QuotaModal";
-import { ResumeReviewPanel } from "@/components/editor/ResumeReviewPanel";
 import { SplitPane } from "@/components/editor/SplitPane";
 import type { SourceSelection } from "@/components/editor/source-selection";
-import { StatusLog } from "@/components/editor/StatusLog";
-import { VersionStepper } from "@/components/editor/VersionStepper";
 import { WritingProfileModal } from "@/components/editor/WritingProfileModal";
 import { TemplatePicker } from "@/components/templates/TemplatePicker";
 import {
@@ -859,108 +855,6 @@ export function EditorClient({
         }}
         onSelectionChange={setSelection}
       />
-
-      <div className="shrink-0 border-t border-studio-border bg-studio-bg px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4">
-        {versions.stack.length > 1 ? (
-          <div className="mb-2">
-            <VersionStepper
-              index={versions.index}
-              total={versions.stack.length}
-              disabled={busy || compiling}
-              onPrev={() => restoreVersion(versions.index - 1)}
-              onNext={() => restoreVersion(versions.index + 1)}
-            />
-          </div>
-        ) : null}
-        {review ? (
-          <div className="mb-2 max-h-36 overflow-auto rounded-lg border border-studio-border bg-studio-paper p-3">
-            <ResumeReviewPanel review={review} />
-          </div>
-        ) : reply ? (
-          <p className="mb-2 line-clamp-3 text-sm leading-relaxed text-studio-ink">{reply}</p>
-        ) : null}
-        {compileError ? (
-          <div className="mb-2">
-            <CompileErrorBanner
-              error={compileError}
-              pending={busy}
-              onDismiss={() => setCompileError(null)}
-              onFix={() => {
-                if (!compileError) return;
-                runVibeEdit({
-                  prompt: COMPILE_FIX_PROMPT,
-                  compilerError: compileError,
-                  clearPrompt: false,
-                });
-              }}
-            />
-          </div>
-        ) : null}
-        <PromptRecipes
-          disabled={busy}
-          onPick={(recipePrompt, recipeId) => {
-            if (recipeId === "format") {
-              void formatForConsistency();
-              return;
-            }
-            setPrompt(recipePrompt);
-            promptRef.current?.focus();
-          }}
-        />
-        <div className="rounded-xl border border-studio-border bg-studio-paper focus-within:border-amber-500/40">
-          <textarea
-            ref={promptRef}
-            data-testid="vibe-prompt"
-            className="w-full resize-none bg-transparent px-3 py-2.5 text-sm leading-relaxed text-studio-ink outline-none placeholder:text-studio-muted/70 disabled:cursor-not-allowed disabled:opacity-60"
-            rows={2}
-            placeholder="Vibe Edit (e.g., 'Make my bullet points sound more impact-driven')..."
-            value={prompt}
-            disabled={busy}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={onPromptKeyDown}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-studio-border/80 px-3 py-2">
-            <p className="hidden text-[0.7rem] text-studio-muted sm:block">⌘/Ctrl + Enter</p>
-            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none">
-              {busy ? (
-                <button
-                  type="button"
-                  data-testid="vibe-stop"
-                  onClick={stopVibeEdit}
-                  className="min-h-9 rounded-md border border-studio-border bg-studio-paper px-3 py-2 text-sm font-medium text-studio-ink transition hover:border-studio-ink/30"
-                >
-                  Stop
-                </button>
-              ) : null}
-              {!busy && lastPrompt ? (
-                <button
-                  type="button"
-                  data-testid="vibe-regenerate"
-                  onClick={() =>
-                    runVibeEdit({
-                      prompt: lastPrompt,
-                      clearPrompt: false,
-                    })
-                  }
-                  className="min-h-9 rounded-md border border-studio-border bg-studio-paper px-3 py-2 text-sm font-medium text-studio-ink transition hover:border-studio-ink/30"
-                >
-                  Regenerate
-                </button>
-              ) : null}
-              <button
-                type="button"
-                data-testid="vibe-submit"
-                disabled={busy || !prompt.trim()}
-                onClick={() => runVibeEdit()}
-                className="min-h-9 flex-1 rounded-lg bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45 sm:flex-none sm:min-w-[7.5rem]"
-              >
-                {busy ? (promptIsReview ? "Reviewing…" : "Working…") : promptIsReview ? "Review" : "Run"}
-              </button>
-            </div>
-          </div>
-        </div>
-        <StatusLog lines={statusLines} active={busy} />
-      </div>
     </aside>
   );
 
@@ -1129,6 +1023,50 @@ export function EditorClient({
         mobileShow={mobilePane === "preview" ? "right" : "left"}
         left={sourcePane}
         right={previewPane}
+      />
+
+      <AiComposerDock
+        prompt={prompt}
+        promptRef={promptRef}
+        busy={busy}
+        compiling={compiling}
+        lastPrompt={lastPrompt}
+        reply={reply}
+        review={review}
+        compileError={compileError}
+        statusLines={statusLines}
+        promptIsReview={promptIsReview}
+        versionIndex={versions.index}
+        versionTotal={versions.stack.length}
+        onPromptChange={setPrompt}
+        onPromptKeyDown={onPromptKeyDown}
+        onPickRecipe={(recipePrompt, recipeId) => {
+          if (recipeId === "format") {
+            void formatForConsistency();
+            return;
+          }
+          setPrompt(recipePrompt);
+          promptRef.current?.focus();
+        }}
+        onRun={() => runVibeEdit()}
+        onStop={stopVibeEdit}
+        onRegenerate={() =>
+          runVibeEdit({
+            prompt: lastPrompt ?? "",
+            clearPrompt: false,
+          })
+        }
+        onDismissCompileError={() => setCompileError(null)}
+        onFixCompile={() => {
+          if (!compileError) return;
+          runVibeEdit({
+            prompt: COMPILE_FIX_PROMPT,
+            compilerError: compileError,
+            clearPrompt: false,
+          });
+        }}
+        onVersionPrev={() => restoreVersion(versions.index - 1)}
+        onVersionNext={() => restoreVersion(versions.index + 1)}
       />
 
       <QuotaModal
