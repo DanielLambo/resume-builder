@@ -10,3 +10,4 @@ alwaysApply: true
 - Don’t dump large code blocks or full-file rewrites when a small diff works.
 - Don’t launch extra subagents or long shell dumps for simple asks.
 - One clarifying question max if blocked; otherwise pick a sane default.
+- Shell noise is filtered by **Rust Token Killer** (`rtk`, not Redux). Prefer `rtk <cmd>` if a hook miss happens. Check savings with `rtk gain`.
