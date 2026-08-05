@@ -5,18 +5,27 @@ import { useTokenUsage } from "@/lib/token-usage";
 type TokenMeterProps = {
   /** Dense single-line meter for narrow headers. */
   compact?: boolean;
+  variant?: "default" | "ide";
 };
 
-export function TokenMeter({ compact = false }: TokenMeterProps) {
+export function TokenMeter({
+  compact = false,
+  variant = "default",
+}: TokenMeterProps) {
   const { used, limit, loading, warning } = useTokenUsage();
   const ratio = limit > 0 ? Math.min(1, used / limit) : 0;
   const pct = Math.round(ratio * 100);
   const nearLimit = ratio >= 0.75;
+  const ide = variant === "ide";
 
   if (compact) {
     return (
       <div
-        className="min-w-0 max-w-[9.5rem] rounded border border-studio-border/80 bg-white px-2 py-1"
+        className={
+          ide
+            ? "min-w-0 max-w-[9.5rem] rounded border border-ide-border bg-ide-raised px-2 py-1"
+            : "min-w-0 max-w-[9.5rem] rounded border border-studio-border/80 bg-white px-2 py-1"
+        }
         aria-live="polite"
         title={
           warning
@@ -26,22 +35,41 @@ export function TokenMeter({ compact = false }: TokenMeterProps) {
         data-quota-warning={warning ? "true" : "false"}
       >
         <div className="mb-0.5 flex items-center justify-between gap-1.5">
-          <span className="font-mono text-[0.55rem] uppercase tracking-wide text-studio-muted">
+          <span
+            className={[
+              "font-mono text-[0.55rem] uppercase tracking-wide",
+              ide ? "text-ide-muted" : "text-studio-muted",
+            ].join(" ")}
+          >
             AI{warning ? " · off" : ""}
           </span>
-          <span className="truncate font-mono text-[0.6rem] text-studio-ink">
+          <span
+            className={[
+              "truncate font-mono text-[0.6rem]",
+              ide ? "text-ide-ink" : "text-studio-ink",
+            ].join(" ")}
+          >
             {loading ? "…" : `${used.toLocaleString()}/${limit.toLocaleString()}`}
           </span>
         </div>
-        <div className="h-0.5 overflow-hidden rounded-full bg-studio-canvas">
+        <div
+          className={[
+            "h-0.5 overflow-hidden rounded-full",
+            ide ? "bg-ide-bg" : "bg-studio-canvas",
+          ].join(" ")}
+        >
           {loading || pct > 0 ? (
             <div
               className={`h-full rounded-full transition-all duration-500 ${
                 loading
-                  ? "w-1/5 animate-pulse bg-studio-border"
+                  ? ide
+                    ? "w-1/5 animate-pulse bg-ide-border"
+                    : "w-1/5 animate-pulse bg-studio-border"
                   : nearLimit || warning
-                    ? "bg-studio-vermilion"
-                    : "bg-studio-ink"
+                    ? "bg-red-500"
+                    : ide
+                      ? "bg-ide-accent"
+                      : "bg-studio-ink"
               }`}
               style={loading ? undefined : { width: `${pct}%` }}
             />

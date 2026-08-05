@@ -20,6 +20,21 @@ module.exports = {
           "vermilion-hover": "#D9381E",
           amber: "#d97706",
         },
+        /** Overleaf-style dark IDE chrome (editor shell only). */
+        ide: {
+          bg: "#1a1d23",
+          panel: "#16181c",
+          raised: "#22262e",
+          hover: "#2a2f38",
+          border: "#2e333c",
+          gutter: "#12141a",
+          ink: "#e6e8ec",
+          muted: "#8b919c",
+          faint: "#5c6370",
+          accent: "#4caf50",
+          "accent-hover": "#43a047",
+          "accent-muted": "#2e7d32",
+        },
       },
       fontFamily: {
         sans: ["var(--font-geist-sans)", "Geist", "Inter", "sans-serif"],

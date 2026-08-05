@@ -53,10 +53,7 @@ type AiComposerDockProps = {
   onVersionNext: () => void;
 };
 
-/**
- * Slim AI bar under the split — recipes + one input row.
- * Source/preview keep the viewport; this should stay ~1–2 short rows.
- */
+/** Compact bottom AI bar — must not steal the editor viewport. */
 export function AiComposerDock({
   prompt,
   promptRef,
@@ -91,30 +88,31 @@ export function AiComposerDock({
 
   return (
     <section
-      className="shrink-0 border-t border-studio-border bg-studio-bg pb-[max(0.4rem,env(safe-area-inset-bottom))]"
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-ide-panel pb-[max(0.25rem,env(safe-area-inset-bottom))]"
       data-testid="ai-composer-dock"
       aria-label="AI editor"
     >
-      <div className="flex items-center gap-2 px-3 pt-1.5 sm:px-4">
-        <span className="inline-flex h-5 shrink-0 items-center rounded-sm bg-studio-vermilion px-1.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em] text-white">
+      <div className="flex shrink-0 items-center gap-2 px-2 pt-1 sm:px-2.5">
+        <span className="font-mono text-[0.58rem] font-medium uppercase tracking-[0.1em] text-ide-faint">
           AI
         </span>
         <ScopeChip scope={scope} disabled={busy || Boolean(proposal)} onClear={onClearScope} />
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <StatusLog lines={statusLines} active={busy} />
-          {versionTotal > 1 ? (
-            <VersionStepper
-              index={versionIndex}
-              total={versionTotal}
-              disabled={busy || compiling || Boolean(proposal)}
-              onPrev={onVersionPrev}
-              onNext={onVersionNext}
-            />
-          ) : null}
+        {versionTotal > 1 ? (
+          <VersionStepper
+            index={versionIndex}
+            total={versionTotal}
+            disabled={busy || compiling || Boolean(proposal)}
+            onPrev={onVersionPrev}
+            onNext={onVersionNext}
+            variant="ide"
+          />
+        ) : null}
+        <div className="ml-auto min-w-0">
+          <StatusLog lines={statusLines} active={busy} variant="ide" />
         </div>
       </div>
 
-      <div className="space-y-1.5 px-3 py-1.5 sm:px-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-1 sm:px-2.5">
         {proposal ? (
           <ProposalCard
             proposal={proposal}
@@ -130,37 +128,32 @@ export function AiComposerDock({
             pending={busy}
             onDismiss={onDismissCompileError}
             onFix={onFixCompile}
+            variant="ide"
           />
         ) : null}
         {!proposal ? (
-          <PromptRecipes disabled={busy} onPick={onPickRecipe} />
-        ) : null}
-        {!proposal ? (
-          <div className="flex items-end gap-2 rounded-lg border border-studio-border bg-studio-paper focus-within:border-amber-500/40">
-            <textarea
-              ref={promptRef}
-              data-testid="vibe-prompt"
-              className="min-h-[2.25rem] max-h-24 w-full resize-y bg-transparent px-2.5 py-2 text-sm leading-snug text-studio-ink outline-none placeholder:text-studio-muted/70 disabled:cursor-not-allowed disabled:opacity-60"
-              rows={1}
-              placeholder={
-                selectionScoped
-                  ? "Change the highlight…"
-                  : canSubmit
-                    ? "Describe an edit…"
-                    : "Describe an edit to enable Apply"
-              }
-              value={prompt}
-              disabled={busy}
-              onChange={(event) => onPromptChange(event.target.value)}
-              onKeyDown={onPromptKeyDown}
-            />
-            <div className="flex shrink-0 items-center gap-1.5 pb-1.5 pr-1.5">
+          <>
+            <PromptRecipes disabled={busy} onPick={onPickRecipe} />
+            <div className="flex shrink-0 items-center gap-1.5">
+              <textarea
+                ref={promptRef}
+                data-testid="vibe-prompt"
+                rows={1}
+                className="max-h-16 min-h-8 w-full resize-none rounded border border-ide-border bg-ide-bg px-2 py-1.5 font-mono text-[0.78rem] leading-snug text-ide-ink outline-none placeholder:text-ide-faint focus:border-ide-faint disabled:opacity-50"
+                placeholder={
+                  selectionScoped ? "Edit the highlight…" : "Describe an edit…"
+                }
+                value={prompt}
+                disabled={busy}
+                onChange={(event) => onPromptChange(event.target.value)}
+                onKeyDown={onPromptKeyDown}
+              />
               {busy ? (
                 <button
                   type="button"
                   data-testid="vibe-stop"
                   onClick={onStop}
-                  className="min-h-8 rounded-md border border-studio-border px-2.5 text-xs font-medium text-studio-ink"
+                  className="min-h-8 shrink-0 rounded border border-ide-border px-2 text-[0.7rem] text-ide-ink hover:bg-ide-hover"
                 >
                   Stop
                 </button>
@@ -170,7 +163,7 @@ export function AiComposerDock({
                   type="button"
                   data-testid="vibe-regenerate"
                   onClick={onRegenerate}
-                  className="min-h-8 rounded-md border border-studio-border px-2.5 text-xs font-medium text-studio-ink"
+                  className="min-h-8 shrink-0 rounded border border-ide-border px-2 text-[0.7rem] text-ide-muted hover:bg-ide-hover hover:text-ide-ink"
                 >
                   Retry
                 </button>
@@ -183,25 +176,15 @@ export function AiComposerDock({
                 onClick={onRun}
                 title={
                   canSubmit
-                    ? selectionScoped
-                      ? "Apply to highlighted text (⌘/Ctrl+Enter)"
-                      : promptIsReview
-                        ? "Review only (⌘/Ctrl+Enter)"
-                        : "Apply to whole resume (⌘/Ctrl+Enter)"
+                    ? "Apply (⌘/Ctrl+Enter)"
                     : "Type an edit first"
                 }
-                className="min-h-8 rounded-md bg-studio-vermilion px-3 text-xs font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-40"
+                className="min-h-8 shrink-0 rounded bg-ide-accent px-3 text-[0.72rem] font-semibold text-white transition hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:bg-ide-raised disabled:text-ide-faint"
               >
-                {busy
-                  ? promptIsReview
-                    ? "…"
-                    : "…"
-                  : promptIsReview
-                    ? "Review"
-                    : "Apply"}
+                {promptIsReview ? "Review" : "Apply"}
               </button>
             </div>
-          </div>
+          </>
         ) : null}
       </div>
     </section>
@@ -220,11 +203,11 @@ function ScopeChip({
   if (scope.kind === "selection") {
     return (
       <div
-        className="flex min-w-0 items-center gap-1.5 rounded-full bg-amber-50 px-2 py-0.5 text-[0.68rem] text-amber-950 ring-1 ring-amber-200"
+        className="flex min-w-0 items-center gap-1.5 rounded-sm border border-ide-border bg-ide-raised px-1.5 py-0.5 text-[0.65rem] text-ide-ink"
         data-testid="ai-scope-chip"
       >
-        <span className="truncate">
-          Highlight
+        <span className="truncate font-mono text-ide-muted">
+          selection
           {scope.lineCount
             ? ` · ${scope.lineCount} line${scope.lineCount === 1 ? "" : "s"}`
             : ""}
@@ -233,9 +216,9 @@ function ScopeChip({
           type="button"
           disabled={disabled}
           onClick={onClear}
-          className="shrink-0 text-[0.62rem] font-medium text-amber-800 hover:text-amber-950 disabled:opacity-40"
+          className="shrink-0 font-mono text-[0.6rem] text-ide-faint hover:text-ide-ink disabled:opacity-40"
         >
-          Clear
+          clear
         </button>
       </div>
     );
@@ -243,10 +226,10 @@ function ScopeChip({
 
   return (
     <p
-      className="truncate text-[0.68rem] text-studio-muted"
+      className="truncate font-mono text-[0.65rem] text-ide-faint"
       data-testid="ai-scope-chip"
     >
-      Whole resume
+      document
     </p>
   );
 }
@@ -262,30 +245,24 @@ function ProposalCard({
 }) {
   return (
     <div
-      className="rounded-lg border border-amber-300 bg-amber-50/80 px-3 py-2"
+      className="rounded border border-ide-border bg-ide-raised px-2 py-1.5"
       data-testid="ai-proposal"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-amber-900">
+          <p className="font-mono text-[0.55rem] uppercase tracking-[0.1em] text-ide-muted">
             Preview · not saved
           </p>
-          <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-studio-ink">
+          <p className="mt-0.5 line-clamp-1 text-[0.75rem] text-ide-ink">
             {proposal.reply}
           </p>
-          <p className="mt-0.5 text-[0.68rem] text-studio-muted">
-            {proposal.scope === "selection" ? "Highlight only" : "Whole resume"}
-            {proposal.diff.changedLineCount
-              ? ` · ${proposal.diff.changedLineCount} lines`
-              : ""}
-          </p>
         </div>
-        <div className="flex shrink-0 gap-1.5">
+        <div className="flex shrink-0 gap-1">
           <button
             type="button"
             data-testid="ai-proposal-keep"
             onClick={onKeep}
-            className="min-h-8 rounded-md bg-studio-vermilion px-2.5 text-xs font-semibold text-white hover:bg-studio-vermilion-hover"
+            className="min-h-7 rounded bg-ide-accent px-2 text-[0.7rem] font-semibold text-white hover:bg-ide-accent-hover"
           >
             Keep
           </button>
@@ -293,28 +270,12 @@ function ProposalCard({
             type="button"
             data-testid="ai-proposal-discard"
             onClick={onDiscard}
-            className="min-h-8 rounded-md border border-studio-border bg-studio-paper px-2.5 text-xs font-medium text-studio-ink"
+            className="min-h-7 rounded border border-ide-border px-2 text-[0.7rem] text-ide-muted hover:bg-ide-hover hover:text-ide-ink"
           >
             Discard
           </button>
         </div>
       </div>
-      {proposal.diff.hunks.length ? (
-        <ul className="mt-1.5 max-h-16 space-y-0.5 overflow-auto font-mono text-[0.65rem] leading-relaxed">
-          {proposal.diff.hunks.slice(0, 3).map((hunk, index) => (
-            <li key={`${index}-${hunk.before}-${hunk.after}`}>
-              {hunk.before ? (
-                <p className="truncate text-red-800/90 line-through decoration-red-800/40">
-                  − {hunk.before}
-                </p>
-              ) : null}
-              {hunk.after ? (
-                <p className="truncate text-emerald-800">+ {hunk.after}</p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </div>
   );
 }
@@ -328,16 +289,14 @@ function FeedbackSlot({
 }): ReactNode {
   if (review) {
     return (
-      <div className="max-h-28 overflow-auto rounded-md border border-studio-border bg-studio-paper p-2.5">
+      <div className="max-h-20 overflow-auto rounded border border-ide-border bg-ide-bg p-2 text-ide-ink [&_*]:text-inherit">
         <ResumeReviewPanel review={review} />
       </div>
     );
   }
   if (reply) {
     return (
-      <p className="line-clamp-1 text-[0.78rem] leading-snug text-studio-ink">
-        {reply}
-      </p>
+      <p className="line-clamp-1 text-[0.72rem] text-ide-muted">{reply}</p>
     );
   }
   return null;

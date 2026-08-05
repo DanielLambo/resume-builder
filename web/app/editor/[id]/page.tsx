@@ -49,8 +49,8 @@ export default async function EditorPage({ params }: EditorPageProps) {
   const job = getJobTargetFromDataJson(resume.data_json);
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
-      <AppHeader email={user.email} dense />
+    <div className="editor-shell flex h-dvh flex-col overflow-hidden">
+      <AppHeader email={user.email} dense variant="ide" />
       <div className="min-h-0 flex-1 overflow-hidden">
         <EditorClient
           resumeId={resume.id}

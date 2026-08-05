@@ -1,5 +1,14 @@
 "use client";
 
+import {
+  AlignLeft,
+  Crosshair,
+  Maximize2,
+  MessageSquareText,
+  Sparkles,
+  Type,
+} from "lucide-react";
+
 import { PROMPT_RECIPES } from "@/lib/prompt-recipes";
 
 type PromptRecipesProps = {
@@ -7,39 +16,40 @@ type PromptRecipesProps = {
   onPick: (prompt: string, recipeId: string) => void;
 };
 
-const KIND_PILL: Record<string, string> = {
-  layout:
-    "border-studio-border bg-studio-paper text-studio-muted hover:border-studio-ink/30 hover:text-studio-ink",
-  rewrite:
-    "border-amber-200 bg-amber-50/70 text-amber-950 hover:border-amber-400",
-  review:
-    "border-emerald-200 bg-emerald-50/70 text-emerald-950 hover:border-emerald-400",
+const RECIPE_ICON: Record<string, typeof AlignLeft> = {
+  format: Type,
+  tighten: AlignLeft,
+  "one-page": Maximize2,
+  humanize: Sparkles,
+  metrics: Crosshair,
+  "review-swe": MessageSquareText,
 };
 
-/** Single horizontal strip — no stacked category headers. */
+/** Single compact row — never stacks into half the viewport. */
 export function PromptRecipes({ disabled, onPick }: PromptRecipesProps) {
   return (
     <div
-      className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="-mx-0.5 flex gap-0.5 overflow-x-auto px-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       data-testid="prompt-recipes"
       aria-label="Suggested edits"
     >
-      {PROMPT_RECIPES.map((recipe) => (
-        <button
-          key={recipe.id}
-          type="button"
-          disabled={disabled}
-          title={recipe.hint}
-          data-testid={`prompt-recipe-${recipe.id}`}
-          onClick={() => onPick(recipe.prompt, recipe.id)}
-          className={[
-            "shrink-0 rounded-full border px-2.5 py-1 text-[0.68rem] transition disabled:opacity-45",
-            KIND_PILL[recipe.kind] ?? KIND_PILL.layout,
-          ].join(" ")}
-        >
-          {recipe.label}
-        </button>
-      ))}
+      {PROMPT_RECIPES.map((recipe) => {
+        const Icon = RECIPE_ICON[recipe.id] ?? AlignLeft;
+        return (
+          <button
+            key={recipe.id}
+            type="button"
+            disabled={disabled}
+            title={recipe.hint}
+            data-testid={`prompt-recipe-${recipe.id}`}
+            onClick={() => onPick(recipe.prompt, recipe.id)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-[0.68rem] text-ide-muted transition hover:bg-ide-hover hover:text-ide-ink disabled:opacity-40"
+          >
+            <Icon className="h-3 w-3 shrink-0" strokeWidth={1.75} aria-hidden />
+            {recipe.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

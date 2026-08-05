@@ -17,9 +17,37 @@ const BodySchema = z.object({
   resumeId: z.string().uuid().optional(),
 });
 
+function pdfResponse(
+  pdf: Buffer,
+  meta: {
+    pageCount: number;
+    lockedToOnePage: boolean;
+    elapsedMs: number;
+    finalConfig?: unknown;
+  },
+) {
+  // Binary PDF (~25% smaller than base64 JSON). Vercel/Next gzip/brotli the body.
+  const headers = new Headers({
+    "Content-Type": "application/pdf",
+    "Cache-Control": "no-store",
+    "X-Page-Count": String(meta.pageCount),
+    "X-Locked-One-Page": meta.lockedToOnePage ? "1" : "0",
+    "X-Elapsed-Ms": String(meta.elapsedMs),
+  });
+  if (meta.finalConfig != null) {
+    try {
+      headers.set("X-Final-Config", JSON.stringify(meta.finalConfig));
+    } catch {
+      /* ignore oversized config */
+    }
+  }
+  return new NextResponse(new Uint8Array(pdf), { status: 200, headers });
+}
+
 /**
  * POST /api/compile
- * Auth required. Preview compiles never send LaTeX to Groq for condense.
+ * Auth required. Success = application/pdf (+ page metadata headers).
+ * Errors stay JSON. Preview compiles never send LaTeX to Groq for condense.
  */
 export async function POST(request: Request) {
   let latexForDiagnostics = "";
@@ -31,7 +59,6 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      // Local mock harness only — never in production / Vercel.
       const allowAnonDevHarness =
         process.env.NODE_ENV === "development" &&
         process.env.NEXT_PUBLIC_USE_MOCK_AI === "true" &&
@@ -64,32 +91,24 @@ export async function POST(request: Request) {
       const pdf = await compileLatexRemote(latex);
       const pageCount = await getPDFPageCount(pdf);
       await maybePersist(pdf);
-      return NextResponse.json({
-        success: true,
-        pdfBase64: pdf.toString("base64"),
+      return pdfResponse(pdf, {
         pageCount,
         lockedToOnePage: pageCount === 1,
-        finalConfig: null,
         elapsedMs: 0,
+        finalConfig: null,
       });
     }
 
-    // Spacing search only — no Groq condense on passive preview compiles.
     const fit = await fitResumeToSinglePage(latex, { allowGroqCondense: false });
     await maybePersist(fit.compiledPdf);
-    return NextResponse.json({
-      success: true,
-      pdfBase64: fit.compiledPdf.toString("base64"),
+    return pdfResponse(fit.compiledPdf, {
       pageCount: fit.pageCount,
       lockedToOnePage: fit.lockedToOnePage,
-      finalConfig: fit.finalConfig,
       elapsedMs: fit.elapsedMs,
+      finalConfig: fit.finalConfig,
     });
   } catch (err) {
     let message = sanitizeCompileError(err);
-    // fitToSinglePage collapses every compile failure into one opaque string —
-    // probe a single compile so the client sees the root cause (e.g. missing
-    // LATEX_COMPILE_URL on Vercel).
     if (
       latexForDiagnostics &&
       /no successful compilation/i.test(
@@ -107,7 +126,6 @@ export async function POST(request: Request) {
       {
         success: false,
         error: message,
-        /** Short heal hint for “Fix with AI” — already sanitized. */
         hint: message,
       },
       { status: 500 },
