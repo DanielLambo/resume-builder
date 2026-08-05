@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Typesetter studio entry — resumes are per-id.
  * Send signed-in users to their library; others to login.

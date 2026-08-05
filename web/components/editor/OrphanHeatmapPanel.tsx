@@ -45,14 +45,14 @@ export function OrphanHeatmapPanel({
       aria-live="polite"
     >
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-xs font-medium text-studio-ink">Line overflow</p>
-        <p className="text-[0.7rem] text-studio-muted">
+        <p className="text-xs font-medium text-ide-ink">Line overflow</p>
+        <p className="text-[0.7rem] text-ide-muted">
           {orphans.length === 0 ? "Clear" : `${orphans.length} to trim`}
         </p>
       </div>
 
       {orphans.length === 0 ? (
-        <p className="text-xs text-studio-muted">
+        <p className="text-xs text-ide-muted">
           No short overflow lines at ~{analysis.lineWidth} chars.
         </p>
       ) : (
@@ -62,14 +62,14 @@ export function OrphanHeatmapPanel({
             return (
               <li
                 key={`${bullet.kind}-${bullet.index}-${bullet.start}`}
-                className="border-l-2 border-amber-500 pl-3"
+                className="border-l-2 border-ide-accent pl-3"
                 data-testid="orphan-bullet"
               >
-                <p className="line-clamp-3 text-[0.8rem] leading-relaxed text-studio-ink">
+                <p className="line-clamp-3 text-[0.8rem] leading-relaxed text-ide-ink">
                   {latexToDisplayText(bullet.text)}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[0.7rem] text-studio-muted">
+                  <span className="text-[0.7rem] text-ide-muted">
                     ~{bullet.trailingWords} word
                     {bullet.trailingWords === 1 ? "" : "s"} over
                   </span>
@@ -77,7 +77,7 @@ export function OrphanHeatmapPanel({
                     type="button"
                     disabled={busy || shorteningIndex !== null}
                     onClick={() => onShorten(bullet)}
-                    className="inline-flex items-center gap-1.5 border border-studio-border bg-studio-paper px-2.5 py-1 text-[0.7rem] font-medium text-studio-ink transition hover:border-studio-ink/30 disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 rounded-sm border border-ide-border bg-ide-raised px-2.5 py-1 text-[0.7rem] font-medium text-ide-ink transition hover:bg-ide-hover disabled:opacity-60"
                     data-testid="orphan-shorten"
                   >
                     {busy ? (
