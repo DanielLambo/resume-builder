@@ -8,7 +8,7 @@ import { assertImportSize, detectImportKind, titleFromFilename } from "@/lib/imp
 import { convertImportedText } from "@/lib/import/convert";
 import { extractPdfText } from "@/lib/import/pdf-text";
 import { planTexImport } from "@/lib/import/tex";
-import { latexValidationError } from "@/lib/import/validate";
+import { ensureHousePreamble, latexValidationError } from "@/lib/import/validate";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import {
   AiRateLimitError,
@@ -172,6 +172,7 @@ export async function importResumeAction(formData: FormData): Promise<ImportResu
     };
   }
 
+  latex = ensureHousePreamble(latex);
   const latexError = latexValidationError(latex);
   if (latexError) {
     return { ok: false, status: 400, code: "VALIDATION", error: latexError };

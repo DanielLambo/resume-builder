@@ -113,11 +113,12 @@ export function LatexSourceEditor({
           <Search className="h-3.5 w-3.5" strokeWidth={1.75} />
         </ToolbarIcon>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         <CodeMirror
           ref={cmRef}
           value={value}
           height="100%"
+          className="absolute inset-0 h-full min-h-0 [&_.cm-editor]:h-full [&_.cm-scroller]:overflow-auto"
           theme={githubDark}
           editable={!disabled}
           basicSetup={{

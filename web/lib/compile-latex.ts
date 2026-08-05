@@ -47,29 +47,56 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-/** Strip TeX / third-party bodies from errors before they hit clients or logs. */
+/** Strip TeX dumps / third-party bodies; keep short, useful diagnostics. */
 export function sanitizeCompileError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
-  if (/Missing LATEX_COMPILE_URL|latexonline is disabled|PII/i.test(raw)) {
-    return raw;
+  const cleaned = raw.replace(/\s+/g, " ").trim();
+
+  if (/Missing LATEX_COMPILE_URL|latexonline is disabled|PII/i.test(cleaned)) {
+    return cleaned.length <= 200 ? cleaned : cleaned.slice(0, 197) + "…";
   }
-  if (/timed out/i.test(raw)) {
+  if (/timed out/i.test(cleaned)) {
     return "PDF compile timed out. Try again in a moment.";
   }
-  if (/pdflatex|ENOENT|spawn/i.test(raw)) {
+  if (/ENOENT|spawn .*ENOENT|not found.*pdflatex/i.test(cleaned)) {
     return "Local TeX compiler is unavailable.";
   }
-  if (/latexonline|Compile service failed|HTTP \d+/i.test(raw)) {
-    return "PDF compile service failed. Resume content was not returned in this error.";
+
+  // Prefer model/service diagnostics that already look like TeX errors.
+  if (
+    /undefined control sequence|emergency stop|missing \$|runaway argument|file .* not found|! LaTeX Error/i.test(
+      cleaned,
+    )
+  ) {
+    const safe = cleaned.replace(/\\[a-zA-Z@]+/g, (cmd) =>
+      cmd.length > 24 ? "\\…" : cmd,
+    );
+    return safe.length <= 180 ? safe : `${safe.slice(0, 177)}…`;
   }
-  if (/\\documentclass|\\begin\{document\}|you@email\.com/i.test(raw)) {
-    return "PDF compile failed.";
+
+  if (/Compile service failed|latexonline|HTTP \d+/i.test(cleaned)) {
+    // Keep trailing hint after the status when present: "…: actual message"
+    const afterColon = cleaned.includes(": ")
+      ? cleaned.slice(cleaned.indexOf(": ") + 2).trim()
+      : "";
+    if (
+      afterColon &&
+      afterColon.length <= 160 &&
+      !/\\begin\{document\}|you@email/i.test(afterColon)
+    ) {
+      return afterColon;
+    }
+    return "PDF compile service failed. Check LaTeX syntax, then tap Recompile.";
   }
-  // Keep short, non-TeX messages; otherwise generic.
-  if (raw.length <= 160 && !raw.includes("\\")) {
-    return raw;
+
+  if (/\\documentclass|\\begin\{document\}|you@email\.com/i.test(cleaned)) {
+    return "PDF compile failed. Check LaTeX syntax near recent edits.";
   }
-  return "PDF compile failed.";
+
+  if (cleaned.length <= 160 && !cleaned.includes("\\")) {
+    return cleaned;
+  }
+  return "PDF compile failed. Check LaTeX syntax, then tap Recompile.";
 }
 
 async function compileViaFastapi(tex: string, baseUrl: string): Promise<Buffer> {
@@ -88,15 +115,32 @@ async function compileViaFastapi(tex: string, baseUrl: string): Promise<Buffer> 
     signal: AbortSignal.timeout(COMPILE_TIMEOUT_MS),
   });
 
-  const json = (await res.json()) as {
+  const json = (await res.json().catch(() => null)) as {
     success?: boolean;
     pdf_base64?: string;
     error?: string;
+    hint?: string;
+    errors?: Array<string | { message?: string }>;
     pages?: number;
-  };
+  } | null;
 
-  if (!res.ok || !json.success || !json.pdf_base64) {
-    throw new Error(`Compile service failed (HTTP ${res.status})`);
+  if (!res.ok || !json?.success || !json.pdf_base64) {
+    const fromList =
+      Array.isArray(json?.errors) && json.errors.length > 0
+        ? typeof json.errors[0] === "string"
+          ? json.errors[0]
+          : json.errors[0]?.message
+        : undefined;
+    const detail =
+      (typeof json?.hint === "string" && json.hint.trim()) ||
+      (typeof json?.error === "string" && json.error.trim()) ||
+      (typeof fromList === "string" && fromList.trim()) ||
+      "";
+    throw new Error(
+      detail
+        ? `Compile service failed (HTTP ${res.status}): ${detail}`
+        : `Compile service failed (HTTP ${res.status})`,
+    );
   }
 
   return Buffer.from(json.pdf_base64, "base64");
