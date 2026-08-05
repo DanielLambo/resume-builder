@@ -1,5 +1,7 @@
 import type { User } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
 
+import { SETUP_DONE_COOKIE } from "@/lib/auth-next";
 import { createClient } from "@/lib/supabase/server";
 
 /** True when the user still needs the first-run wizard. */
@@ -15,6 +17,15 @@ export function metadataNeedsOnboarding(user: User | null | undefined): boolean 
  */
 export async function shouldForceOnboarding(user: User): Promise<boolean> {
   if (!metadataNeedsOnboarding(user)) return false;
+
+  try {
+    const jar = await cookies();
+    if (jar.get(SETUP_DONE_COOKIE)?.value === "1") {
+      return false;
+    }
+  } catch {
+    /* cookies() unavailable outside a request */
+  }
 
   try {
     const supabase = await createClient();

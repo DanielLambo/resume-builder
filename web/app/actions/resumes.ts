@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import type { Json } from "@/lib/database.types";
@@ -210,10 +209,13 @@ export async function getResumePdfSignedUrlAction(
   return { ok: true, url: data.signedUrl };
 }
 
-export async function signOutAction(): Promise<void> {
+export async function signOutAction(): Promise<ActionResult> {
   const supabase = await createClient();
-  await supabase.auth.signOut();
-  redirect("/login");
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
 }
 
 /** Re-export helper for server pages that need latex preview text. */
