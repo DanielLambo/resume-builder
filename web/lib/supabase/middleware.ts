@@ -1,10 +1,16 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
 import type { Database } from "@/lib/database.types";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/editor", "/api/ai", "/onboarding"] as const;
 const AUTH_ROUTES = ["/login", "/signup"] as const;
+
+type CookieToSet = {
+  name: string;
+  value: string;
+  options: CookieOptions;
+};
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(
@@ -16,21 +22,30 @@ function isAuthRoute(pathname: string): boolean {
   return AUTH_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
 
-export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+function applyCookies(response: NextResponse, cookies: CookieToSet[]) {
+  cookies.forEach(({ name, value, options }) => {
+    response.cookies.set(name, value, options);
+  });
+}
 
+export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const { pathname } = request.nextUrl;
 
   if (!url || !anonKey) {
-    if (isProtected(request.nextUrl.pathname)) {
+    if (isProtected(pathname)) {
       const login = request.nextUrl.clone();
       login.pathname = "/login";
-      login.searchParams.set("next", request.nextUrl.pathname);
+      login.searchParams.set("next", pathname);
       return NextResponse.redirect(login);
     }
-    return supabaseResponse;
+    return NextResponse.next({ request });
   }
+
+  // Track cookies with full options — NextResponse.redirect copies must keep them.
+  const cookiesToApply: CookieToSet[] = [];
+  let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(url, anonKey, {
     cookies: {
@@ -38,13 +53,13 @@ export async function updateSession(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => {
+        cookiesToApply.length = 0;
+        cookiesToSet.forEach(({ name, value, options }) => {
           request.cookies.set(name, value);
+          cookiesToApply.push({ name, value, options });
         });
         supabaseResponse = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => {
-          supabaseResponse.cookies.set(name, value, options);
-        });
+        applyCookies(supabaseResponse, cookiesToApply);
       },
     },
   });
@@ -53,30 +68,31 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-
   if (!user && isProtected(pathname)) {
     if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const unauthorized = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      applyCookies(unauthorized, cookiesToApply);
+      return unauthorized;
     }
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
     const redirect = NextResponse.redirect(loginUrl);
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
-      redirect.cookies.set(cookie.name, cookie.value);
-    });
+    applyCookies(redirect, cookiesToApply);
     return redirect;
   }
 
   if (user && isAuthRoute(pathname)) {
-    const dash = request.nextUrl.clone();
-    dash.pathname = "/dashboard";
-    dash.search = "";
-    const redirect = NextResponse.redirect(dash);
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
-      redirect.cookies.set(cookie.name, cookie.value);
-    });
+    // Unfinished profiles → setup; completed → library.
+    // Grandfather (has resumes, no metadata flag) is resolved on /onboarding.
+    const dest = request.nextUrl.clone();
+    dest.pathname =
+      user.user_metadata?.onboarding_completed === true
+        ? "/dashboard"
+        : "/onboarding";
+    dest.search = "";
+    const redirect = NextResponse.redirect(dest);
+    applyCookies(redirect, cookiesToApply);
     return redirect;
   }
 
