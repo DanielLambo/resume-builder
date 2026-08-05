@@ -24,7 +24,7 @@ export const STUDIO_TOUR_STEPS: readonly StudioTourStep[] = [
   {
     id: "quota",
     title: "AI meter",
-    body: "Up top. Format and vibe edits spend from this daily quota.",
+    body: "Up top. Format and AI edits spend from this daily quota.",
     target: "[data-tour='ai-quota']",
   },
 ];

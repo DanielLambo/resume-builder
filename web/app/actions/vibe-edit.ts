@@ -41,6 +41,8 @@ const VibeEditInputSchema = z.object({
   templateId: z.string().trim().max(40).optional(),
   /** When set, force the heal path with this compile/validation error. */
   compilerError: z.string().trim().min(1).max(2000).optional(),
+  /** When false, return a preview without writing latex/history. */
+  commit: z.boolean().optional().default(true),
 });
 
 export type VibeEditStep = {
@@ -131,8 +133,14 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     };
   }
 
-  const { resumeId, prompt, compilerError, latex: clientLatex, templateId } =
-    parsed.data;
+  const {
+    resumeId,
+    prompt,
+    compilerError,
+    latex: clientLatex,
+    templateId,
+    commit,
+  } = parsed.data;
   push("Reading your request…");
 
   try {
@@ -329,7 +337,9 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       lockedToOnePage = fit.lockedToOnePage;
       layout = fit.finalConfig;
       fitElapsedMs = fit.elapsedMs;
-      await persistResumePdf(supabase, user.id, resumeId, fit.compiledPdf);
+      if (commit) {
+        await persistResumePdf(supabase, user.id, resumeId, fit.compiledPdf);
+      }
     } catch (compileErr) {
       // Persist the AI edit even when TeX host is down — demo must not look broken.
       compileWarning = sanitizeCompileError(compileErr);
@@ -402,38 +412,42 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       nextDataJson.pageCount = pageCount;
     }
 
-    const { data: updated, error: updateError } = await supabase
-      .from("resumes")
-      .update({
-        data_json: nextDataJson as unknown as Json,
-      })
-      .eq("id", resumeId)
-      .eq("user_id", user.id)
-      .select("id, data_json")
-      .maybeSingle();
+    if (commit) {
+      const { data: updated, error: updateError } = await supabase
+        .from("resumes")
+        .update({
+          data_json: nextDataJson as unknown as Json,
+        })
+        .eq("id", resumeId)
+        .eq("user_id", user.id)
+        .select("id, data_json")
+        .maybeSingle();
 
-    if (updateError || !updated) {
-      return {
-        ok: false,
-        status: 500,
-        code: "INTERNAL",
-        error: updateError?.message ?? "Failed to save resume.",
-        steps,
-      };
+      if (updateError || !updated) {
+        return {
+          ok: false,
+          status: 500,
+          code: "INTERNAL",
+          error: updateError?.message ?? "Failed to save resume.",
+          steps,
+        };
+      }
     }
 
     const elapsedMs = Date.now() - started;
     if (!compileWarning) {
       push(
-        `PDF rendered successfully (${pageCount} page${pageCount === 1 ? "" : "s"}) in ${fitElapsedMs}ms.`,
+        commit
+          ? `PDF rendered successfully (${pageCount} page${pageCount === 1 ? "" : "s"}) in ${fitElapsedMs}ms.`
+          : `Preview ready (${pageCount} page${pageCount === 1 ? "" : "s"}). Not saved yet.`,
       );
     }
 
     return {
       ok: true,
       mode: "edit",
-      resumeId: updated.id,
-      data_json: asRecord(updated.data_json),
+      resumeId,
+      data_json: nextDataJson,
       reply: groqResult.output.reply,
       tokensUsed: groqResult.totalTokens,
       dailyTokensUsed: usage.used,
