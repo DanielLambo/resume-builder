@@ -59,6 +59,7 @@ export type SelectionEditResult =
       status?: number;
       code?:
         | "AI_DAILY_LIMIT"
+        | "GROQ_BUSY"
         | "UNAUTHORIZED"
         | "VALIDATION"
         | "NOT_FOUND"
@@ -330,7 +331,7 @@ export async function selectionEditAction(
       return {
         ok: false,
         status: 500,
-        code: "INTERNAL",
+        code: "GROQ_BUSY",
         error: messageForGroqLimit(err),
       };
     }
