@@ -8,13 +8,10 @@ import { StatusLog } from "@/components/editor/StatusLog";
 import { TokenMeter } from "@/components/TokenMeter";
 import { mockVibeEdit } from "@/lib/mock-ai";
 import { DEFAULT_RESUME_LATEX } from "@/lib/resume-template";
+import { VIBE_CLIENT_STEPS } from "@/lib/vibe-steps";
 import { useTokenUsage } from "@/lib/token-usage";
 
-const CLIENT_STEPS = [
-  "[1/4] Parsing prompt and extracting Zod schema...",
-  "[2/4] Checking Upstash Redis daily token limit...",
-  "[3/4] Compiling LaTeX via 1-Page Lock engine...",
-] as const;
+const CLIENT_STEPS = VIBE_CLIENT_STEPS;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -211,7 +208,7 @@ export function HarnessClient() {
                 {onePageLock ? "[ 1-PG LOCK ]" : "[ FIT PENDING ]"}
               </span>
               <span className="hidden sm:inline">
-                {onePageLock ? "[ 100% 1-PAGE LOCK ACTIVE ]" : "[ FIT PENDING ]"}
+                {onePageLock ? "1 page locked" : "Still fitting"}
               </span>
             </span>
           </div>

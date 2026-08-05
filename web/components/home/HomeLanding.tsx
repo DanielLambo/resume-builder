@@ -91,39 +91,40 @@ export function HomeLanding() {
           aria-hidden="true"
         />
 
-        <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-6xl flex-col justify-end px-5 pb-10 pt-16 sm:justify-center sm:px-8 sm:pb-16 sm:pt-20 lg:px-10">
-          <div
-            className={`max-w-xl ${motionOn ? "animate-hero-rise" : ""}`}
-          >
+        <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-5 pb-10 pt-5 sm:px-8 sm:pb-16 lg:px-10">
+          <div className="flex items-center justify-end">
+            <Link
+              href="/login"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-studio-ink/80 transition hover:bg-studio-paper/70 hover:text-studio-ink"
+            >
+              Sign in
+            </Link>
+          </div>
+
+          <div className={`mt-auto max-w-xl sm:mt-0 sm:flex sm:min-h-0 sm:flex-1 sm:flex-col sm:justify-center ${motionOn ? "animate-hero-rise" : ""}`}>
             <p className="font-semibold tracking-tight text-studio-ink text-[clamp(2.6rem,8vw,4.5rem)] leading-[0.95]">
               Resumate
             </p>
             <h1 className="mt-5 max-w-[18ch] text-[1.55rem] font-semibold leading-snug tracking-tight text-studio-ink sm:text-[2rem]">
               Get a sharper resume for every job you want.
             </h1>
-            <p className="mt-3 max-w-md text-base leading-relaxed text-studio-muted sm:text-[1.05rem]">
+            <p className="mt-3 max-w-md text-base leading-relaxed text-studio-ink/75 sm:text-[1.05rem]">
               Tailor honestly with AI, get hiring-manager feedback, and lock a
-              clean one-page PDF—so you apply faster without inventing a single
-              detail.
+              clean one-page PDF — so you apply faster without inventing a
+              single detail.
             </p>
             <div className="mt-7 flex w-full max-w-sm flex-col gap-2.5 sm:max-w-none sm:flex-row sm:gap-3">
               <Link
                 href="/signup"
-                className="inline-flex min-h-12 items-center justify-center bg-studio-vermilion px-5 py-3 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-studio-vermilion px-5 py-3 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover"
               >
                 Start free
               </Link>
               <Link
                 href="/import"
-                className="inline-flex min-h-12 items-center justify-center border border-studio-ink/15 bg-studio-paper/80 px-5 py-3 text-sm font-semibold text-studio-ink backdrop-blur-sm transition hover:bg-studio-paper"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-studio-ink/15 bg-studio-paper/80 px-5 py-3 text-sm font-semibold text-studio-ink backdrop-blur-sm transition hover:bg-studio-paper"
               >
                 Import resume
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex min-h-12 items-center justify-center border border-studio-ink/15 bg-studio-paper/80 px-5 py-3 text-sm font-semibold text-studio-ink backdrop-blur-sm transition hover:bg-studio-paper"
-              >
-                Sign in
               </Link>
             </div>
           </div>

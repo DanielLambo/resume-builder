@@ -25,14 +25,14 @@ test.describe("Vibe editor harness (mock AI)", () => {
 
     await expect(page.getByTestId("vermilion-loader")).toBeVisible();
     await expect(page.getByTestId("status-log")).toContainText(
-      "[1/4] Parsing prompt and extracting Zod schema...",
+      "[1/4] Reading your request…",
     );
     await expect(page.getByTestId("status-log")).toContainText(
-      "[2/4] Checking Upstash Redis daily token limit...",
+      "[2/4] Checking today’s AI quota…",
       { timeout: 10_000 },
     );
     await expect(page.getByTestId("status-log")).toContainText(
-      "[3/4] Compiling LaTeX via 1-Page Lock engine...",
+      "[3/4] Updating the one-page preview…",
       { timeout: 10_000 },
     );
     await expect(page.getByTestId("status-log")).toContainText(

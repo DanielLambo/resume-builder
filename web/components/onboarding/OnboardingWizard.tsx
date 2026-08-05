@@ -21,10 +21,18 @@ export function OnboardingWizard() {
   const state = useOnboardingState();
   const [submitting, setSubmitting] = useState(false);
 
-  async function complete() {
+  async function complete(override?: Partial<typeof state.data>) {
     setSubmitting(true);
     try {
-      const result = await completeOnboardingAction(state.data);
+      const payload = {
+        ...state.data,
+        ...override,
+        fullName:
+          (override?.fullName ?? state.data.fullName).trim().length >= 2
+            ? (override?.fullName ?? state.data.fullName).trim()
+            : "Friend",
+      };
+      const result = await completeOnboardingAction(payload);
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -36,7 +44,7 @@ export function OnboardingWizard() {
       } catch {
         /* ignore */
       }
-      toast.success("Welcome to Typesetter");
+      toast.success("Welcome to Resumate");
       const hasImport = await peekPendingImport();
       window.location.assign(
         hasImport ? "/import?autostart=1" : "/dashboard?tour=1",
@@ -48,15 +56,22 @@ export function OnboardingWizard() {
     }
   }
 
-  const showSkip = state.step === 2 || state.step === 3;
+  const showSkip = state.step === 1 || state.step === 2 || state.step === 3;
 
   return (
     <OnboardingLayout
       step={state.step}
       canGoBack={state.step > 1}
       showSkip={showSkip}
+      skipLabel={state.step === 1 ? "Skip setup" : "Skip"}
       onBack={state.back}
-      onSkip={state.next}
+      onSkip={() => {
+        if (state.step === 1) {
+          void complete({ fullName: state.data.fullName.trim() || "Friend" });
+          return;
+        }
+        state.next();
+      }}
     >
       <div key={state.step}>
         {state.step === 1 ? (

@@ -46,7 +46,7 @@ export function TailorForJobModal({
   const canSubmit =
     company.trim().length > 0 &&
     role.trim().length > 0 &&
-    jobDescription.trim().length >= 40 &&
+    jobDescription.trim().length >= 20 &&
     !busy;
 
   return (
@@ -61,11 +61,11 @@ export function TailorForJobModal({
       }}
     >
       <div
-        className="max-h-[92dvh] w-full max-w-lg overflow-auto border border-studio-border bg-studio-paper p-4 shadow-paper-sheet sm:p-5"
+        className="max-h-[92dvh] w-full max-w-lg overflow-auto rounded-2xl border border-studio-border bg-studio-paper p-4 shadow-paper-sheet sm:p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
-          Typesetter / job application
+        <p className="text-[0.65rem] font-medium uppercase tracking-wide text-studio-muted">
+          Job application
         </p>
         <h2
           id="tailor-job-title"
