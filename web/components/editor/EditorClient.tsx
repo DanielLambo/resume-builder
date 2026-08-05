@@ -866,8 +866,8 @@ export function EditorClient({
   }
 
   const sourcePane = (
-    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-ide-bg">
-      <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-ide-border px-2 sm:px-2.5">
+    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-r border-ide-border/60 bg-ide-bg">
+      <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-ide-border bg-ide-panel px-2 sm:px-2.5">
         <div className="min-w-0">
           <div className="flex min-w-0 items-baseline gap-1.5">
             <h1 className="truncate text-[0.75rem] font-medium tracking-tight text-ide-ink">

@@ -88,7 +88,7 @@ export function AiComposerDock({
 
   return (
     <section
-      className="flex h-full min-h-0 flex-col overflow-hidden bg-ide-panel pb-[max(0.25rem,env(safe-area-inset-bottom))]"
+      className="flex h-full min-h-0 flex-col overflow-hidden border-t border-ide-border bg-ide-raised pb-[max(0.25rem,env(safe-area-inset-bottom))]"
       data-testid="ai-composer-dock"
       aria-label="AI editor"
     >
