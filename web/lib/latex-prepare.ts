@@ -1,7 +1,10 @@
-import { planTexImport, softenJakeSource } from "@/lib/import/tex";
-
-const JAKE_MARKERS =
-  /\\resumeItem\b|\\resumeSubheading\b|\\resumeSubHeadingListStart\b|\\resumeProjectHeading\b/;
+import {
+  jakeToHouseLatex,
+  looksLikeJakeTemplate,
+  planTexImport,
+  softenJakeSource,
+} from "@/lib/import/tex";
+import { latexValidationError } from "@/lib/import/validate";
 
 export type PrepareCompileResult = {
   latex: string;
@@ -9,11 +12,12 @@ export type PrepareCompileResult = {
   convertedFromJake: boolean;
 };
 
-export { softenJakeSource };
+export { softenJakeSource, looksLikeJakeTemplate };
 
 /**
  * Make pasted / imported TeX more likely to compile on Resumate's TeX host.
  * Jake's fullpage/titlesec stack is rewritten to the house preamble.
+ * Prefer best-effort house output over failing the compile.
  */
 export function prepareLatexForCompile(tex: string): PrepareCompileResult {
   const trimmed = tex.trim();
@@ -21,14 +25,22 @@ export function prepareLatexForCompile(tex: string): PrepareCompileResult {
     throw new Error("Resume source is empty.");
   }
 
-  if (JAKE_MARKERS.test(trimmed)) {
+  if (looksLikeJakeTemplate(trimmed)) {
     const softened = softenJakeSource(trimmed);
     const plan = planTexImport(softened);
     if (plan.mode === "jake") {
       return { latex: plan.latex, convertedFromJake: true };
     }
+
+    const fallback = jakeToHouseLatex(softened);
+    const err = latexValidationError(fallback);
+    if (!err && !/\\resume[A-Z]/.test(fallback)) {
+      return { latex: fallback, convertedFromJake: true };
+    }
+
     throw new Error(
-      "This Jake-style resume has broken braces or macros. Tap Fix with AI, or use Import resume.",
+      err ??
+        "This Jake-style resume has broken braces or macros. Tap Fix with AI, or use Import resume.",
     );
   }
 
