@@ -14,7 +14,7 @@ export type PromptRecipe = {
 export const PROMPT_RECIPES: readonly PromptRecipe[] = [
   {
     id: "format",
-    label: "Format consistently",
+    label: "House style",
     prompt: FORMAT_CONSISTENCY_PROMPT,
   },
   {

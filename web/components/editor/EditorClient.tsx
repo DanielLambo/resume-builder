@@ -35,7 +35,8 @@ import {
 import { analyzeOrphans, type OrphanBullet } from "@/lib/analyzer/orphanDetector";
 import {
   FORMAT_CONSISTENCY_PROMPT,
-  formatResumeLatex,
+  polishResumeLatex,
+  summarizeFormatChanges,
 } from "@/lib/format-resume";
 import { isResumeReviewPrompt, type ResumeReview } from "@/lib/resume-review";
 import {
@@ -73,6 +74,7 @@ type VibeEditOverrides = {
   prompt?: string;
   compilerError?: string;
   clearPrompt?: boolean;
+  successTitle?: string;
 };
 
 type VersionState = {
@@ -501,12 +503,14 @@ export function EditorClient({
         );
 
         if (result.compileWarning) {
-          toast.success("Vibe edit saved", {
+          toast.success(overrides?.successTitle ?? "Vibe edit saved", {
             description: `AI applied · preview unavailable: ${result.compileWarning}`,
           });
         } else {
-          toast.success("Vibe edit applied", {
-            description: `${result.tokensUsed.toLocaleString()} tokens · ${result.pageCount ?? "?"} page PDF`,
+          toast.success(overrides?.successTitle ?? "Vibe edit applied", {
+            description: overrides?.successTitle
+              ? result.reply.trim()
+              : `${result.tokensUsed.toLocaleString()} tokens · ${result.pageCount ?? "?"} page PDF`,
           });
         }
       } catch {
@@ -529,8 +533,9 @@ export function EditorClient({
     if (busy || compiling) return;
 
     const current = latexRef.current;
-    const formatted = formatResumeLatex(current);
-    const next = formatted !== current ? formatted : current;
+    const polished = polishResumeLatex(current);
+    const next = polished.latex;
+    const summary = summarizeFormatChanges(polished.changes);
 
     if (next !== current || dirty) {
       latexRef.current = next;
@@ -551,10 +556,11 @@ export function EditorClient({
       setDirty(false);
     }
 
-    toast.message("Formatting for consistency…");
+    toast.message("Applying house style…", { description: summary });
     runVibeEdit({
       prompt: FORMAT_CONSISTENCY_PROMPT,
       clearPrompt: false,
+      successTitle: "House style applied",
     });
   }
 
@@ -865,7 +871,7 @@ export function EditorClient({
               type="button"
               className="min-h-8 border border-studio-ink/15 px-2.5 font-medium text-studio-ink transition hover:bg-studio-ink hover:text-white disabled:opacity-50"
               data-testid="format-consistency"
-              title="Unify dates, bullets, headers, and spacing — recruiter-safe, no invented facts"
+              title="Apply recruiter house style — dates, bullets, headers, tense. Facts stay put."
               disabled={compiling || busy}
               onClick={() => {
                 void formatForConsistency();

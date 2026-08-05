@@ -81,12 +81,14 @@ export function mockVibeEdit(input: {
   }
 
   if (
+    prompt.includes("recruiter house style") ||
     prompt.includes("format this entire resume") ||
     prompt.includes("recruiter-grade consistency") ||
-    prompt.includes("format consistently")
+    prompt.includes("format consistently") ||
+    prompt.includes("house style")
   ) {
     nextLatex = formatResumeLatex(nextLatex);
-    reply = "Mock AI: normalized dates, bullets, and section spacing.";
+    reply = "Unified dates, bullets, headers, and separators.";
   }
 
   if (
