@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import {
@@ -45,17 +45,23 @@ function ResumeCardSkeleton() {
 
 export function DashboardClient({
   initialResumes,
+  openTemplates = false,
 }: {
   initialResumes: ResumeRow[];
+  openTemplates?: boolean;
 }) {
   const router = useRouter();
   const [resumes, setResumes] = useState(initialResumes);
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(openTemplates);
   const [tailorSource, setTailorSource] = useState<ResumeRow | null>(null);
   const [tailoring, setTailoring] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (openTemplates) setPickerOpen(true);
+  }, [openTemplates]);
 
   function openPicker() {
     setPickerOpen(true);

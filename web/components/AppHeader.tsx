@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
 
@@ -13,8 +14,15 @@ type AppHeaderProps = {
   showMeter?: boolean;
 };
 
+function initialFromEmail(email: string): string {
+  const local = email.split("@")[0]?.trim() || "U";
+  return local.slice(0, 1).toUpperCase();
+}
+
 export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
+  const pathname = usePathname();
   const [pending, startTransition] = useTransition();
+  const onResumes = pathname.startsWith("/dashboard") || pathname.startsWith("/editor");
 
   function onSignOut() {
     startTransition(async () => {
@@ -31,21 +39,31 @@ export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-studio-border bg-studio-bg/95 backdrop-blur-sm">
-      <div className="mx-auto flex w-full max-w-none items-center justify-between gap-2 px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3">
-        <div className="flex min-w-0 items-center gap-3 sm:gap-6">
+    <header className="sticky top-0 z-40 border-b border-studio-border/80 bg-[#fbfbfa]/95 backdrop-blur-sm">
+      <div className="mx-auto flex w-full items-center justify-between gap-3 px-3 py-2.5 sm:px-6">
+        <div className="flex min-w-0 items-center gap-5 sm:gap-8">
           <Link
             href="/dashboard"
-            className="shrink-0 text-sm font-semibold tracking-tight text-studio-ink"
+            className="shrink-0 text-sm font-semibold tracking-tight text-[#1a1a1a]"
           >
             Resumate
           </Link>
-          <nav className="hidden items-center gap-3 text-xs text-studio-muted sm:flex">
-            <Link href="/dashboard" className="hover:text-studio-ink">
-              Library
+          <nav className="hidden items-center gap-1 text-sm sm:flex">
+            <Link
+              href="/dashboard"
+              className={`rounded-full px-3 py-1.5 transition ${
+                onResumes && !pathname.startsWith("/import")
+                  ? "bg-white text-[#1a1a1a] shadow-sm"
+                  : "text-studio-muted hover:text-[#1a1a1a]"
+              }`}
+            >
+              Resumes
             </Link>
-            <Link href="/import" className="hover:text-studio-ink">
-              Import
+            <Link
+              href="/dashboard?new=1"
+              className="rounded-full px-3 py-1.5 text-studio-muted transition hover:text-[#1a1a1a]"
+            >
+              Templates
             </Link>
           </nav>
         </div>
@@ -61,19 +79,27 @@ export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
               </div>
             </div>
           ) : null}
-          {email ? (
-            <span className="hidden max-w-[160px] truncate font-mono text-[0.65rem] text-studio-muted lg:inline">
-              {email}
+          <div className="flex min-h-9 items-center gap-2 rounded-full border border-slate-200/80 bg-white py-0.5 pl-0.5 pr-1 shadow-sm">
+            <span
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#1a1a1a] text-[0.7rem] font-semibold text-white"
+              aria-hidden="true"
+            >
+              {email ? initialFromEmail(email) : "?"}
             </span>
-          ) : null}
-          <button
-            type="button"
-            onClick={onSignOut}
-            disabled={pending}
-            className="min-h-9 shrink-0 rounded-lg border border-studio-border bg-studio-paper px-2.5 py-1.5 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-60 sm:px-3"
-          >
-            {pending ? "…" : "Sign out"}
-          </button>
+            {email ? (
+              <span className="hidden max-w-[9rem] truncate text-xs text-[#1a1a1a] lg:inline">
+                {email}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={onSignOut}
+              disabled={pending}
+              className="min-h-8 shrink-0 rounded-full px-2.5 text-xs font-medium text-studio-muted transition hover:bg-studio-canvas hover:text-[#1a1a1a] disabled:opacity-60"
+            >
+              {pending ? "Signing out" : "Sign out"}
+            </button>
+          </div>
         </div>
       </div>
     </header>

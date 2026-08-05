@@ -202,14 +202,15 @@ export function HarnessClient() {
           <div className="mb-3 flex justify-end">
             <span
               data-testid="one-page-lock"
-              className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 font-mono text-[0.65rem] text-emerald-700 sm:text-xs"
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.68rem] font-semibold tracking-wide ${
+                onePageLock
+                  ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
+                  : "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
+              }`}
             >
-              <span className="sm:hidden">
-                {onePageLock ? "[ 1-PG LOCK ]" : "[ FIT PENDING ]"}
-              </span>
-              <span className="hidden sm:inline">
-                {onePageLock ? "1 page locked" : "Still fitting"}
-              </span>
+              {onePageLock
+                ? "[ 🟢 1-PAGE LOCK ACTIVE ]"
+                : "[ wrapping · preview ]"}
             </span>
           </div>
           <PDFPreview

@@ -47,8 +47,8 @@ export function LineOptimizerToggle({
         disabled={!ready}
         onClick={() => onChange(!enabled)}
         className={[
-          "relative h-6 w-10 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-studio-vermilion disabled:opacity-50 sm:h-5 sm:w-9",
-          ready && enabled ? "bg-amber-500" : "bg-studio-border",
+          "relative h-6 w-10 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-50 sm:h-5 sm:w-9",
+          ready && enabled ? "bg-amber-500" : "bg-slate-200",
         ].join(" ")}
       >
         <span
@@ -60,8 +60,13 @@ export function LineOptimizerToggle({
           ].join(" ")}
         />
       </button>
-      <span className="font-mono text-[0.65rem] text-studio-muted" aria-live="polite">
-        {!ready ? "…" : enabled ? "ON" : "OFF"}
+      <span
+        className={`text-[0.7rem] font-medium ${
+          ready && enabled ? "text-amber-700" : "text-studio-muted"
+        }`}
+        aria-live="polite"
+      >
+        {!ready ? "…" : enabled ? "On" : "Off"}
         {ready && enabled && orphanCount > 0 ? ` · ${orphanCount}` : ""}
       </span>
     </div>
