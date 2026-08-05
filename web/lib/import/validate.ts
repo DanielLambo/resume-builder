@@ -1,5 +1,19 @@
 import { HOUSE_LATEX_PREAMBLE } from "@/lib/resume-template";
 
+function unescapedBraceDelta(text: string): number {
+  let opens = 0;
+  let closes = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === "\\" && i + 1 < text.length) {
+      i += 1;
+      continue;
+    }
+    if (text[i] === "{") opens += 1;
+    else if (text[i] === "}") closes += 1;
+  }
+  return opens - closes;
+}
+
 export function latexValidationError(latex: string): string | null {
   const text = latex.trim();
   if (!text) return "LaTeX is empty.";
@@ -10,9 +24,8 @@ export function latexValidationError(latex: string): string | null {
   if (/\\write18|\\immediate\s*\\write|\\openout/.test(text)) {
     return "LaTeX contains blocked shell escapes";
   }
-  const opens = (text.match(/\{/g) ?? []).length;
-  const closes = (text.match(/\}/g) ?? []).length;
-  if (Math.abs(opens - closes) > 2) {
+  // Ignore \\{ \\} literals — naive \{ counts false-flagged Jake resumes.
+  if (Math.abs(unescapedBraceDelta(text)) > 8) {
     return "LaTeX looks incomplete (unbalanced braces). Re-import or fix the source.";
   }
   return null;
