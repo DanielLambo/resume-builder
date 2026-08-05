@@ -49,12 +49,33 @@ type ExtractedItem = {
   kind: "item" | "resumeItem";
 };
 
-function stripLatexNoise(raw: string): string {
+/** Human-readable bullet text for UI (keeps %, ×, etc.). */
+export function latexToDisplayText(raw: string): string {
   return raw
-    .replace(/\\[a-zA-Z]+\*?(\[[^\]]*\])?(\{[^}]*\})?/g, " ")
-    .replace(/[{}$~^_]/g, " ")
+    .replace(/\\%/g, "%")
+    .replace(/\\\$/g, "$")
+    .replace(/\\&/g, "&")
+    .replace(/\\#/g, "#")
+    .replace(/\\_/g, "_")
+    .replace(/\\{/g, "{")
+    .replace(/\\}/g, "}")
+    .replace(/\\times\b/g, "×")
+    .replace(/\\cdot\b/g, "·")
+    .replace(/\\sim\b/g, "~")
+    .replace(/\\textbf\{([^}]*)\}/g, "$1")
+    .replace(/\\textit\{([^}]*)\}/g, "$1")
+    .replace(/\\emph\{([^}]*)\}/g, "$1")
+    .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?/g, "")
+    .replace(/\$([^$]*)\$/g, "$1")
+    .replace(/\{([^{}]*)\}/g, "$1")
+    .replace(/~/g, " ")
+    .replace(/\\\s/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function stripLatexNoise(raw: string): string {
+  return latexToDisplayText(raw);
 }
 
 function estimateWrap(

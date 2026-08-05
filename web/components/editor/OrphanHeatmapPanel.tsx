@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import {
   DEFAULT_LINE_WIDTH,
   analyzeOrphans,
+  latexToDisplayText,
   type OrphanBullet,
 } from "@/lib/analyzer/orphanDetector";
 
@@ -65,7 +66,7 @@ export function OrphanHeatmapPanel({
                 data-testid="orphan-bullet"
               >
                 <p className="line-clamp-3 text-[0.8rem] leading-relaxed text-studio-ink">
-                  {bullet.text}
+                  {latexToDisplayText(bullet.text)}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[0.7rem] text-studio-muted">

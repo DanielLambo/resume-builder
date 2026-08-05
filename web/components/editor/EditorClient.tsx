@@ -1103,40 +1103,48 @@ export function EditorClient({
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col items-center gap-3 overflow-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:gap-4 sm:p-6 md:p-10">
-          {compileError && mode === "source" ? (
-            <div className="w-full max-w-3xl">
-              <CompileErrorBanner
-                error={compileError}
-                pending={busy}
-                onDismiss={() => setCompileError(null)}
-                onFix={() => {
-                  if (!compileError) return;
-                  setMode("vibe");
-                  runVibeEdit({
-                    prompt: COMPILE_FIX_PROMPT,
-                    compilerError: compileError,
-                    clearPrompt: false,
-                  });
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 p-3 sm:p-5">
+            {compileError && mode === "source" ? (
+              <div className="mx-auto mb-3 w-full max-w-3xl">
+                <CompileErrorBanner
+                  error={compileError}
+                  pending={busy}
+                  onDismiss={() => setCompileError(null)}
+                  onFix={() => {
+                    if (!compileError) return;
+                    setMode("vibe");
+                    runVibeEdit({
+                      prompt: COMPILE_FIX_PROMPT,
+                      compilerError: compileError,
+                      clearPrompt: false,
+                    });
+                  }}
+                />
+              </div>
+            ) : null}
+            <div className="mx-auto h-full max-w-[8.5in]">
+              <PDFPreview
+                pdfBase64={pdfBase64}
+                pageCount={pageCount}
+                ghostActive={ghostActive}
+                pendingLatex={latex}
+                compiling={compiling || busy}
+              />
+            </div>
+          </div>
+          {heatmapOn && heatmapReady ? (
+            <div className="max-h-[28vh] shrink-0 overflow-auto border-t border-studio-border bg-studio-bg px-4 py-3 sm:px-5">
+              <OrphanHeatmapPanel
+                latex={latex}
+                enabled
+                shorteningIndex={shorteningIndex}
+                onShorten={(bullet) => {
+                  void onShortenOrphan(bullet);
                 }}
               />
             </div>
           ) : null}
-          <PDFPreview
-            pdfBase64={pdfBase64}
-            pageCount={pageCount}
-            ghostActive={ghostActive}
-            pendingLatex={latex}
-            compiling={compiling || busy}
-          />
-          <OrphanHeatmapPanel
-            latex={latex}
-            enabled={heatmapOn && heatmapReady}
-            shorteningIndex={shorteningIndex}
-            onShorten={(bullet) => {
-              void onShortenOrphan(bullet);
-            }}
-          />
         </div>
       </section>
 
