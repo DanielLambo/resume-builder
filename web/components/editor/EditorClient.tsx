@@ -147,6 +147,15 @@ export function EditorClient({
   const [compileError, setCompileError] = useState<string | null>(null);
   const busy = aiBusy;
   const [mobilePane, setMobilePane] = useState<MobilePane>("edit");
+  const [narrow, setNarrow] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const apply = () => setNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
   const [zoom, setZoom] = useState<PreviewZoom>("fit");
   const [onePageLock, setOnePageLock] = useState(
     initialPageCount != null && initialPageCount === 1,
@@ -911,7 +920,7 @@ export function EditorClient({
           </button>
           <button
             type="button"
-            className="min-h-6 rounded-sm px-1.5 transition hover:bg-ide-hover hover:text-ide-ink disabled:opacity-50"
+            className="hidden min-h-6 rounded-sm px-1.5 transition hover:bg-ide-hover hover:text-ide-ink disabled:opacity-50 sm:inline"
             data-testid="format-consistency"
             title="Normalize dates, bullets, and tense. Facts stay put."
             disabled={compiling || busy}
@@ -938,16 +947,16 @@ export function EditorClient({
 
   const previewPane = (
     <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-ide-gutter">
-      <div className="flex h-8 shrink-0 flex-wrap items-center justify-between gap-1.5 border-b border-ide-border bg-ide-panel px-2 sm:px-2.5">
+      <div className="flex h-9 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-ide-border bg-ide-panel px-2 [scrollbar-width:none] sm:h-8 sm:px-2.5 [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
           onClick={onCompile}
           disabled={compiling || busy}
-          className="min-h-6 rounded bg-ide-accent px-2.5 text-[0.72rem] font-semibold text-white transition hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:bg-ide-raised disabled:text-ide-faint"
+          className="min-h-7 shrink-0 rounded bg-ide-accent px-2.5 text-[0.72rem] font-semibold text-white transition hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:bg-ide-raised disabled:text-ide-faint"
         >
           {compiling ? "Compiling…" : "Recompile"}
         </button>
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
           <span
             data-testid="one-page-lock"
             className={`inline-flex items-center rounded-sm px-1.5 py-0.5 font-mono text-[0.6rem] tracking-wide ${
@@ -958,14 +967,16 @@ export function EditorClient({
           >
             {onePageLock ? "1 page" : `${pageCount ?? "?"}p`}
           </span>
-          <LineOptimizerToggle
-            enabled={heatmapOn}
-            orphanCount={orphanCount}
-            onChange={setHeatmapOn}
-            ready={heatmapReady}
-            compact
-            variant="ide"
-          />
+          <div className="hidden sm:block">
+            <LineOptimizerToggle
+              enabled={heatmapOn}
+              orphanCount={orphanCount}
+              onChange={setHeatmapOn}
+              ready={heatmapReady}
+              compact
+              variant="ide"
+            />
+          </div>
           <div
             className="inline-flex items-center rounded-sm border border-ide-border bg-ide-raised p-0.5"
             data-testid="preview-zoom"
@@ -1128,11 +1139,21 @@ export function EditorClient({
           />
         </div>
         <BottomDock
-          defaultHeight={128}
+          defaultHeight={narrow ? 108 : 128}
           minHeight={72}
-          maxHeight={380}
+          maxHeight={narrow ? 240 : 380}
           preferHeight={
-            prompt.length > 900 ? 260 : prompt.length > 280 ? 200 : prompt.length > 80 ? 160 : 128
+            narrow
+              ? prompt.length > 280
+                ? 180
+                : 108
+              : prompt.length > 900
+                ? 260
+                : prompt.length > 280
+                  ? 200
+                  : prompt.length > 80
+                    ? 160
+                    : 128
           }
         >
           <AiComposerDock
