@@ -48,6 +48,7 @@ import {
   EMPTY_WRITING_PROFILE,
   type WritingProfile,
 } from "@/lib/writing-profile";
+import { VIBE_CLIENT_STEPS } from "@/lib/vibe-steps";
 
 type EditorClientProps = {
   resumeId: string;
@@ -82,11 +83,7 @@ type VersionState = {
   index: number;
 };
 
-const CLIENT_STEPS = [
-  "[1/4] Parsing prompt and extracting Zod schema...",
-  "[2/4] Checking Upstash Redis daily token limit...",
-  "[3/4] Compiling LaTeX via 1-Page Lock engine...",
-] as const;
+const CLIENT_STEPS = VIBE_CLIENT_STEPS;
 
 const COMPILE_FIX_PROMPT =
   "Fix this LaTeX compile error without inventing new experience. Keep facts honest.";
@@ -798,7 +795,11 @@ export function EditorClient({
               <h1 className="truncate text-[0.95rem] font-semibold tracking-tight text-studio-ink">
                 {title}
               </h1>
-              <span className="shrink-0 text-[0.7rem] text-studio-muted">
+              <span
+                className={`shrink-0 text-[0.7rem] ${
+                  dirty ? "text-studio-muted" : "text-emerald-700"
+                }`}
+              >
                 {dirty ? "Unsaved" : "Saved"}
               </span>
             </div>
@@ -822,13 +823,13 @@ export function EditorClient({
 
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3 sm:px-5">
           <div
-            className="inline-flex border border-studio-border bg-studio-paper p-0.5"
+            className="inline-flex rounded-lg border border-studio-border bg-studio-paper p-0.5"
             role="group"
             aria-label="Editor mode"
           >
             <button
               type="button"
-              className={`min-h-8 px-3 text-xs font-medium transition ${
+              className={`min-h-8 rounded-md px-3 text-xs font-medium transition ${
                 mode === "vibe"
                   ? "bg-studio-ink text-white"
                   : "text-studio-muted hover:text-studio-ink"
@@ -839,7 +840,7 @@ export function EditorClient({
             </button>
             <button
               type="button"
-              className={`min-h-8 px-3 text-xs font-medium transition ${
+              className={`min-h-8 rounded-md px-3 text-xs font-medium transition ${
                 mode === "source"
                   ? "bg-studio-ink text-white"
                   : "text-studio-muted hover:text-studio-ink"
@@ -869,7 +870,7 @@ export function EditorClient({
             </button>
             <button
               type="button"
-              className="min-h-8 border border-studio-ink/15 px-2.5 font-medium text-studio-ink transition hover:bg-studio-ink hover:text-white disabled:opacity-50"
+              className="min-h-8 rounded-md border border-studio-ink/15 px-2.5 font-medium text-studio-ink transition hover:bg-studio-ink hover:text-white disabled:opacity-50"
               data-testid="format-consistency"
               title="Apply recruiter house style — dates, bullets, headers, tense. Facts stay put."
               disabled={compiling || busy}
@@ -1000,7 +1001,7 @@ export function EditorClient({
                   promptRef.current?.focus();
                 }}
               />
-              <div className="border border-studio-border bg-studio-paper focus-within:border-studio-ink/30">
+              <div className="rounded-xl border border-studio-border bg-studio-paper focus-within:border-studio-ink/30">
                 <textarea
                   ref={promptRef}
                   data-testid="vibe-prompt"
@@ -1047,7 +1048,7 @@ export function EditorClient({
                       data-testid="vibe-submit"
                       disabled={busy || !prompt.trim()}
                       onClick={() => runVibeEdit()}
-                      className="min-h-9 flex-1 bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45 sm:flex-none sm:min-w-[7.5rem]"
+                      className="min-h-9 flex-1 rounded-lg bg-studio-vermilion px-3 py-2 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45 sm:flex-none sm:min-w-[7.5rem]"
                     >
                       {busy
                         ? promptIsReview
@@ -1096,8 +1097,8 @@ export function EditorClient({
               </span>
               <span className="hidden sm:inline">
                 {onePageLock
-                  ? `${pageCount ?? 1}-PAGE LOCK ACTIVE`
-                  : `${pageCount ?? "?"} pages · fit pending`}
+                  ? `${pageCount ?? 1} page locked`
+                  : `${pageCount ?? "?"} pages · still fitting`}
               </span>
             </span>
           </div>

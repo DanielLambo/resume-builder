@@ -50,11 +50,11 @@ export function QuotaModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md border border-studio-border bg-studio-paper p-4 shadow-paper-sheet sm:p-5"
+        className="w-full max-w-md rounded-2xl border border-studio-border bg-studio-paper p-4 shadow-paper-sheet sm:p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted">
-          Typesetter notice
+        <p className="text-[0.65rem] font-medium uppercase tracking-wide text-studio-muted">
+          Quota
         </p>
         <h2 id="quota-modal-title" className="mt-1 text-lg font-semibold text-studio-ink">
           {title}
@@ -64,7 +64,7 @@ export function QuotaModal({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-11 border border-studio-border px-3 py-2.5 text-sm text-studio-ink hover:bg-studio-canvas sm:min-h-0"
+            className="min-h-11 rounded-lg border border-studio-border px-3 py-2.5 text-sm text-studio-ink hover:bg-studio-canvas sm:min-h-0"
           >
             Keep editing
           </button>

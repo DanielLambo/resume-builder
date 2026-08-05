@@ -43,14 +43,13 @@ export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
           >
             Resumate
           </Link>
-          <nav className="hidden items-center gap-1 font-mono text-xs text-studio-muted sm:flex">
+          <nav className="hidden items-center gap-3 text-xs text-studio-muted sm:flex">
             <Link href="/dashboard" className="hover:text-studio-ink">
               Library
             </Link>
-            <span aria-hidden="true" className="px-1">
-              |
-            </span>
-            <span className="text-studio-muted/80">Typesetter Studio</span>
+            <Link href="/import" className="hover:text-studio-ink">
+              Import
+            </Link>
           </nav>
         </div>
 
@@ -74,7 +73,7 @@ export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
             type="button"
             onClick={onSignOut}
             disabled={pending}
-            className="min-h-9 shrink-0 border border-studio-border bg-studio-paper px-2.5 py-1.5 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-60 sm:px-3"
+            className="min-h-9 shrink-0 rounded-lg border border-studio-border bg-studio-paper px-2.5 py-1.5 text-xs font-medium text-studio-ink hover:bg-studio-canvas disabled:opacity-60 sm:px-3"
           >
             {pending ? "…" : "Sign out"}
           </button>
