@@ -60,10 +60,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function looksLikeLatex(dataJson: Record<string, unknown>): string | null {
-  const latex = dataJson.latex;
-  if (typeof latex !== "string" || !latex.trim()) {
-    return "data_json.latex missing or empty";
+function estimateTokens(text: string): number {
+  return Math.max(1, Math.ceil(text.length / 3.5));
+}
+
+/** Stay under Groq on-demand TPM (~8k) including reserved max_tokens. */
+function completionBudget(latex: string, prompt: string): number {
+  const promptTokens = estimateTokens(latex) + estimateTokens(prompt) + 220;
+  const remaining = 7200 - promptTokens;
+  const needed = estimateTokens(latex) + 280;
+  return Math.max(500, Math.min(2800, remaining, needed));
+}
+
+function looksLikeLatex(latex: string): string | null {
+  if (!latex.trim()) {
+    return "latex missing or empty";
   }
   if (!/\\documentclass/.test(latex)) {
     return "LaTeX missing \\documentclass";
@@ -77,6 +88,19 @@ function looksLikeLatex(dataJson: Record<string, unknown>): string | null {
   return null;
 }
 
+function parseModelJson(content: string): unknown {
+  const trimmed = content
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "");
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    const repaired = trimmed.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
+    return JSON.parse(repaired) as unknown;
+  }
+}
+
 async function callGroqOnce(input: {
   prompt: string;
   dataJson: Record<string, unknown>;
@@ -86,16 +110,15 @@ async function callGroqOnce(input: {
   baseUrl: string;
   model: string;
 }): Promise<GroqVibeEditResult> {
+  const previousLatex = getLatexFromDataJson(input.dataJson);
   const system = [
     "You are Resumate's vibe editor.",
-    "Return JSON only matching:",
-    '{"data_json": object, "reply": string}',
-    "data_json MUST include a full compilable LaTeX string in the `latex` field.",
-    "Make the smallest possible surgical edit that satisfies the prompt.",
-    "Never delete, rewrite, or omit unrelated jobs, bullets, education, skills, or sections.",
-    "If the user adds one role (for example an internship at Rippling), INSERT that role and keep every other entry verbatim.",
-    "Do not invent employers, dates, or metrics. If a detail is missing, use a short placeholder the user can fill.",
-    "Reply in one sentence listing only what changed.",
+    'Return JSON only: {"latex":"<full compilable LaTeX>","reply":"<one sentence>"}',
+    "Escape backslashes in latex so the JSON is valid.",
+    "Make the smallest surgical edit that satisfies the prompt.",
+    "Never delete unrelated jobs, bullets, education, skills, or sections.",
+    "If the user adds one role, INSERT it and keep every other entry verbatim.",
+    "Do not invent employers, dates, or metrics.",
     input.writingProfileNote?.trim() || "",
   ]
     .filter(Boolean)
@@ -103,12 +126,33 @@ async function callGroqOnce(input: {
 
   const userPayload: Record<string, unknown> = {
     prompt: input.prompt,
-    data_json: input.dataJson,
+    latex: previousLatex,
   };
   if (input.healHint) {
     userPayload.compiler_error = input.healHint;
     userPayload.instruction =
       "Previous output failed validation/compile. Fix the LaTeX and return valid JSON only.";
+  }
+
+  const maxTokens = completionBudget(previousLatex, input.prompt);
+  if (estimateTokens(previousLatex) + estimateTokens(input.prompt) + maxTokens > 7800) {
+    throw new Error(
+      "Resume is too long for one AI pass. Trim the source slightly, or try a smaller edit.",
+    );
+  }
+
+  const requestBody: Record<string, unknown> = {
+    model: input.model,
+    temperature: 0.2,
+    max_tokens: maxTokens,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: JSON.stringify(userPayload) },
+    ],
+  };
+  if (input.model.includes("gpt-oss")) {
+    requestBody.reasoning_effort = "low";
   }
 
   const response = await fetch(`${input.baseUrl}/v1/chat/completions`, {
@@ -117,19 +161,10 @@ async function callGroqOnce(input: {
       Authorization: `Bearer ${input.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: input.model,
-      temperature: 0.2,
-      max_tokens: 4096,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: JSON.stringify(userPayload) },
-      ],
-    }),
+    body: JSON.stringify(requestBody),
   });
 
-  throwIfGroqFailed(response);
+  await throwIfGroqFailed(response);
 
   const raw: unknown = await response.json();
   const completion = GroqChatCompletionSchema.parse(raw);
@@ -140,7 +175,7 @@ async function callGroqOnce(input: {
 
   let parsedJson: unknown;
   try {
-    parsedJson = JSON.parse(content) as unknown;
+    parsedJson = parseModelJson(content);
   } catch {
     throw new Error("INVALID_JSON: Groq returned non-JSON content");
   }
@@ -152,13 +187,13 @@ async function callGroqOnce(input: {
     const detail = err instanceof Error ? err.message : "schema mismatch";
     throw new Error(`INVALID_JSON: ${detail}`);
   }
-  const latexError = looksLikeLatex(output.data_json);
+  const nextLatex =
+    typeof output.data_json.latex === "string" ? output.data_json.latex : "";
+  const latexError = looksLikeLatex(nextLatex);
   if (latexError) {
     throw new Error(`LATEX_INVALID: ${latexError}`);
   }
 
-  const previousLatex = getLatexFromDataJson(input.dataJson);
-  const nextLatex = getLatexFromDataJson(output.data_json);
   const wipe = detectContentWipe(previousLatex, nextLatex);
   if (wipe) {
     throw new Error(wipe);
@@ -304,25 +339,30 @@ async function callGroqReviewOnce(input: {
       "Previous output failed schema validation. Fix and return valid JSON only.";
   }
 
+  const reviewBody: Record<string, unknown> = {
+    model: input.model,
+    temperature: 0.35,
+    max_tokens: 1800,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: JSON.stringify(userPayload) },
+    ],
+  };
+  if (input.model.includes("gpt-oss")) {
+    reviewBody.reasoning_effort = "low";
+  }
+
   const response = await fetch(`${input.baseUrl}/v1/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${input.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: input.model,
-      temperature: 0.35,
-      max_tokens: 3500,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: JSON.stringify(userPayload) },
-      ],
-    }),
+    body: JSON.stringify(reviewBody),
   });
 
-  throwIfGroqFailed(response);
+  await throwIfGroqFailed(response);
 
   const raw: unknown = await response.json();
   const completion = GroqChatCompletionSchema.parse(raw);

@@ -91,6 +91,8 @@ async function shortenWithGroq(bullet: string): Promise<{
     body: JSON.stringify({
       model,
       temperature: 0.2,
+      max_tokens: 200,
+      ...(model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
       response_format: { type: "json_object" },
       messages: [
         {
@@ -106,7 +108,7 @@ async function shortenWithGroq(bullet: string): Promise<{
     }),
   });
 
-  throwIfGroqFailed(response);
+  await throwIfGroqFailed(response);
 
   const json = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;

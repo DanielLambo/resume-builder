@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { DEFAULT_GROQ_MODEL } from "@/lib/groq-model";
+import { DEFAULT_GROQ_MODEL, throwIfGroqFailed } from "@/lib/groq-model";
 import { IMPORT_SOURCE_TEXT_MAX } from "@/lib/import/constants";
 import { latexValidationError } from "@/lib/import/validate";
 import { isMockAiEnabled } from "@/lib/mock-ai";
@@ -123,27 +123,30 @@ async function callConvertOnce(input: {
       "Previous output failed validation. Fix and return valid JSON only.";
   }
 
+  const body: Record<string, unknown> = {
+    model: input.model,
+    temperature: 0.15,
+    max_tokens: 2800,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: JSON.stringify(userPayload) },
+    ],
+  };
+  if (input.model.includes("gpt-oss")) {
+    body.reasoning_effort = "low";
+  }
+
   const response = await fetch(`${input.baseUrl}/v1/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${input.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: input.model,
-      temperature: 0.15,
-      max_tokens: 4500,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: JSON.stringify(userPayload) },
-      ],
-    }),
+    body: JSON.stringify(body),
   });
 
-  if (!response.ok) {
-    throw new Error(`Groq API error (HTTP ${response.status})`);
-  }
+  await throwIfGroqFailed(response);
 
   const raw: unknown = await response.json();
   const completion = GroqChatSchema.parse(raw);

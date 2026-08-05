@@ -8,6 +8,7 @@ import type { Json } from "@/lib/database.types";
 import { sanitizeCompileError } from "@/lib/compile-latex";
 import { fitResumeToSinglePage } from "@/lib/fit-resume";
 import { invokeGroqVibeEdit } from "@/lib/groq";
+import { latexFromVibeOutput } from "@/lib/vibe-types";
 import {
   asDataRecord,
   buildTailorJobPrompt,
@@ -157,10 +158,7 @@ export async function tailorResumeForJobAction(
       maxHealRetries: 2,
     });
 
-    const editedLatex =
-      typeof groqResult.output.data_json.latex === "string"
-        ? groqResult.output.data_json.latex
-        : "";
+    const editedLatex = latexFromVibeOutput(groqResult.output);
 
     if (!editedLatex.trim()) {
       return {

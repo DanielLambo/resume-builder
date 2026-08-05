@@ -88,7 +88,8 @@ export async function condenseBulletsWithGroq(
         body: JSON.stringify({
           model,
           temperature: 0.2,
-          max_tokens: 8000,
+          max_tokens: 2400,
+          ...(model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: system },

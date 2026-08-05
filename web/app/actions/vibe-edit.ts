@@ -7,10 +7,8 @@ import type { Json } from "@/lib/database.types";
 import { sanitizeCompileError } from "@/lib/compile-latex";
 import { fitResumeToSinglePage } from "@/lib/fit-resume";
 import { invokeGroqResumeReview, invokeGroqVibeEdit } from "@/lib/groq";
-import {
-  GROQ_BUSY_MESSAGE,
-  isGroqRateLimitError,
-} from "@/lib/groq-model";
+import { isGroqRateLimitError, messageForGroqLimit } from "@/lib/groq-model";
+import { latexFromVibeOutput } from "@/lib/vibe-types";
 import { getJobTargetFromDataJson } from "@/lib/job-target";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import { persistResumePdf } from "@/lib/persist-resume-pdf";
@@ -283,10 +281,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     });
     if (groqResult.healed) healed = true;
 
-    const editedLatex =
-      typeof groqResult.output.data_json.latex === "string"
-        ? groqResult.output.data_json.latex
-        : "";
+    const editedLatex = latexFromVibeOutput(groqResult.output);
 
     if (!editedLatex.trim()) {
       return {
@@ -450,7 +445,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
         ok: false,
         status: 429,
         code: "GROQ_BUSY",
-        error: GROQ_BUSY_MESSAGE,
+        error: messageForGroqLimit(err),
         steps,
       };
     }
