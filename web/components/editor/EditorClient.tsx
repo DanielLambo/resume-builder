@@ -20,6 +20,7 @@ import {
   AiComposerDock,
   type ComposerProposal,
 } from "@/components/editor/AiComposerDock";
+import { EditableResumeTitle } from "@/components/editor/EditableResumeTitle";
 import { LineOptimizerToggle, useLineOptimizerPreference } from "@/components/editor/LineOptimizerToggle";
 import { OrphanHeatmapPanel } from "@/components/editor/OrphanHeatmapPanel";
 import { PDFPreview } from "@/components/editor/PDFPreview";
@@ -133,6 +134,7 @@ export function EditorClient({
 }: EditorClientProps) {
   const { applyUsage, used: tokensUsed } = useTokenUsage();
   const [latex, setLatex] = useState(initialLatex);
+  const [docTitle, setDocTitle] = useState(title);
   const [templateId, setTemplateId] = useState<ResumeTemplateId>(initialTemplateId);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
@@ -190,12 +192,14 @@ export function EditorClient({
   const streamSignalRef = useRef<{ cancelled: boolean } | null>(null);
   const compileGen = useRef(0);
   const latexRef = useRef(latex);
+  const titleRef = useRef(docTitle);
   const templateIdRef = useRef(templateId);
   const savingRef = useRef(false);
   const pendingResaveRef = useRef(false);
   const proposalLockRef = useRef(false);
   const didInitialCompile = useRef(false);
   latexRef.current = latex;
+  titleRef.current = docTitle;
   templateIdRef.current = templateId;
 
   const orphanCount = useMemo(
@@ -216,11 +220,12 @@ export function EditorClient({
         pendingResaveRef.current = false;
         passes += 1;
         const snapshot = latexRef.current;
+        const snapshotTitle = titleRef.current;
         const snapshotTemplate = templateIdRef.current;
         const result = await saveResumeLatexAction(
           resumeId,
           snapshot,
-          title,
+          snapshotTitle,
           snapshotTemplate,
         );
         if (!result.ok) {
@@ -232,6 +237,7 @@ export function EditorClient({
         }
         const drifted =
           latexRef.current !== snapshot ||
+          titleRef.current !== snapshotTitle ||
           templateIdRef.current !== snapshotTemplate ||
           pendingResaveRef.current;
         if (drifted && passes < 5) {
@@ -254,7 +260,7 @@ export function EditorClient({
         void flushSave();
       }
     }
-  }, [resumeId, title]);
+  }, [resumeId]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -612,7 +618,7 @@ export function EditorClient({
             void saveResumeLatexAction(
               resumeId,
               priorLatex,
-              title,
+              titleRef.current,
               templateIdRef.current,
             );
           }
@@ -767,7 +773,7 @@ export function EditorClient({
       const saved = await saveResumeLatexAction(
         resumeId,
         next,
-        title,
+        titleRef.current,
         templateIdRef.current,
       );
       if (!saved.ok) {
@@ -883,9 +889,16 @@ export function EditorClient({
       <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-ide-border bg-ide-panel px-2 sm:px-2.5">
         <div className="min-w-0">
           <div className="flex min-w-0 items-baseline gap-1.5">
-            <h1 className="truncate text-[0.75rem] font-medium tracking-tight text-ide-ink">
-              {title}
-            </h1>
+            <EditableResumeTitle
+              value={docTitle}
+              disabled={busy || Boolean(proposal)}
+              onCommit={(next) => {
+                setDocTitle(next);
+                titleRef.current = next;
+                setDirty(true);
+                void flushSave();
+              }}
+            />
             <span
               className={`shrink-0 font-mono text-[0.6rem] ${
                 dirty ? "text-ide-faint" : "text-ide-accent"
@@ -1234,7 +1247,7 @@ export function EditorClient({
         title={quotaTitle}
         body={quotaBody}
         latex={latex}
-        filename={`${title.replace(/\s+/g, "-").toLowerCase() || "resume"}.tex`}
+        filename={`${docTitle.replace(/\s+/g, "-").toLowerCase() || "resume"}.tex`}
         onClose={() => setQuotaOpen(false)}
       />
       <TemplatePicker
