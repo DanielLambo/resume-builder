@@ -10,6 +10,7 @@ import {
   getLatexFromDataJson,
   getTemplateIdFromDataJson,
 } from "@/lib/resume-template";
+import { onboardingPathWithNext } from "@/lib/auth-next";
 import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 import { writingProfileFromMetadata } from "@/lib/writing-profile";
@@ -32,7 +33,7 @@ export default async function EditorPage({ params }: EditorPageProps) {
   }
 
   if (await shouldForceOnboarding(user)) {
-    redirect("/onboarding");
+    redirect(onboardingPathWithNext(`/editor/${id}`));
   }
 
   const { data: resume, error } = await supabase
