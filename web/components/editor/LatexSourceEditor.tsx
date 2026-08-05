@@ -46,14 +46,20 @@ const latexHighlightStyle = HighlightStyle.define([
   { tag: t.invalid, color: "#FF7B72", textDecoration: "underline wavy" },
 ]);
 
+const IDE_BG = "#252220";
+const IDE_GUTTER = "#1f1c1b";
+const IDE_LINE = "#2e2928";
+const IDE_INK = "#E6EDF3";
+
 const ideEditorTheme = EditorView.theme(
   {
     "&": {
       height: "100%",
       maxHeight: "100%",
       fontSize: "13px",
-      backgroundColor: "#252220",
-      color: "#E6EDF3",
+      backgroundColor: `${IDE_BG} !important`,
+      color: IDE_INK,
+      colorScheme: "dark",
     },
     "&.cm-focused": {
       outline: "none",
@@ -62,50 +68,56 @@ const ideEditorTheme = EditorView.theme(
       fontFamily:
         'var(--font-geist-mono), "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       lineHeight: "1.55",
+      backgroundColor: `${IDE_BG} !important`,
       overflowX: "auto",
       overflowY: "scroll",
       overscrollBehavior: "contain",
       touchAction: "pan-x pan-y",
       scrollbarGutter: "stable",
       scrollbarWidth: "auto",
-      scrollbarColor: "#8a827a #1f1c1b",
+      scrollbarColor: `#8a827a ${IDE_GUTTER}`,
     },
     ".cm-scroller::-webkit-scrollbar": {
       width: "11px",
       height: "11px",
     },
     ".cm-scroller::-webkit-scrollbar-track": {
-      background: "#1f1c1b",
+      background: IDE_GUTTER,
     },
     ".cm-scroller::-webkit-scrollbar-thumb": {
       backgroundColor: "#8a827a",
       borderRadius: "6px",
-      border: "2px solid #1f1c1b",
+      border: `2px solid ${IDE_GUTTER}`,
     },
     ".cm-scroller::-webkit-scrollbar-thumb:hover": {
       backgroundColor: "#a39a90",
     },
     ".cm-content": {
       padding: "8px 0 28px",
-      caretColor: "#E6EDF3",
+      caretColor: IDE_INK,
       minHeight: "100%",
+      backgroundColor: `${IDE_BG} !important`,
+      color: IDE_INK,
+    },
+    ".cm-line": {
+      backgroundColor: "transparent",
     },
     ".cm-gutters": {
-      backgroundColor: "#1f1c1b",
+      backgroundColor: `${IDE_GUTTER} !important`,
       borderRight: "1px solid #5c534e",
       color: "#8a827a",
     },
     ".cm-activeLineGutter": {
-      backgroundColor: "#2e2928",
-      color: "#E6EDF3",
+      backgroundColor: IDE_LINE,
+      color: IDE_INK,
     },
     ".cm-activeLine": {
-      backgroundColor: "#2e2928",
+      backgroundColor: `${IDE_LINE} !important`,
     },
     ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-      backgroundColor: "#5c3a38",
+      backgroundColor: "#5c3a38 !important",
     },
-    ".cm-cursor": {
+    ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "#E54B4B",
     },
   },
@@ -174,7 +186,9 @@ export function LatexSourceEditor({
           ref={cmRef}
           value={value}
           height="100%"
-          className="absolute inset-0 h-full min-h-0 [&_.cm-editor]:h-full [&_.cm-editor]:max-h-full [&_.cm-scroller]:overscroll-contain"
+          // Force dark; without this, @uiw/react-codemirror defaults to a white light theme.
+          theme={ideEditorTheme}
+          className="absolute inset-0 h-full min-h-0 bg-ide-bg [&_.cm-editor]:h-full [&_.cm-editor]:max-h-full [&_.cm-editor]:bg-ide-bg [&_.cm-scroller]:bg-ide-bg [&_.cm-scroller]:overscroll-contain [&_.cm-content]:bg-ide-bg"
           editable={!disabled}
           basicSetup={{
             lineNumbers: true,
@@ -189,7 +203,6 @@ export function LatexSourceEditor({
           extensions={[
             latexLanguage,
             syntaxHighlighting(latexHighlightStyle),
-            ideEditorTheme,
             EditorView.lineWrapping,
           ]}
           onChange={(next) => {
