@@ -19,7 +19,8 @@ const ideEditorTheme = EditorView.theme(
     "&": {
       height: "100%",
       fontSize: "13px",
-      backgroundColor: "#1a1d23",
+      backgroundColor: "#222831",
+      color: "#f1f3f6",
     },
     "&.cm-focused": {
       outline: "none",
@@ -32,25 +33,25 @@ const ideEditorTheme = EditorView.theme(
     },
     ".cm-content": {
       padding: "8px 0 20px",
-      caretColor: "#e6e8ec",
+      caretColor: "#f1f3f6",
     },
     ".cm-gutters": {
-      backgroundColor: "#16181c",
-      borderRight: "1px solid #2e333c",
-      color: "#5c6370",
+      backgroundColor: "#1c222c",
+      borderRight: "1px solid #4d5666",
+      color: "#808a99",
     },
     ".cm-activeLineGutter": {
-      backgroundColor: "#22262e",
-      color: "#e6e8ec",
+      backgroundColor: "#2a313c",
+      color: "#f1f3f6",
     },
     ".cm-activeLine": {
-      backgroundColor: "#22262e",
+      backgroundColor: "#2a313c",
     },
     ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-      backgroundColor: "#264f78",
+      backgroundColor: "#3d5a80",
     },
     ".cm-cursor": {
-      borderLeftColor: "#e6e8ec",
+      borderLeftColor: "#f1f3f6",
     },
   },
   { dark: true },

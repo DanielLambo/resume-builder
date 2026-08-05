@@ -120,10 +120,10 @@ export function SplitPane({
         aria-label={resizeLabel}
         title="Drag to resize"
         onPointerDown={startDrag}
-        className="group relative z-10 hidden w-1.5 shrink-0 cursor-col-resize items-stretch justify-center bg-ide-gutter transition hover:bg-ide-accent/50 focus-visible:bg-ide-accent focus-visible:outline-none lg:flex"
+        className="group relative z-10 hidden w-1.5 shrink-0 cursor-col-resize items-stretch justify-center bg-ide-border/80 transition hover:bg-ide-accent/60 focus-visible:bg-ide-accent focus-visible:outline-none lg:flex"
         data-testid="split-resize-horizontal"
       >
-        <span className="m-auto h-8 w-0.5 rounded-full bg-ide-border transition group-hover:bg-ide-accent/80" />
+        <span className="m-auto h-8 w-0.5 rounded-full bg-ide-muted/70 transition group-hover:bg-ide-accent" />
       </button>
       <div
         className={[
@@ -230,10 +230,10 @@ export function BottomDock({
         aria-label="Resize AI panel"
         title="Drag to resize AI panel"
         onPointerDown={startDrag}
-        className="group relative z-10 flex h-1.5 w-full shrink-0 cursor-row-resize items-center justify-center bg-ide-gutter transition hover:bg-ide-accent/50 focus-visible:bg-ide-accent focus-visible:outline-none"
+        className="group relative z-10 flex h-1.5 w-full shrink-0 cursor-row-resize items-center justify-center bg-ide-border/80 transition hover:bg-ide-accent/60 focus-visible:bg-ide-accent focus-visible:outline-none"
         data-testid="split-resize-vertical"
       >
-        <span className="h-0.5 w-8 rounded-full bg-ide-border transition group-hover:bg-ide-accent/80" />
+        <span className="h-0.5 w-8 rounded-full bg-ide-muted/70 transition group-hover:bg-ide-accent" />
       </button>
       <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
     </div>
