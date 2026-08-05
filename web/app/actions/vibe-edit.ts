@@ -23,6 +23,7 @@ import {
   isResumeReviewPrompt,
   type ResumeReview,
 } from "@/lib/resume-review";
+import { isResumeTemplateId } from "@/lib/resume-template";
 import { createClient } from "@/lib/supabase/server";
 import {
   formatWritingProfileForPrompt,
@@ -32,6 +33,9 @@ import {
 const VibeEditInputSchema = z.object({
   resumeId: z.string().uuid(),
   prompt: z.string().trim().min(1).max(4000),
+  /** Live editor buffer — prefer this over possibly stale DB latex. */
+  latex: z.string().min(1).max(400_000).optional(),
+  templateId: z.string().trim().max(40).optional(),
   /** When set, force the heal path with this compile/validation error. */
   compilerError: z.string().trim().min(1).max(2000).optional(),
 });
@@ -123,7 +127,8 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     };
   }
 
-  const { resumeId, prompt, compilerError } = parsed.data;
+  const { resumeId, prompt, compilerError, latex: clientLatex, templateId } =
+    parsed.data;
   push("Reading your request…");
 
   try {
@@ -193,6 +198,12 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     }
 
     const dataJson = asRecord(resume.data_json);
+    if (clientLatex?.trim()) {
+      dataJson.latex = clientLatex;
+    }
+    if (templateId && isResumeTemplateId(templateId)) {
+      dataJson.template = templateId;
+    }
     const job = getJobTargetFromDataJson(dataJson);
     const writingProfileNote = formatWritingProfileForPrompt(
       writingProfileFromMetadata(user.user_metadata),
@@ -353,13 +364,11 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
 
     const nextDataJson: Record<string, unknown> = {
       ...prevData,
-      ...modelData,
       latex: fittedLatex,
       version: prevVersion + 1,
       ai_history: nextHistory,
       last_ai_reply: groqResult.output.reply,
       last_ai_prompt: prompt,
-      // Preserve template id from the existing resume when the model omits it.
       template:
         (typeof prevData.template === "string" && prevData.template) ||
         (typeof modelData.template === "string" && modelData.template) ||

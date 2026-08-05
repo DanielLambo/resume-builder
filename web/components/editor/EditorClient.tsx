@@ -177,7 +177,10 @@ export function EditorClient({
           snapshotTemplate,
         );
         if (!result.ok) {
-          toast.error(result.error);
+          toast.error(result.error, { id: "autosave-failed" });
+          window.setTimeout(() => {
+            void flushSave();
+          }, 4000);
           return;
         }
         const drifted =
@@ -190,8 +193,19 @@ export function EditorClient({
         if (!drifted) setDirty(false);
         return;
       } while (passes < 5);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn’t save draft", {
+        id: "autosave-failed",
+      });
+      window.setTimeout(() => {
+        void flushSave();
+      }, 4000);
     } finally {
       savingRef.current = false;
+      if (pendingResaveRef.current) {
+        pendingResaveRef.current = false;
+        void flushSave();
+      }
     }
   }, [resumeId, title]);
 
@@ -202,6 +216,24 @@ export function EditorClient({
     }, 1600);
     return () => window.clearTimeout(t);
   }, [dirty, flushSave, latex, templateId]);
+
+  useEffect(() => {
+    function onLeave(event: BeforeUnloadEvent) {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+      void flushSave();
+    }
+    function onHide() {
+      if (dirty) void flushSave();
+    }
+    window.addEventListener("beforeunload", onLeave);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("beforeunload", onLeave);
+      window.removeEventListener("pagehide", onHide);
+    };
+  }, [dirty, flushSave]);
 
   useEffect(() => {
     if (!ghostActive) return;
@@ -332,7 +364,8 @@ export function EditorClient({
     runId.current += 1;
     if (streamSignalRef.current) streamSignalRef.current.cancelled = true;
     setAiBusy(false);
-    setStatusLines(["Stopped"]);
+    setStatusLines(["Stopped — draft unchanged."]);
+    toast.message("Stopped", { description: "Draft unchanged." });
   }
 
   function restoreVersion(nextIndex: number) {
@@ -374,12 +407,24 @@ export function EditorClient({
         const result = await vibeEditAction({
           resumeId,
           prompt: text,
+          latex: latexRef.current,
+          templateId: templateIdRef.current,
           ...(overrides?.compilerError
             ? { compilerError: overrides.compilerError }
             : {}),
         });
         signal.cancelled = true;
-        if (id !== runId.current) return;
+        if (id !== runId.current) {
+          if (!reviewing) {
+            void saveResumeLatexAction(
+              resumeId,
+              priorLatex,
+              title,
+              templateIdRef.current,
+            );
+          }
+          return;
+        }
 
         if (!result.ok) {
           if (result.steps?.length) {

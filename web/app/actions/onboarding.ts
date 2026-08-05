@@ -62,7 +62,7 @@ export async function completeOnboardingAction(
   }
 
   const jar = await cookies();
-  jar.set(SETUP_DONE_COOKIE, "1", {
+  jar.set(SETUP_DONE_COOKIE, user.id, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

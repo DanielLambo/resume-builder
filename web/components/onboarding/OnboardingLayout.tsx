@@ -10,8 +10,10 @@ type OnboardingLayoutProps = {
   showSkip?: boolean;
   skipLabel?: string;
   skipDisabled?: boolean;
+  signOutPending?: boolean;
   onBack: () => void;
   onSkip?: () => void;
+  onSignOut?: () => void;
   children: ReactNode;
 };
 
@@ -22,8 +24,10 @@ export function OnboardingLayout({
   showSkip = false,
   skipLabel = "Skip",
   skipDisabled = false,
+  signOutPending = false,
   onBack,
   onSkip,
+  onSignOut,
   children,
 }: OnboardingLayoutProps) {
   const progress = (step / totalSteps) * 100;
@@ -53,18 +57,30 @@ export function OnboardingLayout({
             Step {step} of {totalSteps}
           </p>
 
-          {showSkip && onSkip ? (
-            <button
-              type="button"
-              onClick={onSkip}
-              disabled={skipDisabled}
-              className="rounded-lg px-2 py-1.5 font-mono text-xs text-studio-muted transition hover:bg-studio-canvas hover:text-studio-ink disabled:opacity-50"
-            >
-              {skipDisabled ? "Saving…" : skipLabel}
-            </button>
-          ) : (
-            <span className="w-12" aria-hidden="true" />
-          )}
+          <div className="flex items-center justify-end gap-1">
+            {onSignOut ? (
+              <button
+                type="button"
+                onClick={onSignOut}
+                disabled={signOutPending}
+                className="rounded-lg px-2 py-1.5 font-mono text-xs text-studio-muted transition hover:bg-studio-canvas hover:text-studio-ink disabled:opacity-50"
+              >
+                {signOutPending ? "Signing out" : "Sign out"}
+              </button>
+            ) : null}
+            {showSkip && onSkip ? (
+              <button
+                type="button"
+                onClick={onSkip}
+                disabled={skipDisabled}
+                className="rounded-lg px-2 py-1.5 font-mono text-xs text-studio-muted transition hover:bg-studio-canvas hover:text-studio-ink disabled:opacity-50"
+              >
+                {skipDisabled ? "Saving…" : skipLabel}
+              </button>
+            ) : !onSignOut ? (
+              <span className="w-12" aria-hidden="true" />
+            ) : null}
+          </div>
         </div>
 
         <div className="h-1 w-full bg-studio-canvas" role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={totalSteps}>
