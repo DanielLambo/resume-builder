@@ -186,16 +186,24 @@ export function DashboardClient({
             Keep one base sheet, then tailor a copy for each job application.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openPicker}
-          disabled={pending}
-          className="inline-flex min-h-11 w-full items-center justify-center bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white hover:bg-studio-vermilion-hover disabled:opacity-60 sm:w-auto"
-          data-testid="create-resume"
-          data-tour="create-resume"
-        >
-          {pending && !busyId ? "Creating…" : "Create New Resume"}
-        </button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Link
+            href="/import"
+            className="inline-flex min-h-11 w-full items-center justify-center border border-studio-ink/15 bg-studio-paper px-4 py-2.5 text-sm font-semibold text-studio-ink hover:bg-studio-canvas sm:w-auto"
+          >
+            Import resume
+          </Link>
+          <button
+            type="button"
+            onClick={openPicker}
+            disabled={pending}
+            className="inline-flex min-h-11 w-full items-center justify-center bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white hover:bg-studio-vermilion-hover disabled:opacity-60 sm:w-auto"
+            data-testid="create-resume"
+            data-tour="create-resume"
+          >
+            {pending && !busyId ? "Creating…" : "Create New Resume"}
+          </button>
+        </div>
       </div>
 
       {resumes.length === 0 ? (
@@ -210,13 +218,21 @@ export function DashboardClient({
             Pick a template built for new grads — PM, SWE, EE, MechE, or a
             clean general layout — then tailor a copy for each posting.
           </p>
-          <button
-            type="button"
-            onClick={openPicker}
-            className="mt-2 bg-studio-vermilion px-4 py-2 text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
-          >
-            Choose a template
-          </button>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={openPicker}
+              className="bg-studio-vermilion px-4 py-2 text-sm font-semibold text-white hover:bg-studio-vermilion-hover"
+            >
+              Choose a template
+            </button>
+            <Link
+              href="/import"
+              className="border border-studio-ink/15 bg-studio-paper px-4 py-2 text-sm font-semibold text-studio-ink hover:bg-studio-canvas"
+            >
+              Import .tex or PDF
+            </Link>
+          </div>
         </div>
       ) : (
         <div

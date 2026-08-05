@@ -13,6 +13,11 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   transpilePackages: ["@resumate/one-page-lock"],
   poweredByHeader: false,
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "4mb",
+    },
+  },
   async headers() {
     return [
       {
@@ -21,7 +26,7 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  serverExternalPackages: ["pdf-lib"],
+  serverExternalPackages: ["pdf-lib", "unpdf", "pdfjs-dist"],
 };
 
 export default nextConfig;

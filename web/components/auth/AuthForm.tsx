@@ -196,14 +196,20 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
           {isLogin ? (
             <>
               No account?{" "}
-              <Link className="text-studio-ink underline underline-offset-2" href="/signup">
+              <Link
+                className="text-studio-ink underline underline-offset-2"
+                href={next && next !== "/dashboard" ? `/signup?next=${encodeURIComponent(next)}` : "/signup"}
+              >
                 Create one
               </Link>
             </>
           ) : (
             <>
               Already have an account?{" "}
-              <Link className="text-studio-ink underline underline-offset-2" href="/login">
+              <Link
+                className="text-studio-ink underline underline-offset-2"
+                href={next && next !== "/onboarding" ? `/login?next=${encodeURIComponent(next)}` : "/login"}
+              >
                 Sign in
               </Link>
             </>

@@ -30,7 +30,7 @@ export type ResumeDataJson = {
 
 export const DEFAULT_RESUME_TITLE = "Untitled Resume";
 
-const PREAMBLE = String.raw`\documentclass[11pt,letterpaper]{article}
+export const HOUSE_LATEX_PREAMBLE = String.raw`\documentclass[11pt,letterpaper]{article}
 \usepackage[margin=0.55in]{geometry}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
@@ -52,7 +52,7 @@ const PREAMBLE = String.raw`\documentclass[11pt,letterpaper]{article}
 }
 `;
 
-const NEW_GRAD_LATEX = `${PREAMBLE}
+const NEW_GRAD_LATEX = `${HOUSE_LATEX_PREAMBLE}
 \\begin{document}
 \\headerblock{Alex Rivera}{alex.rivera@email.com $\\cdot$ (555) 010-2211 $\\cdot$ linkedin.com/in/alexrivera $\\cdot$ City, ST}
 
@@ -92,7 +92,7 @@ const NEW_GRAD_LATEX = `${PREAMBLE}
 \\end{document}
 `;
 
-const SWE_LATEX = `${PREAMBLE}
+const SWE_LATEX = `${HOUSE_LATEX_PREAMBLE}
 \\begin{document}
 \\headerblock{Jordan Lee}{jordan.lee@email.com $\\cdot$ github.com/jordanlee $\\cdot$ linkedin.com/in/jordanlee $\\cdot$ City, ST}
 
@@ -132,7 +132,7 @@ const SWE_LATEX = `${PREAMBLE}
 \\end{document}
 `;
 
-const PM_LATEX = `${PREAMBLE}
+const PM_LATEX = `${HOUSE_LATEX_PREAMBLE}
 \\begin{document}
 \\headerblock{Sam Patel}{sam.patel@email.com $\\cdot$ linkedin.com/in/sampatel $\\cdot$ City, ST}
 
@@ -173,7 +173,7 @@ const PM_LATEX = `${PREAMBLE}
 \\end{document}
 `;
 
-const EE_LATEX = `${PREAMBLE}
+const EE_LATEX = `${HOUSE_LATEX_PREAMBLE}
 \\begin{document}
 \\headerblock{Taylor Nguyen}{taylor.nguyen@email.com $\\cdot$ linkedin.com/in/taylornguyen $\\cdot$ City, ST}
 
@@ -213,7 +213,7 @@ const EE_LATEX = `${PREAMBLE}
 \\end{document}
 `;
 
-const MECHENG_LATEX = `${PREAMBLE}
+const MECHENG_LATEX = `${HOUSE_LATEX_PREAMBLE}
 \\begin{document}
 \\headerblock{Casey Morgan}{casey.morgan@email.com $\\cdot$ linkedin.com/in/caseymorgan $\\cdot$ City, ST}
 
@@ -254,7 +254,7 @@ const MECHENG_LATEX = `${PREAMBLE}
 \\end{document}
 `;
 
-const BLANK_LATEX = `${PREAMBLE}
+const BLANK_LATEX = `${HOUSE_LATEX_PREAMBLE}
 \\begin{document}
 \\headerblock{Your Name}{you@email.com $\\cdot$ linkedin.com/in/you $\\cdot$ City, ST}
 

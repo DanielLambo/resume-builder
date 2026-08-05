@@ -13,6 +13,7 @@ import {
   ONBOARDING_DONE_KEY,
   ONBOARDING_STORAGE_KEY,
 } from "@/lib/onboarding/schema";
+import { peekPendingImport } from "@/lib/import/pending";
 import { STUDIO_TOUR_PENDING_KEY } from "@/lib/studio-tour";
 import { useOnboardingState } from "@/lib/onboarding/useOnboardingState";
 
@@ -36,7 +37,10 @@ export function OnboardingWizard() {
         /* ignore */
       }
       toast.success("Welcome to Typesetter");
-      window.location.assign("/dashboard?tour=1");
+      const hasImport = await peekPendingImport();
+      window.location.assign(
+        hasImport ? "/import?autostart=1" : "/dashboard?tour=1",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not finish setup");
     } finally {
