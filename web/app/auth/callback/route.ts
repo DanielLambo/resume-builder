@@ -3,26 +3,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/database.types";
+import {
+  isSetupDestination,
+  onboardingPathWithNext,
+  safeNextPath,
+} from "@/lib/auth-next";
 import { metadataNeedsOnboarding } from "@/lib/onboarding/gate";
 import { PRODUCTION_SITE_ORIGIN } from "@/lib/site-url";
-
-const ALLOWED_NEXT = [
-  /^\/$/,
-  /^\/dashboard(?:\/|$)/,
-  /^\/editor(?:\/|$)/,
-  /^\/onboarding(?:\/|$)/,
-  /^\/import(?:\/|$|\?)/,
-] as const;
-
-function safeNextPath(next: string | null): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) {
-    return "/dashboard";
-  }
-  if (!ALLOWED_NEXT.some((re) => re.test(next))) {
-    return "/dashboard";
-  }
-  return next;
-}
 
 function appOrigin(request: NextRequest): string {
   const forwardedHost = request.headers.get("x-forwarded-host");
@@ -133,7 +120,7 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (user && metadataNeedsOnboarding(user)) {
-      next = "/onboarding";
+      next = onboardingPathWithNext(isSetupDestination(next) ? null : next);
     }
 
     return buildRedirect(next);

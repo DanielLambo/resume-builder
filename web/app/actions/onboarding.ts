@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
+import { SETUP_DONE_COOKIE } from "@/lib/auth-next";
 import { OnboardingDataSchema, type OnboardingData } from "@/lib/onboarding/schema";
 import { createClient } from "@/lib/supabase/server";
 
@@ -52,6 +54,21 @@ export async function completeOnboardingAction(
   if (error) {
     return { ok: false, error: error.message };
   }
+
+  // Refresh JWT so the next full-page load sees onboarding_completed.
+  const { error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError) {
+    console.error("[onboarding] refreshSession failed:", refreshError.message);
+  }
+
+  const jar = await cookies();
+  jar.set(SETUP_DONE_COOKIE, "1", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 120,
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/onboarding");

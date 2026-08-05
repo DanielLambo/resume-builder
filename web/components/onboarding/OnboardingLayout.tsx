@@ -9,6 +9,7 @@ type OnboardingLayoutProps = {
   canGoBack: boolean;
   showSkip?: boolean;
   skipLabel?: string;
+  skipDisabled?: boolean;
   onBack: () => void;
   onSkip?: () => void;
   children: ReactNode;
@@ -20,6 +21,7 @@ export function OnboardingLayout({
   canGoBack,
   showSkip = false,
   skipLabel = "Skip",
+  skipDisabled = false,
   onBack,
   onSkip,
   children,
@@ -55,9 +57,10 @@ export function OnboardingLayout({
             <button
               type="button"
               onClick={onSkip}
-              className="rounded-lg px-2 py-1.5 font-mono text-xs text-studio-muted transition hover:bg-studio-canvas hover:text-studio-ink"
+              disabled={skipDisabled}
+              className="rounded-lg px-2 py-1.5 font-mono text-xs text-studio-muted transition hover:bg-studio-canvas hover:text-studio-ink disabled:opacity-50"
             >
-              {skipLabel}
+              {skipDisabled ? "Saving…" : skipLabel}
             </button>
           ) : (
             <span className="w-12" aria-hidden="true" />
