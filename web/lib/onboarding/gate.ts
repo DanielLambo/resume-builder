@@ -20,7 +20,7 @@ export async function shouldForceOnboarding(user: User): Promise<boolean> {
 
   try {
     const jar = await cookies();
-    if (jar.get(SETUP_DONE_COOKIE)?.value === "1") {
+    if (jar.get(SETUP_DONE_COOKIE)?.value === user.id) {
       return false;
     }
   } catch {

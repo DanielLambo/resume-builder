@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { completeOnboardingAction } from "@/app/actions/onboarding";
+import { signOutAction } from "@/app/actions/resumes";
 import { OnboardingLayout } from "@/components/onboarding/OnboardingLayout";
 import { Step1Personal } from "@/components/onboarding/Step1Personal";
 import { Step2Referral } from "@/components/onboarding/Step2Referral";
@@ -21,6 +22,7 @@ import {
 } from "@/lib/onboarding/schema";
 import { useOnboardingState } from "@/lib/onboarding/useOnboardingState";
 import { STUDIO_TOUR_PENDING_KEY } from "@/lib/studio-tour";
+import { createClient } from "@/lib/supabase/client";
 
 export function OnboardingWizard({
   userId,
@@ -31,6 +33,7 @@ export function OnboardingWizard({
 }) {
   const state = useOnboardingState(userId);
   const [submitting, setSubmitting] = useState(false);
+  const [signingOut, startSignOut] = useTransition();
 
   async function complete(override?: Partial<typeof state.data>) {
     if (submitting) return;
@@ -89,6 +92,32 @@ export function OnboardingWizard({
 
   const showSkip = state.step === 1 || state.step === 2 || state.step === 3;
 
+  function onSignOut() {
+    startSignOut(async () => {
+      try {
+        const supabase = createClient();
+        await supabase.auth.signOut();
+        await signOutAction();
+      } catch {
+        /* still leave via hard nav */
+      }
+      toast.message("Signed out");
+      window.location.assign("/login");
+    });
+  }
+
+  if (!state.hydrated) {
+    return (
+      <div className="min-h-dvh bg-studio-bg">
+        <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
+          <div className="h-4 w-24 animate-pulse rounded bg-studio-canvas" />
+          <div className="mt-6 h-10 w-2/3 animate-pulse rounded bg-studio-canvas" />
+          <div className="mt-3 h-4 w-full animate-pulse rounded bg-studio-canvas" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <OnboardingLayout
       step={state.step}
@@ -96,6 +125,8 @@ export function OnboardingWizard({
       showSkip={showSkip}
       skipLabel={state.step === 1 ? "Skip setup" : "Skip"}
       skipDisabled={submitting}
+      signOutPending={signingOut}
+      onSignOut={onSignOut}
       onBack={state.back}
       onSkip={() => {
         if (state.step === 1) {

@@ -26,12 +26,6 @@ export function OptionCard({
       role={multi ? "checkbox" : "radio"}
       aria-checked={selected}
       onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
       className={[
         "group relative flex w-full items-start gap-3 rounded-xl border bg-studio-paper p-4 text-left transition-all",
         "hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-studio-vermilion",
