@@ -6,8 +6,6 @@ type PDFPreviewProps = {
   pdfBase64: string | null;
   pageCount: number | null;
   ghostActive?: boolean;
-  /** Fallback LaTeX shown only while waiting for first PDF (never as the final preview). */
-  pendingLatex?: string;
   compiling?: boolean;
 };
 
@@ -21,7 +19,6 @@ export function PDFPreview({
   pdfBase64,
   pageCount,
   ghostActive = false,
-  pendingLatex,
   compiling = false,
 }: PDFPreviewProps) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
@@ -77,13 +74,8 @@ export function PDFPreview({
             {statusLabel ?? "No PDF yet"}
           </p>
           <p className="max-w-sm text-sm text-studio-muted">
-            Run Compile or a vibe edit to typeset the floating paper sheet.
+            Hit Recompile to typeset a PDF preview. Source stays on the left.
           </p>
-          {pendingLatex ? (
-            <p className="mt-4 max-h-24 overflow-hidden font-mono text-[0.65rem] text-studio-muted/50">
-              {pendingLatex.slice(0, 180)}…
-            </p>
-          ) : null}
         </div>
       )}
 
