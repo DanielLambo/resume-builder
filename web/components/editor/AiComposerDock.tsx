@@ -40,6 +40,7 @@ type AiComposerDockProps = {
   reply: string | null;
   review: ResumeReview | null;
   compileError: string | null;
+  compileErrorLine?: number | null;
   statusLines: string[];
   promptIsReview: boolean;
   scope: ComposerScope;
@@ -57,6 +58,7 @@ type AiComposerDockProps = {
   onDiscardProposal: () => void;
   onDismissCompileError: () => void;
   onFixCompile: () => void;
+  onJumpToCompileLine?: (line: number) => void;
   onVersionPrev: () => void;
   onVersionNext: () => void;
 };
@@ -71,6 +73,7 @@ export function AiComposerDock({
   reply,
   review,
   compileError,
+  compileErrorLine = null,
   statusLines,
   promptIsReview,
   scope,
@@ -88,6 +91,7 @@ export function AiComposerDock({
   onDiscardProposal,
   onDismissCompileError,
   onFixCompile,
+  onJumpToCompileLine,
   onVersionPrev,
   onVersionNext,
 }: AiComposerDockProps) {
@@ -142,9 +146,11 @@ export function AiComposerDock({
         {compileError ? (
           <CompileErrorBanner
             error={compileError}
+            line={compileErrorLine}
             pending={busy}
             onDismiss={onDismissCompileError}
             onFix={onFixCompile}
+            onJumpToLine={onJumpToCompileLine}
             variant="ide"
           />
         ) : null}

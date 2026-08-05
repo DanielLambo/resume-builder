@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { sanitizeCompileError } from "@/lib/compile-latex";
+import {
+  compileErrorLine,
+  sanitizeCompileError,
+} from "@/lib/compile-latex";
 import { fitResumeToSinglePage } from "@/lib/fit-resume";
 import { persistResumePdf } from "@/lib/persist-resume-pdf";
 import { createClient } from "@/lib/supabase/server";
@@ -26,7 +29,6 @@ function pdfResponse(
     finalConfig?: unknown;
   },
 ) {
-  // Binary PDF (~25% smaller than base64 JSON). Vercel/Next gzip/brotli the body.
   const headers = new Headers({
     "Content-Type": "application/pdf",
     "Cache-Control": "no-store",
@@ -47,7 +49,7 @@ function pdfResponse(
 /**
  * POST /api/compile
  * Auth required. Success = application/pdf (+ page metadata headers).
- * Errors stay JSON. Preview compiles never send LaTeX to Groq for condense.
+ * Errors stay JSON (include `line` when TeX reported l.N).
  */
 export async function POST(request: Request) {
   let latexForDiagnostics = "";
@@ -108,7 +110,10 @@ export async function POST(request: Request) {
       finalConfig: fit.finalConfig,
     });
   } catch (err) {
+    let rootErr: unknown = err;
     let message = sanitizeCompileError(err);
+    let line = compileErrorLine(err);
+
     if (
       latexForDiagnostics &&
       /no successful compilation/i.test(
@@ -119,14 +124,23 @@ export async function POST(request: Request) {
         const { compileLatexRemote } = await import("@/lib/compile-latex");
         await compileLatexRemote(latexForDiagnostics);
       } catch (root) {
+        rootErr = root;
         message = sanitizeCompileError(root);
+        line = compileErrorLine(root);
       }
     }
+
+    if (line == null) {
+      const fromMsg = /^Line (\d+):/i.exec(message);
+      line = compileErrorLine(rootErr) ?? (fromMsg ? Number(fromMsg[1]) : null);
+    }
+
     return NextResponse.json(
       {
         success: false,
         error: message,
         hint: message,
+        line,
       },
       { status: 500 },
     );
