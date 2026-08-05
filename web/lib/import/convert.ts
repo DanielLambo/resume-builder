@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { DEFAULT_GROQ_MODEL, throwIfGroqFailed } from "@/lib/groq-model";
 import { IMPORT_SOURCE_TEXT_MAX } from "@/lib/import/constants";
-import { latexValidationError } from "@/lib/import/validate";
+import { ensureHousePreamble, latexValidationError } from "@/lib/import/validate";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import {
   HOUSE_LATEX_PREAMBLE,
@@ -126,7 +126,7 @@ async function callConvertOnce(input: {
   const body: Record<string, unknown> = {
     model: input.model,
     temperature: 0.15,
-    max_tokens: 2800,
+    max_tokens: 4000,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: system },
@@ -167,6 +167,11 @@ async function callConvertOnce(input: {
     const detail = err instanceof Error ? err.message : "schema mismatch";
     throw new Error(`INVALID_JSON: ${detail}`);
   }
+
+  output = {
+    ...output,
+    latex: ensureHousePreamble(output.latex),
+  };
 
   const latexError = latexValidationError(output.latex);
   if (latexError) {
