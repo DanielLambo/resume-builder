@@ -1127,7 +1127,14 @@ export function EditorClient({
             secondary={previewPane}
           />
         </div>
-        <BottomDock defaultHeight={128} minHeight={72} maxHeight={280}>
+        <BottomDock
+          defaultHeight={128}
+          minHeight={72}
+          maxHeight={380}
+          preferHeight={
+            prompt.length > 900 ? 260 : prompt.length > 280 ? 200 : prompt.length > 80 ? 160 : 128
+          }
+        >
           <AiComposerDock
             prompt={prompt}
             promptRef={promptRef}
