@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/AppHeader";
@@ -10,9 +11,10 @@ import { StudioTour } from "@/components/dashboard/StudioTour";
 import { PrivacyNotice } from "@/components/PrivacyNotice";
 import type { Json, ResumeRow } from "@/lib/database.types";
 import { asDataRecord, getJobTargetFromDataJson } from "@/lib/job-target";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, hasSupabasePublicEnv } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /** List rows without shipping full latex / ai_history to the browser. */
 function slimResumeForLibrary(row: ResumeRow): ResumeRow {
@@ -85,6 +87,13 @@ export default async function DashboardPage({
 }: {
   searchParams?: Promise<{ tour?: string; new?: string }>;
 }) {
+  // Defer until a real request — avoids build-time prerender needing Supabase env.
+  await connection();
+
+  if (!hasSupabasePublicEnv()) {
+    redirect("/login?next=/dashboard");
+  }
+
   const params = searchParams ? await searchParams : {};
   const supabase = await createClient();
   const {
