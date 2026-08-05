@@ -3,12 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/database.types";
-import {
-  isSetupDestination,
-  onboardingPathWithNext,
-  safeNextPath,
-} from "@/lib/auth-next";
-import { metadataNeedsOnboarding } from "@/lib/onboarding/needs-onboarding";
+import { safeNextPath } from "@/lib/auth-next";
 import { PRODUCTION_SITE_ORIGIN } from "@/lib/site-url";
 
 function appOrigin(request: NextRequest): string {
@@ -115,14 +110,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user && metadataNeedsOnboarding(user)) {
-      next = onboardingPathWithNext(isSetupDestination(next) ? null : next);
-    }
-
+    // Do not force the onboarding wizard here — that path is signup-only.
     return buildRedirect(next);
   } catch (err) {
     console.error("[auth/callback] unexpected:", err);

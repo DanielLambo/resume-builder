@@ -1,12 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
-import {
-  isSetupDestination,
-  onboardingPathWithNext,
-  trySafeNextPath,
-} from "@/lib/auth-next";
-import { metadataNeedsOnboarding } from "@/lib/onboarding/needs-onboarding";
+import { isSetupDestination, trySafeNextPath } from "@/lib/auth-next";
 import type { Database } from "@/lib/database.types";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/editor", "/api/ai", "/onboarding"] as const;
@@ -110,13 +105,11 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && isAuthRoute(pathname)) {
-    // Signup-flagged unfinished profiles → setup. Everyone else → product.
+    // Already signed in — send them to the product. Wizard is signup-only
+    // (AuthForm navigates there right after createUser).
     const requested = trySafeNextPath(request.nextUrl.searchParams.get("next"));
-    const target = metadataNeedsOnboarding(user)
-      ? onboardingPathWithNext(requested)
-      : requested && !isSetupDestination(requested)
-        ? requested
-        : "/dashboard";
+    const target =
+      requested && !isSetupDestination(requested) ? requested : "/dashboard";
     const dest = new URL(target, request.nextUrl.origin);
     const redirect = NextResponse.redirect(dest);
     applyCookies(redirect, cookiesToApply);
