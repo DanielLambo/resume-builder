@@ -10,7 +10,7 @@ import {
   type OrphanBullet,
 } from "@/lib/analyzer/orphanDetector";
 import type { Json } from "@/lib/database.types";
-import { DEFAULT_GROQ_MODEL, throwIfGroqFailed } from "@/lib/groq-model";
+import { DEFAULT_GROQ_MODEL, isGroqRateLimitError, messageForGroqLimit, throwIfGroqFailed } from "@/lib/groq-model";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import {
   AiRateLimitError,
@@ -50,6 +50,7 @@ export type ShortenBulletResult =
       status?: number;
       code?:
         | "AI_DAILY_LIMIT"
+        | "GROQ_BUSY"
         | "UNAUTHORIZED"
         | "VALIDATION"
         | "NOT_FOUND"
@@ -314,6 +315,25 @@ export async function shortenBulletAction(
       dailyTokensRemaining: usage.remaining,
     };
   } catch (err) {
+    if (err instanceof AiRateLimitError) {
+      const payload = rateLimitExceededPayload(err.used, err.limit);
+      return {
+        ok: false,
+        status: 429,
+        code: "AI_DAILY_LIMIT",
+        error: payload.error,
+        used: payload.used,
+        limit: payload.limit,
+      };
+    }
+    if (isGroqRateLimitError(err)) {
+      return {
+        ok: false,
+        status: 500,
+        code: "GROQ_BUSY",
+        error: messageForGroqLimit(err),
+      };
+    }
     return {
       ok: false,
       code: "INTERNAL",
