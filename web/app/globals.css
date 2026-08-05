@@ -74,15 +74,15 @@ select {
   }
 
   .editor-shell * {
-    scrollbar-color: #5a6474 transparent;
+    scrollbar-color: #6a605a transparent;
   }
 
   .editor-shell *::-webkit-scrollbar-thumb {
-    background-color: #5a6474;
+    background-color: #6a605a;
   }
 
   .editor-shell *::-webkit-scrollbar-thumb:hover {
-    background-color: #6e7a8c;
+    background-color: #827870;
   }
 }
 
