@@ -2,20 +2,31 @@
 
 type CompileErrorBannerProps = {
   error: string;
+  line?: number | null;
   pending?: boolean;
   onFix: () => void;
   onDismiss: () => void;
+  onJumpToLine?: (line: number) => void;
   variant?: "default" | "ide";
 };
 
+function parseLineFromError(error: string): number | null {
+  const m = /^Line (\d+):/i.exec(error.trim());
+  return m ? Number(m[1]) : null;
+}
+
 export function CompileErrorBanner({
   error,
+  line,
   pending,
   onFix,
   onDismiss,
+  onJumpToLine,
   variant = "default",
 }: CompileErrorBannerProps) {
   const ide = variant === "ide";
+  const resolvedLine = line ?? parseLineFromError(error);
+  const detail = error.replace(/^Line \d+:\s*/i, "").trim() || error;
 
   return (
     <div
@@ -36,15 +47,34 @@ export function CompileErrorBanner({
             ].join(" ")}
           >
             PDF compile failed
+            {resolvedLine != null ? (
+              <span className="ml-1.5 font-mono font-medium text-ide-ink/90">
+                · line {resolvedLine}
+              </span>
+            ) : null}
           </p>
           <p
             className={[
-              "mt-1 text-xs leading-relaxed",
+              "mt-1 font-mono text-[0.7rem] leading-relaxed",
               ide ? "text-ide-muted" : "text-studio-muted",
             ].join(" ")}
           >
-            {error}
+            {detail}
           </p>
+          {resolvedLine != null && onJumpToLine ? (
+            <button
+              type="button"
+              data-testid="compile-jump-line"
+              onClick={() => onJumpToLine(resolvedLine)}
+              className={
+                ide
+                  ? "mt-1.5 text-[0.7rem] text-ide-accent underline-offset-2 hover:underline"
+                  : "mt-1.5 text-[0.7rem] text-studio-vermilion underline-offset-2 hover:underline"
+              }
+            >
+              Jump to line {resolvedLine}
+            </button>
+          ) : null}
         </div>
         <button
           type="button"

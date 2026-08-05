@@ -147,6 +147,8 @@ export function EditorClient({
   const [aiBusy, setAiBusy] = useState(false);
   const [compiling, setCompiling] = useState(false);
   const [compileError, setCompileError] = useState<string | null>(null);
+  const [compileErrorLine, setCompileErrorLine] = useState<number | null>(null);
+  const [jumpToLine, setJumpToLine] = useState<number | null>(null);
   const busy = aiBusy;
   const [mobilePane, setMobilePane] = useState<MobilePane>("edit");
   const [narrow, setNarrow] = useState(false);
@@ -374,14 +376,28 @@ export function EditorClient({
         if (!data.success) {
           const message = data.hint?.trim() || data.error.trim() || "Compile failed";
           const short =
-            message.length > 140 ? `${message.slice(0, 137)}…` : message;
+            /^Line \d+:/i.test(message) || message.length <= 280
+              ? message.length > 320
+                ? `${message.slice(0, 317)}…`
+                : message
+              : message.length > 140
+                ? `${message.slice(0, 137)}…`
+                : message;
           if (gen === compileGen.current) {
             setCompileError(short);
+            setCompileErrorLine(
+              typeof data.line === "number" ? data.line : null,
+            );
+            if (typeof data.line === "number") {
+              setJumpToLine(data.line);
+              setMobilePane("edit");
+            }
           }
           throw new Error(short);
         }
         if (gen !== compileGen.current) return data; // stale response
         setCompileError(null);
+        setCompileErrorLine(null);
         setPdfBase64(data.pdfBase64);
         setPageCount(data.pageCount ?? null);
         setOnePageLock(Boolean(data.lockedToOnePage ?? data.pageCount === 1));
@@ -399,8 +415,21 @@ export function EditorClient({
         if (gen === compileGen.current) {
           const message = err instanceof Error ? err.message : "Compile failed";
           const short =
-            message.length > 140 ? `${message.slice(0, 137)}…` : message;
+            /^Line \d+:/i.test(message) || message.length <= 280
+              ? message.length > 320
+                ? `${message.slice(0, 317)}…`
+                : message
+              : message.length > 140
+                ? `${message.slice(0, 137)}…`
+                : message;
           setCompileError(short);
+          const lineMatch = /^Line (\d+):/i.exec(short);
+          if (lineMatch) {
+            const line = Number(lineMatch[1]);
+            setCompileErrorLine(line);
+            setJumpToLine(line);
+            setMobilePane("edit");
+          }
           if (!quiet) toast.error("PDF compile failed", { description: short });
         }
         throw err;
@@ -981,6 +1010,8 @@ export function EditorClient({
       <LatexSourceEditor
         value={latex}
         disabled={busy || Boolean(proposal)}
+        jumpToLine={jumpToLine}
+        onJumped={() => setJumpToLine(null)}
         onChange={(next) => {
           setLatex(next);
           setDirty(true);
@@ -1210,6 +1241,7 @@ export function EditorClient({
             reply={reply}
             review={review}
             compileError={compileError}
+            compileErrorLine={compileErrorLine}
             statusLines={statusLines}
             promptIsReview={promptIsReview}
             scope={
@@ -1255,7 +1287,10 @@ export function EditorClient({
             onClearScope={() => setSelection(null)}
             onKeepProposal={keepProposal}
             onDiscardProposal={discardProposal}
-            onDismissCompileError={() => setCompileError(null)}
+            onDismissCompileError={() => {
+              setCompileError(null);
+              setCompileErrorLine(null);
+            }}
             onFixCompile={() => {
               if (!compileError) return;
               runVibeEdit({
@@ -1263,6 +1298,10 @@ export function EditorClient({
                 compilerError: compileError,
                 clearPrompt: false,
               });
+            }}
+            onJumpToCompileLine={(line) => {
+              setJumpToLine(line);
+              setMobilePane("edit");
             }}
             onVersionPrev={() => restoreVersion(versions.index - 1)}
             onVersionNext={() => restoreVersion(versions.index + 1)}
