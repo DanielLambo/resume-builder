@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
 import {
   HighlightStyle,
@@ -127,6 +127,9 @@ const ideEditorTheme = EditorView.theme(
 type LatexSourceEditorProps = {
   value: string;
   disabled?: boolean;
+  /** When set, scroll/select that 1-based line (e.g. compile error). */
+  jumpToLine?: number | null;
+  onJumped?: () => void;
   onChange: (value: string) => void;
   onSelectionChange: (selection: SourceSelection | null) => void;
 };
@@ -134,10 +137,27 @@ type LatexSourceEditorProps = {
 export function LatexSourceEditor({
   value,
   disabled = false,
+  jumpToLine = null,
+  onJumped,
   onChange,
   onSelectionChange,
 }: LatexSourceEditorProps) {
   const cmRef = useRef<ReactCodeMirrorRef>(null);
+
+  useEffect(() => {
+    if (jumpToLine == null) return;
+    const view = cmRef.current?.view;
+    if (!view) return;
+    const doc = view.state.doc;
+    const safeLine = Math.max(1, Math.min(jumpToLine, doc.lines));
+    const line = doc.line(safeLine);
+    view.dispatch({
+      selection: { anchor: line.from, head: line.to },
+      effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+    });
+    view.focus();
+    onJumped?.();
+  }, [jumpToLine, onJumped]);
 
   function withView(run: (view: EditorView) => void) {
     const view = cmRef.current?.view;

@@ -2,6 +2,8 @@ import { compileLatexWithPdflatex } from "@resumate/one-page-lock";
 
 import type { CompileLatexFn } from "@resumate/one-page-lock";
 
+import { formatCompileDiagnostic, parseTexLogErrors } from "@/lib/tex-log";
+
 /** Per-compile hard timeout (remote TeX). Override with LATEX_COMPILE_TIMEOUT_MS. */
 export const COMPILE_TIMEOUT_MS = Number(
   process.env.LATEX_COMPILE_TIMEOUT_MS ?? 8_000,
@@ -47,10 +49,38 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-/** Strip TeX dumps / third-party bodies; keep short, useful diagnostics. */
+export class CompileDiagnosticError extends Error {
+  readonly line: number | null;
+
+  constructor(message: string, line: number | null = null) {
+    super(message);
+    this.name = "CompileDiagnosticError";
+    this.line = line;
+  }
+}
+
+/** Keep compiler-style diagnostics; only collapse secrets / TeX dumps. */
 export function sanitizeCompileError(err: unknown): string {
+  if (err instanceof CompileDiagnosticError) {
+    return err.message.length <= 320 ? err.message : `${err.message.slice(0, 317)}…`;
+  }
+
   const raw = err instanceof Error ? err.message : String(err);
   const cleaned = raw.replace(/\s+/g, " ").trim();
+
+  if (/^Line \d+:/i.test(cleaned)) {
+    return cleaned.length <= 320 ? cleaned : `${cleaned.slice(0, 317)}…`;
+  }
+
+  const parsed = formatCompileDiagnostic({ error: cleaned, log: raw });
+  if (
+    parsed.line != null ||
+    /undefined control sequence|emergency stop|missing \$|runaway argument|! LaTeX Error|Package .* Error/i.test(
+      parsed.message,
+    )
+  ) {
+    return parsed.message;
+  }
 
   if (/Missing LATEX_COMPILE_URL|latexonline is disabled|PII/i.test(cleaned)) {
     return cleaned.length <= 160 ? cleaned : `${cleaned.slice(0, 157)}…`;
@@ -61,46 +91,35 @@ export function sanitizeCompileError(err: unknown): string {
   if (/ENOENT|spawn .*ENOENT|not found.*pdflatex/i.test(cleaned)) {
     return "Local TeX compiler is unavailable.";
   }
-  if (/Jake-style resume has broken braces/i.test(cleaned)) {
+  if (/Jake-style resume has broken braces|Resume source is empty/i.test(cleaned)) {
     return cleaned;
-  }
-  if (/Resume source is empty/i.test(cleaned)) {
-    return cleaned;
-  }
-
-  if (
-    /undefined control sequence|emergency stop|missing \$|runaway argument|file .* not found|! LaTeX Error|Package .* Error/i.test(
-      cleaned,
-    )
-  ) {
-    const safe = cleaned.replace(/\\[a-zA-Z@]+/g, (cmd) =>
-      cmd.length > 28 ? "\\…" : cmd,
-    );
-    return safe.length <= 140 ? safe : `${safe.slice(0, 137)}…`;
   }
 
   if (/Compile service failed|latexonline|HTTP \d+/i.test(cleaned)) {
     const afterColon = cleaned.includes(": ")
       ? cleaned.slice(cleaned.indexOf(": ") + 2).trim()
       : "";
-    if (
-      afterColon &&
-      afterColon.length <= 140 &&
-      !/\\begin\{document\}|you@email/i.test(afterColon)
-    ) {
-      return afterColon;
+    if (afterColon) {
+      return formatCompileDiagnostic({ error: afterColon }).message;
     }
     return "PDF compile failed. Check LaTeX near recent edits, then Recompile.";
   }
 
-  if (/\\documentclass|\\begin\{document\}|you@email\.com/i.test(cleaned)) {
+  if (/\\documentclass|\\begin\{document\}|you@email\.com/i.test(cleaned) && cleaned.length > 200) {
     return "PDF compile failed. Check LaTeX near recent edits.";
   }
 
-  if (cleaned.length <= 140 && !cleaned.includes("\\")) {
+  if (cleaned.length <= 280) {
     return cleaned;
   }
   return "PDF compile failed. Check LaTeX near recent edits, then Recompile.";
+}
+
+export function compileErrorLine(err: unknown): number | null {
+  if (err instanceof CompileDiagnosticError) return err.line;
+  const msg = err instanceof Error ? err.message : String(err);
+  const m = /^Line (\d+):/i.exec(msg) ?? /\bl\.(\d+)\b/.exec(msg);
+  return m ? Number(m[1]) : null;
 }
 
 async function compileViaFastapi(tex: string, baseUrl: string): Promise<Buffer> {
@@ -124,27 +143,23 @@ async function compileViaFastapi(tex: string, baseUrl: string): Promise<Buffer> 
     pdf_base64?: string;
     error?: string;
     hint?: string;
-    errors?: Array<string | { message?: string }>;
+    log?: string;
+    errors?: Array<string | { message?: string; line?: number | null; context?: string }>;
     pages?: number;
   } | null;
 
   if (!res.ok || !json?.success || !json.pdf_base64) {
-    const fromList =
-      Array.isArray(json?.errors) && json.errors.length > 0
-        ? typeof json.errors[0] === "string"
-          ? json.errors[0]
-          : json.errors[0]?.message
-        : undefined;
-    const detail =
-      (typeof json?.hint === "string" && json.hint.trim()) ||
-      (typeof json?.error === "string" && json.error.trim()) ||
-      (typeof fromList === "string" && fromList.trim()) ||
-      "";
-    throw new Error(
-      detail
-        ? `Compile service failed (HTTP ${res.status}): ${detail}`
-        : `Compile service failed (HTTP ${res.status})`,
-    );
+    const diagnostic = formatCompileDiagnostic({
+      error: json?.error,
+      hint: json?.hint,
+      errors: json?.errors,
+      log: json?.log,
+    });
+    const fallback =
+      diagnostic.message && diagnostic.message !== "PDF compile failed."
+        ? diagnostic.message
+        : `Compile service failed (HTTP ${res.status})`;
+    throw new CompileDiagnosticError(fallback, diagnostic.line);
   }
 
   return Buffer.from(json.pdf_base64, "base64");
@@ -160,7 +175,6 @@ async function compileViaLatexOnline(tex: string): Promise<Buffer> {
   const endpoint = process.env.LATEX_ONLINE_URL?.trim() || LATEX_ONLINE_DEFAULT;
   const url = new URL(endpoint);
   url.searchParams.set("command", "pdflatex");
-  // GET puts TeX in the query string — only used when explicitly allowed.
   url.searchParams.set("text", tex);
 
   const res = await fetch(url.toString(), {
@@ -169,13 +183,22 @@ async function compileViaLatexOnline(tex: string): Promise<Buffer> {
   });
 
   if (!res.ok) {
-    // Do not attach response bodies (may echo TeX) into thrown errors.
-    throw new Error(`latexonline compile failed (HTTP ${res.status})`);
+    const bodyText = await res.text().catch(() => "");
+    const diagnostic = formatCompileDiagnostic({
+      error: `latexonline compile failed (HTTP ${res.status})`,
+      log: bodyText.slice(0, 8000),
+    });
+    throw new CompileDiagnosticError(diagnostic.message, diagnostic.line);
   }
 
   const bytes = Buffer.from(await res.arrayBuffer());
   if (bytes.length < 5 || bytes.subarray(0, 4).toString("utf8") !== "%PDF") {
-    throw new Error("latexonline returned a non-PDF response");
+    const asText = bytes.toString("utf8").slice(0, 8000);
+    const diagnostic = formatCompileDiagnostic({
+      error: "latexonline returned a non-PDF response",
+      log: asText,
+    });
+    throw new CompileDiagnosticError(diagnostic.message, diagnostic.line);
   }
   return bytes;
 }
@@ -216,8 +239,15 @@ export const compileLatexRemote: CompileLatexFn = async (tex) => {
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (!/ENOENT|not found|spawn/i.test(message)) {
-        throw err;
+      if (/ENOENT|not found|spawn/i.test(message)) {
+        // fall through
+      } else {
+        const diagnostic = formatCompileDiagnostic({
+          error: message,
+          log: message,
+          errors: parseTexLogErrors(message),
+        });
+        throw new CompileDiagnosticError(diagnostic.message, diagnostic.line);
       }
     }
   }

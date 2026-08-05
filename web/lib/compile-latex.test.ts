@@ -20,4 +20,20 @@ describe("sanitizeCompileError", () => {
     );
     assert.match(msg, /Missing/);
   });
+
+  it("preserves Line N diagnostics", () => {
+    const msg = sanitizeCompileError(
+      new Error("Line 42: Undefined control sequence. — \\boguscmd"),
+    );
+    assert.match(msg, /^Line 42:/);
+    assert.match(msg, /Undefined control sequence/);
+  });
+
+  it("parses pdflatex log snippets into Line N", () => {
+    const msg = sanitizeCompileError(
+      new Error("pdflatex failed (exit 1):\n! Missing $ inserted.\nl.18 \\item 50%\n"),
+    );
+    assert.match(msg, /Line 18/);
+    assert.match(msg, /Missing \$/);
+  });
 });
