@@ -10,6 +10,7 @@ import {
   type OrphanBullet,
 } from "@/lib/analyzer/orphanDetector";
 import type { Json } from "@/lib/database.types";
+import { DEFAULT_GROQ_MODEL, throwIfGroqFailed } from "@/lib/groq-model";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import {
   AiRateLimitError,
@@ -79,7 +80,7 @@ async function shortenWithGroq(bullet: string): Promise<{
   const baseUrl = (
     process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai"
   ).replace(/\/$/, "");
-  const model = process.env.RESUMATE_MODEL ?? "llama-3.3-70b-versatile";
+  const model = DEFAULT_GROQ_MODEL;
 
   const response = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: "POST",
@@ -105,9 +106,7 @@ async function shortenWithGroq(bullet: string): Promise<{
     }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Groq shorten failed (HTTP ${response.status})`);
-  }
+  throwIfGroqFailed(response);
 
   const json = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;

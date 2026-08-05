@@ -47,6 +47,7 @@ export async function completeOnboardingAction(
       job_types: data.jobTypes,
       target_fields: data.targetFields,
       onboarding_completed: true,
+      onboarding_required: false,
       onboarding_completed_at: new Date().toISOString(),
     },
   });
