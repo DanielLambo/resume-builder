@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { type FormEvent, Suspense, useState } from "react";
 import { toast } from "sonner";
 
@@ -9,6 +9,12 @@ import {
   confirmEmailForLoginAction,
   signUpConfirmedAction,
 } from "@/app/actions/auth";
+import {
+  AFTER_SETUP_STORAGE_KEY,
+  isSetupDestination,
+  onboardingPathWithNext,
+  safeNextPath,
+} from "@/lib/auth-next";
 import { createClient } from "@/lib/supabase/client";
 
 type AuthMode = "login" | "signup";
@@ -27,10 +33,26 @@ function friendlyAuthError(message: string): string {
   return message;
 }
 
+function rememberAfterSetup(next: string) {
+  try {
+    if (!isSetupDestination(next) && next !== "/dashboard") {
+      window.sessionStorage.setItem(AFTER_SETUP_STORAGE_KEY, next);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function go(path: string) {
+  window.location.assign(path);
+}
+
 function AuthFormInner({ mode }: { mode: AuthMode }) {
-  const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || (mode === "signup" ? "/onboarding" : "/dashboard");
+  const next = safeNextPath(
+    params.get("next"),
+    mode === "signup" ? "/onboarding" : "/dashboard",
+  );
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,13 +63,40 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
       : null,
   );
 
-  async function finishLogin(supabase: ReturnType<typeof createClient>) {
+  async function destinationAfterSignIn(
+    supabase: ReturnType<typeof createClient>,
+  ): Promise<string> {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     const needsSetup = user?.user_metadata?.onboarding_completed !== true;
-    router.replace(needsSetup ? "/onboarding" : next === "/onboarding" ? "/dashboard" : next);
-    router.refresh();
+    if (needsSetup) {
+      rememberAfterSetup(next);
+      return onboardingPathWithNext(next);
+    }
+    if (isSetupDestination(next)) return "/dashboard";
+    return next;
+  }
+
+  async function signInWithPassword(supabase: ReturnType<typeof createClient>) {
+    return supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+  }
+
+  async function signInWithRetry(supabase: ReturnType<typeof createClient>) {
+    let lastMessage = "Could not sign in.";
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const { error } = await signInWithPassword(supabase);
+      if (!error) {
+        await supabase.auth.getSession();
+        return null;
+      }
+      lastMessage = error.message;
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+    return lastMessage;
   }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -60,31 +109,39 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
       if (mode === "signup") {
         const created = await signUpConfirmedAction(email, password);
         if (!created.ok) {
+          if (created.code === "already_exists") {
+            const { error: existingSignError } = await signInWithPassword(supabase);
+            if (!existingSignError) {
+              toast.success("Welcome back");
+              go(await destinationAfterSignIn(supabase));
+              return;
+            }
+            const msg =
+              "An account with this email already exists. Sign in with your password.";
+            setError(msg);
+            toast.error(msg);
+            return;
+          }
           setError(created.error);
           toast.error(created.error);
           return;
         }
 
-        const { error: signError } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
+        const signError = await signInWithRetry(supabase);
         if (signError) {
-          const msg = friendlyAuthError(signError.message);
+          const msg = friendlyAuthError(signError);
           setError(msg);
           toast.error(msg);
           return;
         }
 
         toast.success("Account ready");
-        await finishLogin(supabase);
+        rememberAfterSetup(next);
+        go(onboardingPathWithNext(next));
         return;
       }
 
-      let { error: signError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      let { error: signError } = await signInWithPassword(supabase);
 
       if (signError && /not confirmed|email not confirmed/i.test(signError.message)) {
         const repaired = await confirmEmailForLoginAction(email);
@@ -93,10 +150,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
           toast.error(repaired.error);
           return;
         }
-        ({ error: signError } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        }));
+        ({ error: signError } = await signInWithPassword(supabase));
       }
 
       if (signError) {
@@ -107,7 +161,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
       }
 
       toast.success("Welcome back");
-      await finishLogin(supabase);
+      go(await destinationAfterSignIn(supabase));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Authentication failed";
       setError(message);
@@ -118,6 +172,13 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
   }
 
   const isLogin = mode === "login";
+  const crossHref = isLogin
+    ? next && next !== "/dashboard"
+      ? `/signup?next=${encodeURIComponent(next)}`
+      : "/signup"
+    : next && next !== "/onboarding"
+      ? `/login?next=${encodeURIComponent(next)}`
+      : "/login";
 
   return (
     <main className="grid min-h-dvh place-items-center bg-studio-bg px-3 py-8 sm:px-4 sm:py-10">
@@ -128,7 +189,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
         >
           Resumate
         </Link>
-        <p className="mt-3 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-studio-muted">
+        <p className="mt-3 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-studio-muted">
           {isLogin ? "Welcome back" : "New desk"}
         </p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-studio-ink sm:text-3xl">
@@ -165,12 +226,13 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
               value={password}
               disabled={pending}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder={isLogin ? undefined : "At least 6 characters"}
             />
           </label>
 
           {error ? (
             <p
-              className="border border-studio-vermilion/25 bg-red-50/80 px-3 py-2 text-sm text-studio-vermilion"
+              className="rounded-lg border border-studio-vermilion/25 bg-red-50/80 px-3 py-2 text-sm text-studio-vermilion"
               role="alert"
             >
               {error}
@@ -196,20 +258,14 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
           {isLogin ? (
             <>
               No account?{" "}
-              <Link
-                className="text-studio-ink underline underline-offset-2"
-                href={next && next !== "/dashboard" ? `/signup?next=${encodeURIComponent(next)}` : "/signup"}
-              >
+              <Link className="text-studio-ink underline underline-offset-2" href={crossHref}>
                 Create one
               </Link>
             </>
           ) : (
             <>
               Already have an account?{" "}
-              <Link
-                className="text-studio-ink underline underline-offset-2"
-                href={next && next !== "/onboarding" ? `/login?next=${encodeURIComponent(next)}` : "/login"}
-              >
+              <Link className="text-studio-ink underline underline-offset-2" href={crossHref}>
                 Sign in
               </Link>
             </>

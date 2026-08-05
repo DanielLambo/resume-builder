@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 import { signOutAction } from "@/app/actions/resumes";
 import { TokenMeter } from "@/components/TokenMeter";
+import { createClient } from "@/lib/supabase/client";
 
 type AppHeaderProps = {
   email?: string | null;
@@ -15,21 +14,19 @@ type AppHeaderProps = {
 };
 
 export function AppHeader({ email, showMeter = true }: AppHeaderProps) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   function onSignOut() {
     startTransition(async () => {
       try {
+        const supabase = createClient();
+        await supabase.auth.signOut();
         await signOutAction();
-      } catch (err) {
-        if (isRedirectError(err)) {
-          toast.message("Signed out");
-          return;
-        }
-        router.replace("/login");
+      } catch {
+        /* still leave the session cookies behind via a hard nav */
       }
       toast.message("Signed out");
+      window.location.assign("/login");
     });
   }
 

@@ -11,35 +11,42 @@ import {
 
 export type OnboardingStep = 1 | 2 | 3 | 4;
 
-export function useOnboardingState() {
+export function useOnboardingState(userId: string) {
   const [step, setStep] = useState<OnboardingStep>(1);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [data, setData] = useState<OnboardingData>(DEFAULT_ONBOARDING);
   const [hydrated, setHydrated] = useState(false);
+  const storageKey = `${ONBOARDING_STORAGE_KEY}:${userId}`;
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(ONBOARDING_STORAGE_KEY);
+      const scoped = window.localStorage.getItem(storageKey);
+      const legacy = window.localStorage.getItem(ONBOARDING_STORAGE_KEY);
+      const raw = scoped ?? legacy;
       if (raw) {
         const parsed = OnboardingFieldsSchema.partial().safeParse(JSON.parse(raw));
         if (parsed.success) {
           setData({ ...DEFAULT_ONBOARDING, ...parsed.data });
         }
       }
+      if (legacy && !scoped) {
+        window.localStorage.setItem(storageKey, legacy);
+        window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
+      }
     } catch {
       /* ignore */
     }
     setHydrated(true);
-  }, []);
+  }, [storageKey]);
 
   const persist = useCallback((next: OnboardingData) => {
     setData(next);
     try {
-      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(next));
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
     } catch {
       /* ignore quota */
     }
-  }, []);
+  }, [storageKey]);
 
   const patch = useCallback(
     (partial: Partial<OnboardingData>) => {

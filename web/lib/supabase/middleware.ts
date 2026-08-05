@@ -1,6 +1,11 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
+import {
+  isSetupDestination,
+  onboardingPathWithNext,
+  trySafeNextPath,
+} from "@/lib/auth-next";
 import type { Database } from "@/lib/database.types";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/editor", "/api/ai", "/onboarding"] as const;
@@ -37,7 +42,7 @@ export async function updateSession(request: NextRequest) {
     if (isProtected(pathname)) {
       const login = request.nextUrl.clone();
       login.pathname = "/login";
-      login.searchParams.set("next", pathname);
+      login.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
       return NextResponse.redirect(login);
     }
     return NextResponse.next({ request });
@@ -76,21 +81,26 @@ export async function updateSession(request: NextRequest) {
     }
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("next", pathname);
+    loginUrl.searchParams.set(
+      "next",
+      `${pathname}${request.nextUrl.search}`,
+    );
     const redirect = NextResponse.redirect(loginUrl);
     applyCookies(redirect, cookiesToApply);
     return redirect;
   }
 
   if (user && isAuthRoute(pathname)) {
-    // Unfinished profiles → setup; completed → library.
+    // Unfinished profiles → setup (keep deep link). Completed → requested next.
     // Grandfather (has resumes, no metadata flag) is resolved on /onboarding.
-    const dest = request.nextUrl.clone();
-    dest.pathname =
+    const requested = trySafeNextPath(request.nextUrl.searchParams.get("next"));
+    const target =
       user.user_metadata?.onboarding_completed === true
-        ? "/dashboard"
-        : "/onboarding";
-    dest.search = "";
+        ? requested && !isSetupDestination(requested)
+          ? requested
+          : "/dashboard"
+        : onboardingPathWithNext(requested);
+    const dest = new URL(target, request.nextUrl.origin);
     const redirect = NextResponse.redirect(dest);
     applyCookies(redirect, cookiesToApply);
     return redirect;
