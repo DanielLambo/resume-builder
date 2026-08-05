@@ -16,7 +16,7 @@ export function TokenMeter({ compact = false }: TokenMeterProps) {
   if (compact) {
     return (
       <div
-        className="min-w-0 max-w-[11rem] rounded-md border border-studio-border bg-white px-2.5 py-1.5"
+        className="min-w-0 max-w-[9.5rem] rounded border border-studio-border/80 bg-white px-2 py-1"
         aria-live="polite"
         title={
           warning
@@ -25,15 +25,15 @@ export function TokenMeter({ compact = false }: TokenMeterProps) {
         }
         data-quota-warning={warning ? "true" : "false"}
       >
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <span className="font-mono text-[0.6rem] uppercase tracking-wide text-studio-muted">
+        <div className="mb-0.5 flex items-center justify-between gap-1.5">
+          <span className="font-mono text-[0.55rem] uppercase tracking-wide text-studio-muted">
             AI{warning ? " · off" : ""}
           </span>
-          <span className="truncate font-mono text-[0.65rem] text-studio-ink">
+          <span className="truncate font-mono text-[0.6rem] text-studio-ink">
             {loading ? "…" : `${used.toLocaleString()}/${limit.toLocaleString()}`}
           </span>
         </div>
-        <div className="h-1 overflow-hidden rounded-full bg-studio-canvas">
+        <div className="h-0.5 overflow-hidden rounded-full bg-studio-canvas">
           {loading || pct > 0 ? (
             <div
               className={`h-full rounded-full transition-all duration-500 ${
