@@ -23,6 +23,7 @@ import { PDFPreview } from "@/components/editor/PDFPreview";
 import { PromptRecipes } from "@/components/editor/PromptRecipes";
 import { QuotaModal } from "@/components/editor/QuotaModal";
 import { ResumeReviewPanel } from "@/components/editor/ResumeReviewPanel";
+import { SplitPane } from "@/components/editor/SplitPane";
 import type { SourceSelection } from "@/components/editor/source-selection";
 import { StatusLog } from "@/components/editor/StatusLog";
 import { VersionStepper } from "@/components/editor/VersionStepper";
@@ -61,6 +62,8 @@ type EditorClientProps = {
   jobLabel?: string | null;
   initialWritingProfile?: WritingProfile;
 };
+
+type MobilePane = "edit" | "preview";
 
 type PreviewZoom = number | "fit";
 
@@ -110,7 +113,7 @@ export function EditorClient({
   const [compiling, setCompiling] = useState(false);
   const [compileError, setCompileError] = useState<string | null>(null);
   const busy = aiBusy;
-  const [sourceOpen, setSourceOpen] = useState(false);
+  const [mobilePane, setMobilePane] = useState<MobilePane>("edit");
   const [zoom, setZoom] = useState<PreviewZoom>("fit");
   const [onePageLock, setOnePageLock] = useState(
     initialPageCount != null && initialPageCount === 1,
@@ -241,15 +244,6 @@ export function EditorClient({
     return () => window.clearTimeout(t);
   }, [ghostActive]);
 
-  useEffect(() => {
-    if (!sourceOpen) return;
-    function onKey(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") setSourceOpen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [sourceOpen]);
-
   const pushMutatingSnapshot = useCallback(
     (args: {
       priorLatex: string;
@@ -318,6 +312,7 @@ export function EditorClient({
         setPageCount(data.pageCount ?? null);
         setOnePageLock(Boolean(data.lockedToOnePage ?? data.pageCount === 1));
         if (!quiet) {
+          setMobilePane("preview");
           toast.success("Preview ready", {
             description:
               data.pageCount === 1
@@ -763,204 +758,105 @@ export function EditorClient({
     });
   }
 
-  return (
-    <div
-      className="relative flex h-full min-h-0 flex-col bg-studio-bg text-studio-ink"
-      data-testid="vibe-harness"
-      data-token-used={tokensUsed}
-    >
-      {(busy || compiling) && (
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 z-30 h-0.5 overflow-hidden"
-          data-testid="vermilion-loader"
-        >
-          <div className="h-full w-full origin-left animate-pulse bg-studio-vermilion" />
-        </div>
-      )}
-
-      <div className="shrink-0 border-b border-studio-border bg-studio-bg">
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 sm:px-4">
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-baseline gap-2">
-              <h1 className="truncate text-[0.95rem] font-semibold tracking-tight text-studio-ink">
-                {title}
-              </h1>
-              <span
-                className={`shrink-0 text-[0.7rem] ${
-                  dirty ? "text-studio-muted" : "text-emerald-700"
-                }`}
-              >
-                {dirty ? "Unsaved" : "Saved"}
-              </span>
-            </div>
-            {jobLabel ? (
-              <p
-                className="mt-0.5 truncate text-[0.7rem] text-studio-vermilion"
-                data-testid="job-target-label"
-                title={jobLabel}
-              >
-                {jobLabel}
-              </p>
-            ) : null}
-          </div>
-          <div className="flex shrink-0 items-center gap-1 text-xs text-studio-muted">
-            <button
-              type="button"
-              className="min-h-8 rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink"
-              data-testid="writing-profile-open"
-              onClick={() => setProfileOpen(true)}
-            >
-              Profile
-            </button>
-            <button
-              type="button"
-              className="min-h-8 max-w-[9rem] truncate rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink sm:max-w-[12rem]"
-              onClick={() => setTemplatePickerOpen(true)}
-              data-testid="template-switch"
-              title={getTemplate(templateId).description}
-            >
-              {getTemplate(templateId).name}
-            </button>
-            <button
-              type="button"
-              className="min-h-8 rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink disabled:opacity-50"
-              data-testid="format-consistency"
-              title="Normalize dates, bullets, and tense. Facts stay put."
-              disabled={compiling || busy}
-              onClick={() => {
-                void formatForConsistency();
-              }}
-            >
-              Format
-            </button>
-            <button
-              type="button"
-              className="min-h-8 rounded-md px-2 font-medium text-studio-ink transition hover:bg-studio-paper"
-              data-testid="mobile-pane-edit"
-              onClick={() => setSourceOpen(true)}
-            >
-              Source
-            </button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-studio-border/70 bg-studio-canvas px-3 py-2 sm:px-4">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+  const sourcePane = (
+    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-studio-bg">
+      <div className="flex items-center justify-between gap-3 px-3 py-2.5 sm:px-4">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <h1 className="truncate text-[0.95rem] font-semibold tracking-tight text-studio-ink">
+              {title}
+            </h1>
             <span
-              data-testid="one-page-lock"
-              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.68rem] font-semibold tracking-wide ${
-                onePageLock
-                  ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
-                  : "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
+              className={`shrink-0 text-[0.7rem] ${
+                dirty ? "text-studio-muted" : "text-emerald-700"
               }`}
             >
-              {onePageLock
-                ? "[ 🟢 1-PAGE LOCK ACTIVE ]"
-                : `[ wrapping · ${pageCount ?? "?"}p ]`}
+              {dirty ? "Unsaved" : "Saved"}
             </span>
-            <LineOptimizerToggle
-              enabled={heatmapOn}
-              orphanCount={orphanCount}
-              onChange={setHeatmapOn}
-              ready={heatmapReady}
-              compact
-            />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div
-              className="inline-flex items-center rounded-full border border-slate-200/80 bg-white p-0.5 shadow-sm"
-              data-testid="preview-zoom"
+          {jobLabel ? (
+            <p
+              className="mt-0.5 truncate text-[0.7rem] text-studio-vermilion"
+              data-testid="job-target-label"
+              title={jobLabel}
             >
-              <button
-                type="button"
-                aria-label="Zoom out"
-                className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas"
-                onClick={() => bumpZoom(-10)}
-              >
-                −
-              </button>
-              <button
-                type="button"
-                aria-label="Reset zoom to 100 percent"
-                className={`min-h-8 min-w-[3.25rem] rounded-full px-2 text-[0.7rem] font-semibold transition ${
-                  zoom === 100
-                    ? "bg-amber-500 text-white"
-                    : "text-studio-ink hover:bg-studio-canvas"
-                }`}
-                onClick={() => setZoom(100)}
-              >
-                100%
-              </button>
-              <button
-                type="button"
-                aria-label="Zoom in"
-                className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas"
-                onClick={() => bumpZoom(10)}
-              >
-                +
-              </button>
-              <button
-                type="button"
-                className={`min-h-8 rounded-full px-2.5 text-[0.7rem] font-semibold transition ${
-                  zoom === "fit"
-                    ? "bg-amber-500 text-white"
-                    : "text-studio-ink hover:bg-studio-canvas"
-                }`}
-                onClick={() => setZoom("fit")}
-              >
-                Fit
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={onCompile}
-              disabled={compiling || busy}
-              className="min-h-8 rounded-full bg-studio-ink px-3.5 text-xs font-semibold text-white transition hover:bg-black disabled:opacity-50"
-            >
-              {compiling ? "Compiling…" : "Recompile"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="relative min-h-0 flex-1 overflow-auto bg-studio-canvas">
-        {(busy || compiling) && !pdfBase64 ? (
-          <div className="absolute inset-0 z-10 flex items-start justify-center px-6 pt-10">
-            <div className="w-full max-w-[8.5in] space-y-4 rounded-sm border border-slate-200/60 bg-white p-10 shadow-2xl">
-              <div className="h-4 w-1/3 animate-pulse rounded bg-slate-100" />
-              <div className="h-3 w-full animate-pulse rounded bg-slate-100" />
-              <div className="h-3 w-5/6 animate-pulse rounded bg-slate-100" />
-              <div className="h-3 w-2/3 animate-pulse rounded bg-slate-100" />
-              <div className="mt-6 h-40 animate-pulse rounded bg-slate-50" />
-            </div>
-          </div>
-        ) : null}
-        <div className="mx-auto flex min-h-full max-w-[9.5in] flex-col px-4 py-5 sm:px-8 sm:py-8">
-          <div className="min-h-[28rem] flex-1">
-            <PDFPreview
-              pdfBase64={pdfBase64}
-              pageCount={pageCount}
-              ghostActive={ghostActive}
-              compiling={compiling || busy}
-              zoom={zoom}
-            />
-          </div>
-          {heatmapOn && heatmapReady ? (
-            <div className="mt-4 max-h-[28vh] shrink-0 overflow-auto rounded-xl border border-studio-border bg-studio-bg px-4 py-3">
-              <OrphanHeatmapPanel
-                latex={latex}
-                enabled
-                shorteningIndex={shorteningIndex}
-                onShorten={(bullet) => {
-                  void onShortenOrphan(bullet);
-                }}
-              />
-            </div>
+              {jobLabel}
+            </p>
           ) : null}
         </div>
+        <div className="flex shrink-0 items-center gap-1 text-xs text-studio-muted">
+          <button
+            type="button"
+            className="min-h-8 rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink"
+            data-testid="writing-profile-open"
+            onClick={() => setProfileOpen(true)}
+          >
+            Profile
+          </button>
+          <button
+            type="button"
+            className="min-h-8 max-w-[9rem] truncate rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink sm:max-w-[12rem]"
+            onClick={() => setTemplatePickerOpen(true)}
+            data-testid="template-switch"
+            title={getTemplate(templateId).description}
+          >
+            {getTemplate(templateId).name}
+          </button>
+          <button
+            type="button"
+            className="min-h-8 rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink disabled:opacity-50"
+            data-testid="format-consistency"
+            title="Normalize dates, bullets, and tense. Facts stay put."
+            disabled={compiling || busy}
+            onClick={() => {
+              void formatForConsistency();
+            }}
+          >
+            Format
+          </button>
+        </div>
       </div>
 
-      <div className="shrink-0 border-t border-studio-border bg-[#fbfbfa]/95 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(26,26,26,0.04)] backdrop-blur-sm sm:px-5">
+      {hasSelection ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-studio-border bg-studio-paper px-3 py-2 sm:px-4">
+          <span className="text-[0.7rem] font-medium text-studio-ink">Edit selection</span>
+          <input
+            type="text"
+            value={selectionPrompt}
+            disabled={busy}
+            placeholder="e.g. Tighten this bullet"
+            onChange={(e) => setSelectionPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                runSelectionEdit();
+              }
+            }}
+            className="min-h-8 min-w-0 flex-1 rounded-md border border-studio-border bg-studio-bg px-2 py-1 text-xs text-studio-ink outline-none placeholder:text-studio-muted/70 focus:border-studio-ink/30 disabled:opacity-60"
+          />
+          <button
+            type="button"
+            data-testid="selection-edit-submit"
+            disabled={busy || !selectionPrompt.trim()}
+            onClick={runSelectionEdit}
+            className="min-h-8 rounded-md bg-studio-vermilion px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45"
+          >
+            {busy ? "Editing…" : "Apply"}
+          </button>
+        </div>
+      ) : null}
+
+      <LatexSourceEditor
+        value={latex}
+        disabled={busy}
+        onChange={(next) => {
+          setLatex(next);
+          setDirty(true);
+        }}
+        onSelectionChange={setSelection}
+      />
+
+      <div className="shrink-0 border-t border-studio-border bg-studio-bg px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4">
         {versions.stack.length > 1 ? (
           <div className="mb-2">
             <VersionStepper
@@ -973,11 +869,11 @@ export function EditorClient({
           </div>
         ) : null}
         {review ? (
-          <div className="mb-2 max-h-28 overflow-auto rounded-lg border border-studio-border bg-studio-paper p-3">
+          <div className="mb-2 max-h-36 overflow-auto rounded-lg border border-studio-border bg-studio-paper p-3">
             <ResumeReviewPanel review={review} />
           </div>
         ) : reply ? (
-          <p className="mb-2 line-clamp-2 text-sm leading-relaxed text-studio-ink">{reply}</p>
+          <p className="mb-2 line-clamp-3 text-sm leading-relaxed text-studio-ink">{reply}</p>
         ) : null}
         {compileError ? (
           <div className="mb-2">
@@ -1007,11 +903,11 @@ export function EditorClient({
             promptRef.current?.focus();
           }}
         />
-        <div className="rounded-2xl border border-studio-border bg-white shadow-floating-bar focus-within:border-amber-500/40">
+        <div className="rounded-xl border border-studio-border bg-studio-paper focus-within:border-amber-500/40">
           <textarea
             ref={promptRef}
             data-testid="vibe-prompt"
-            className="w-full resize-none bg-transparent px-4 py-3 text-sm leading-relaxed text-studio-ink outline-none placeholder:text-studio-muted/80 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full resize-none bg-transparent px-3 py-2.5 text-sm leading-relaxed text-studio-ink outline-none placeholder:text-studio-muted/70 disabled:cursor-not-allowed disabled:opacity-60"
             rows={2}
             placeholder="Vibe Edit (e.g., 'Make my bullet points sound more impact-driven')..."
             value={prompt}
@@ -1061,77 +957,175 @@ export function EditorClient({
         </div>
         <StatusLog lines={statusLines} active={busy} />
       </div>
+    </aside>
+  );
 
-      {sourceOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-          <button
-            type="button"
-            aria-label="Close source editor"
-            className="absolute inset-0 bg-[#1a1a1a]/40"
-            onClick={() => setSourceOpen(false)}
-          />
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-label="LaTeX source"
-            data-testid="source-drawer"
-            className="relative z-10 flex h-[78vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-studio-border bg-studio-bg shadow-2xl sm:h-[82vh] sm:rounded-2xl"
+  const previewPane = (
+    <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-studio-canvas">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-studio-border bg-studio-canvas/95 px-3 py-2 sm:px-4">
+        <button
+          type="button"
+          onClick={onCompile}
+          disabled={compiling || busy}
+          className="min-h-9 rounded-md bg-studio-vermilion px-3.5 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-50"
+        >
+          {compiling ? "Compiling…" : "Recompile"}
+        </button>
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+          <span
+            data-testid="one-page-lock"
+            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.68rem] font-semibold tracking-wide ${
+              onePageLock
+                ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
+                : "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
+            }`}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-studio-border px-4 py-3">
-              <div>
-                <p className="text-[0.7rem] font-medium uppercase tracking-wide text-studio-muted">
-                  Power user
-                </p>
-                <h2 className="text-sm font-semibold text-studio-ink">LaTeX source</h2>
-              </div>
-              <button
-                type="button"
-                className="min-h-8 rounded-md px-2 text-sm text-studio-muted transition hover:bg-studio-paper hover:text-studio-ink"
-                onClick={() => setSourceOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-            {hasSelection ? (
-              <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-studio-border bg-studio-paper px-4 py-2">
-                <span className="text-[0.7rem] font-medium text-studio-ink">Edit selection</span>
-                <input
-                  type="text"
-                  value={selectionPrompt}
-                  disabled={busy}
-                  placeholder="e.g. Tighten this bullet"
-                  onChange={(e) => setSelectionPrompt(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      runSelectionEdit();
-                    }
-                  }}
-                  className="min-h-8 min-w-0 flex-1 rounded-md border border-studio-border bg-studio-bg px-2 py-1 text-xs text-studio-ink outline-none placeholder:text-studio-muted/70 focus:border-studio-ink/30 disabled:opacity-60"
-                />
-                <button
-                  type="button"
-                  data-testid="selection-edit-submit"
-                  disabled={busy || !selectionPrompt.trim()}
-                  onClick={runSelectionEdit}
-                  className="min-h-8 rounded-md bg-studio-vermilion px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45"
-                >
-                  {busy ? "Editing…" : "Apply"}
-                </button>
-              </div>
-            ) : null}
-            <LatexSourceEditor
-              value={latex}
-              disabled={busy}
-              onChange={(next) => {
-                setLatex(next);
-                setDirty(true);
-              }}
-              onSelectionChange={setSelection}
-            />
-          </section>
+            {onePageLock
+              ? "[ 🟢 1-PAGE LOCK ACTIVE ]"
+              : `[ wrapping · ${pageCount ?? "?"}p ]`}
+          </span>
+          <LineOptimizerToggle
+            enabled={heatmapOn}
+            orphanCount={orphanCount}
+            onChange={setHeatmapOn}
+            ready={heatmapReady}
+            compact
+          />
+          <div
+            className="inline-flex items-center rounded-full border border-slate-200/80 bg-white p-0.5 shadow-sm"
+            data-testid="preview-zoom"
+          >
+            <button
+              type="button"
+              aria-label="Zoom out"
+              className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas"
+              onClick={() => bumpZoom(-10)}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              aria-label="Reset zoom to 100 percent"
+              className={`min-h-8 min-w-[3.25rem] rounded-full px-2 text-[0.7rem] font-semibold transition ${
+                zoom === 100
+                  ? "bg-amber-500 text-white"
+                  : "text-studio-ink hover:bg-studio-canvas"
+              }`}
+              onClick={() => setZoom(100)}
+            >
+              100%
+            </button>
+            <button
+              type="button"
+              aria-label="Zoom in"
+              className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas"
+              onClick={() => bumpZoom(10)}
+            >
+              +
+            </button>
+            <button
+              type="button"
+              className={`min-h-8 rounded-full px-2.5 text-[0.7rem] font-semibold transition ${
+                zoom === "fit"
+                  ? "bg-amber-500 text-white"
+                  : "text-studio-ink hover:bg-studio-canvas"
+              }`}
+              onClick={() => setZoom("fit")}
+            >
+              Fit
+            </button>
+          </div>
         </div>
-      ) : null}
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 p-3 sm:p-4">
+          <div className="mx-auto h-full max-w-[8.5in]">
+            <PDFPreview
+              pdfBase64={pdfBase64}
+              pageCount={pageCount}
+              ghostActive={ghostActive}
+              compiling={compiling || busy}
+              zoom={zoom}
+            />
+          </div>
+        </div>
+        {heatmapOn && heatmapReady ? (
+          <div className="max-h-[28vh] shrink-0 overflow-auto border-t border-studio-border bg-studio-bg px-4 py-3 sm:px-5">
+            <OrphanHeatmapPanel
+              latex={latex}
+              enabled
+              shorteningIndex={shorteningIndex}
+              onShorten={(bullet) => {
+                void onShortenOrphan(bullet);
+              }}
+            />
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+
+  return (
+    <div
+      className="relative flex h-full min-h-0 flex-col bg-studio-bg"
+      data-testid="vibe-harness"
+      data-token-used={tokensUsed}
+    >
+      {(busy || compiling) && (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 z-30 h-0.5 overflow-hidden"
+          data-testid="vermilion-loader"
+        >
+          <div className="h-full w-full origin-left animate-pulse bg-studio-vermilion" />
+        </div>
+      )}
+
+      <div
+        className="flex shrink-0 border-b border-studio-border lg:hidden"
+        role="tablist"
+        aria-label="Editor panes"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobilePane === "edit"}
+          data-testid="mobile-pane-edit"
+          onClick={() => setMobilePane("edit")}
+          className={`flex-1 px-3 py-3 text-center text-sm font-medium transition ${
+            mobilePane === "edit"
+              ? "border-b-2 border-studio-vermilion text-studio-ink"
+              : "text-studio-muted"
+          }`}
+        >
+          Source
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobilePane === "preview"}
+          data-testid="mobile-pane-preview"
+          onClick={() => setMobilePane("preview")}
+          className={`flex-1 px-3 py-3 text-center text-sm font-medium transition ${
+            mobilePane === "preview"
+              ? "border-b-2 border-studio-vermilion text-studio-ink"
+              : "text-studio-muted"
+          }`}
+        >
+          Preview
+          {pageCount != null ? (
+            <span className="ml-1 text-[0.7rem] font-normal text-studio-muted">
+              {pageCount}p
+            </span>
+          ) : null}
+        </button>
+      </div>
+
+      <SplitPane
+        mobileShow={mobilePane === "preview" ? "right" : "left"}
+        left={sourcePane}
+        right={previewPane}
+      />
 
       <QuotaModal
         open={quotaOpen}
