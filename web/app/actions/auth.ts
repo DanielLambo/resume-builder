@@ -32,78 +32,9 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
   return null;
 }
 
-async function upsertConfirmedUser(
-  email: string,
-  password: string,
-): Promise<AuthActionResult> {
-  const admin = createAdminClient();
-
-  // Prefer update when the account already exists — avoids mailer entirely.
-  const existingId = await findUserIdByEmail(email);
-  if (existingId) {
-    const { error } = await admin.auth.admin.updateUserById(existingId, {
-      password,
-      email_confirm: true,
-    });
-    if (error) {
-      return { ok: false, error: error.message, code: "repair_failed" };
-    }
-    return { ok: true };
-  }
-
-  const { error } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-  });
-
-  if (!error) return { ok: true };
-
-  // Race: created between list + create
-  const msg = error.message.toLowerCase();
-  const already =
-    msg.includes("already") ||
-    msg.includes("registered") ||
-    msg.includes("exists") ||
-    error.status === 422;
-
-  if (already) {
-    const userId = await findUserIdByEmail(email);
-    if (!userId) {
-      return {
-        ok: false,
-        error: "An account with this email already exists. Try signing in.",
-        code: "already_exists",
-      };
-    }
-    const { error: updateError } = await admin.auth.admin.updateUserById(userId, {
-      password,
-      email_confirm: true,
-    });
-    if (updateError) {
-      return { ok: false, error: updateError.message, code: "repair_failed" };
-    }
-    return { ok: true };
-  }
-
-  if (isRateLimitMessage(error.message)) {
-    // Mailer throttle from earlier confirm spam — admin create should not email,
-    // but GoTrue still returns this for some addresses. Guide a plus-alias.
-    return {
-      ok: false,
-      error:
-        "Supabase email throttle hit that address. Use Sign in if you already registered, or try a plus-alias like you+resumate@gmail.com.",
-      code: "rate_limit",
-    };
-  }
-
-  return { ok: false, error: error.message, code: "signup_failed" };
-}
-
 /**
- * Create/repair a confirmed account (no confirmation email).
- * Needed because Supabase Site URL still points at localhost, so confirm
- * links break — and repeated failed confirms trip the mailer rate limit.
+ * Create a confirmed account (no confirmation email).
+ * Never changes an existing user's password.
  */
 export async function signUpConfirmedAction(
   emailRaw: string,
@@ -122,14 +53,56 @@ export async function signUpConfirmedAction(
   }
 
   try {
-    return await upsertConfirmedUser(email, password);
+    const existingId = await findUserIdByEmail(email);
+    if (existingId) {
+      return {
+        ok: false,
+        error: "An account with this email already exists. Try signing in.",
+        code: "already_exists",
+      };
+    }
+
+    const admin = createAdminClient();
+    const { error } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+
+    if (!error) return { ok: true };
+
+    const msg = error.message.toLowerCase();
+    const already =
+      msg.includes("already") ||
+      msg.includes("registered") ||
+      msg.includes("exists") ||
+      error.status === 422;
+
+    if (already) {
+      return {
+        ok: false,
+        error: "An account with this email already exists. Try signing in.",
+        code: "already_exists",
+      };
+    }
+
+    if (isRateLimitMessage(error.message)) {
+      return {
+        ok: false,
+        error:
+          "Too many sign-ups on that address. Sign in if you already registered, or try a plus-alias like you+resumate@gmail.com.",
+        code: "rate_limit",
+      };
+    }
+
+    return { ok: false, error: error.message, code: "signup_failed" };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Sign up failed";
     if (isRateLimitMessage(message)) {
       return {
         ok: false,
         error:
-          "Supabase email throttle hit that address. Try Sign in, or use you+resumate@gmail.com.",
+          "Too many attempts. Wait a minute, or try you+resumate@gmail.com.",
         code: "rate_limit",
       };
     }

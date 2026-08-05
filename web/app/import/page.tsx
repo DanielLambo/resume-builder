@@ -16,7 +16,7 @@ export default async function ImportPage() {
   } = await supabase.auth.getUser();
 
   if (user && (await shouldForceOnboarding(user))) {
-    redirect("/onboarding");
+    redirect("/onboarding?next=%2Fimport");
   }
 
   return (

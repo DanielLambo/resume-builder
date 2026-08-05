@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { Camera } from "lucide-react";
+import { toast } from "sonner";
 
 import { AVATAR_COLORS } from "@/lib/onboarding/schema";
 import type { OnboardingData } from "@/lib/onboarding/schema";
@@ -33,8 +34,15 @@ export function Step1Personal({
       : null;
 
   function onFile(file: File | undefined) {
-    if (!file || !file.type.startsWith("image/")) return;
-    if (file.size > 2_000_000) return;
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Use a JPG or PNG photo.");
+      return;
+    }
+    if (file.size > 2_000_000) {
+      toast.error("Keep photos under 2 MB.");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") {
