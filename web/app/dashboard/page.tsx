@@ -14,6 +14,8 @@ import { onboardingPathWithNext } from "@/lib/auth-next";
 import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 /** List rows without shipping full latex / ai_history to the browser. */
 function slimResumeForLibrary(row: ResumeRow): ResumeRow {
   const job = getJobTargetFromDataJson(row.data_json);
