@@ -32,6 +32,7 @@ const InputSchema = z
     end: z.number().int().positive(),
     selectedText: z.string().min(1).max(4_000),
     prompt: z.string().trim().min(1).max(1_000),
+    commit: z.boolean().optional().default(true),
   })
   .refine((v) => v.end > v.start, {
     message: "end must be greater than start",
@@ -188,7 +189,8 @@ export async function selectionEditAction(
     };
   }
 
-  const { resumeId, latex, start, end, selectedText, prompt } = parsed.data;
+  const { resumeId, latex, start, end, selectedText, prompt, commit } =
+    parsed.data;
 
   try {
     const supabase = await createClient();
@@ -267,19 +269,21 @@ export async function selectionEditAction(
         (typeof prev.template === "string" && prev.template) || "new-grad",
     };
 
-    const { error: updateError } = await supabase
-      .from("resumes")
-      .update({ data_json: nextData as unknown as Json })
-      .eq("id", resumeId)
-      .eq("user_id", user.id);
+    if (commit) {
+      const { error: updateError } = await supabase
+        .from("resumes")
+        .update({ data_json: nextData as unknown as Json })
+        .eq("id", resumeId)
+        .eq("user_id", user.id);
 
-    if (updateError) {
-      return {
-        ok: false,
-        status: 500,
-        code: "INTERNAL",
-        error: updateError.message,
-      };
+      if (updateError) {
+        return {
+          ok: false,
+          status: 500,
+          code: "INTERNAL",
+          error: updateError.message,
+        };
+      }
     }
 
     const usage = isMockAiEnabled()
@@ -296,8 +300,10 @@ export async function selectionEditAction(
         })()
       : await incrementDailyAiTokens(user.id, edited.tokens);
 
-    revalidatePath(`/editor/${resumeId}`);
-    revalidatePath("/dashboard");
+    if (commit) {
+      revalidatePath(`/editor/${resumeId}`);
+      revalidatePath("/dashboard");
+    }
 
     return {
       ok: true,

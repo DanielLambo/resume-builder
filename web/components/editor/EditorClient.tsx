@@ -15,7 +15,10 @@ import { selectionEditAction } from "@/app/actions/selection-edit";
 import { vibeEditAction } from "@/app/actions/vibe-edit";
 import { shortenBulletAction } from "@/app/actions/shorten-bullet";
 import { saveResumeLatexAction } from "@/app/actions/resumes";
-import { AiComposerDock } from "@/components/editor/AiComposerDock";
+import {
+  AiComposerDock,
+  type ComposerProposal,
+} from "@/components/editor/AiComposerDock";
 import { LatexSourceEditor } from "@/components/editor/LatexSourceEditor";
 import { LineOptimizerToggle, useLineOptimizerPreference } from "@/components/editor/LineOptimizerToggle";
 import { OrphanHeatmapPanel } from "@/components/editor/OrphanHeatmapPanel";
@@ -29,12 +32,14 @@ import {
   appendLocalSnapshot,
   type LocalAiSnapshot,
 } from "@/lib/ai-history";
+import { summarizeLatexDiff } from "@/lib/ai/latex-diff";
 import { analyzeOrphans, type OrphanBullet } from "@/lib/analyzer/orphanDetector";
 import {
   FORMAT_CONSISTENCY_PROMPT,
   polishResumeLatex,
   summarizeFormatChanges,
 } from "@/lib/format-resume";
+import { getPromptRecipe } from "@/lib/prompt-recipes";
 import { isResumeReviewPrompt, type ResumeReview } from "@/lib/resume-review";
 import {
   getTemplate,
@@ -68,6 +73,18 @@ type VibeEditOverrides = {
   compilerError?: string;
   clearPrompt?: boolean;
   successTitle?: string;
+  forceDocument?: boolean;
+};
+
+type PendingProposal = ComposerProposal & {
+  priorLatex: string;
+  nextLatex: string;
+  priorReply: string | null;
+  priorPdf: string | null;
+  priorPageCount: number | null;
+  nextPdf: string | null;
+  nextPageCount: number | null;
+  lockedToOnePage: boolean | null;
 };
 
 type VersionState = {
@@ -127,7 +144,7 @@ export function EditorClient({
     useState<WritingProfile>(initialWritingProfile);
   const [profileOpen, setProfileOpen] = useState(false);
   const [selection, setSelection] = useState<SourceSelection | null>(null);
-  const [selectionPrompt, setSelectionPrompt] = useState("");
+  const [proposal, setProposal] = useState<PendingProposal | null>(null);
   const [versions, setVersions] = useState<VersionState>(() => ({
     stack: [
       {
@@ -147,6 +164,7 @@ export function EditorClient({
   const templateIdRef = useRef(templateId);
   const savingRef = useRef(false);
   const pendingResaveRef = useRef(false);
+  const proposalLockRef = useRef(false);
   const didInitialCompile = useRef(false);
   latexRef.current = latex;
   templateIdRef.current = templateId;
@@ -157,6 +175,7 @@ export function EditorClient({
   );
 
   const flushSave = useCallback(async () => {
+    if (proposalLockRef.current) return;
     if (savingRef.current) {
       pendingResaveRef.current = true;
       return;
@@ -359,6 +378,83 @@ export function EditorClient({
     toast.message("Stopped", { description: "Draft unchanged." });
   }
 
+  function presentProposal(input: {
+    prompt: string;
+    reply: string;
+    scope: "selection" | "document";
+    priorLatex: string;
+    priorReply: string | null;
+    nextLatex: string;
+    nextPdf: string | null;
+    nextPageCount: number | null;
+    lockedToOnePage: boolean | null;
+  }) {
+    proposalLockRef.current = true;
+    setDirty(false);
+    setReview(null);
+    setReply(input.reply);
+    setLatex(input.nextLatex);
+    setGhostActive(true);
+    if (input.nextPdf) {
+      setCompileError(null);
+      setPdfBase64(input.nextPdf);
+      setPageCount(input.nextPageCount);
+      if (input.lockedToOnePage != null) {
+        setOnePageLock(input.lockedToOnePage);
+      }
+    }
+    setProposal({
+      prompt: input.prompt,
+      reply: input.reply,
+      scope: input.scope,
+      diff: summarizeLatexDiff(input.priorLatex, input.nextLatex),
+      priorLatex: input.priorLatex,
+      nextLatex: input.nextLatex,
+      priorReply: input.priorReply,
+      priorPdf: pdfBase64,
+      priorPageCount: pageCount,
+      nextPdf: input.nextPdf,
+      nextPageCount: input.nextPageCount,
+      lockedToOnePage: input.lockedToOnePage,
+    });
+    setMobilePane("preview");
+  }
+
+  function keepProposal() {
+    if (!proposal || busy) return;
+    pushMutatingSnapshot({
+      priorLatex: proposal.priorLatex,
+      priorReply: proposal.priorReply,
+      nextLatex: proposal.nextLatex,
+      nextReply: proposal.reply,
+      prompt: proposal.prompt,
+    });
+    proposalLockRef.current = false;
+    setProposal(null);
+    setDirty(true);
+    setSelection(null);
+    toast.success("Changes kept", {
+      description:
+        proposal.scope === "selection"
+          ? "Highlighted text updated."
+          : "Resume updated.",
+    });
+  }
+
+  function discardProposal() {
+    if (!proposal || busy) return;
+    setLatex(proposal.priorLatex);
+    setReply(proposal.priorReply);
+    setPdfBase64(proposal.priorPdf);
+    setPageCount(proposal.priorPageCount);
+    proposalLockRef.current = false;
+    setProposal(null);
+    setDirty(false);
+    setGhostActive(false);
+    setStatusLines(["Discarded — draft unchanged."]);
+    toast.message("Discarded", { description: "Draft unchanged." });
+  }
+
   function restoreVersion(nextIndex: number) {
     const snap = versions.stack[nextIndex];
     if (!snap || busy || compiling) return;
@@ -395,11 +491,79 @@ export function EditorClient({
       }
 
       try {
+        const sel = selection;
+        const useSelection =
+          !overrides?.forceDocument &&
+          !reviewing &&
+          Boolean(sel && sel.text.trim());
+
+        if (useSelection && sel) {
+          const result = await selectionEditAction({
+            resumeId,
+            latex: latexRef.current,
+            start: sel.start,
+            end: sel.end,
+            selectedText: sel.text,
+            prompt: text,
+            commit: false,
+          });
+          signal.cancelled = true;
+          if (id !== runId.current) return;
+          if (!result.ok) {
+            if (result.status === 429 || result.code === "AI_DAILY_LIMIT") {
+              if (typeof result.used === "number") {
+                applyUsage(result.used, undefined, result.limit);
+              }
+              setQuotaTitle("Daily AI token limit reached");
+              setQuotaBody(
+                `${result.error} Quota resets at UTC midnight. Your current resume draft is safe.`,
+              );
+              setQuotaOpen(true);
+              return;
+            }
+            toast.error(result.error);
+            return;
+          }
+          applyUsage(result.dailyTokensUsed, result.dailyTokensRemaining);
+          setLastPrompt(text);
+          if (clearPrompt) setPrompt("");
+          presentProposal({
+            prompt: text,
+            reply: result.reply,
+            scope: "selection",
+            priorLatex,
+            priorReply,
+            nextLatex: result.latex,
+            nextPdf: null,
+            nextPageCount: null,
+            lockedToOnePage: null,
+          });
+          void compilePdf(result.latex, { quiet: true })
+            .then((compiled) => {
+              if (!compiled?.pdfBase64) return;
+              setProposal((current) =>
+                current
+                  ? {
+                      ...current,
+                      nextPdf: compiled.pdfBase64 ?? null,
+                      nextPageCount: compiled.pageCount ?? null,
+                      lockedToOnePage: Boolean(
+                        compiled.lockedToOnePage ?? compiled.pageCount === 1,
+                      ),
+                    }
+                  : current,
+              );
+            })
+            .catch(() => undefined);
+          return;
+        }
+
         const result = await vibeEditAction({
           resumeId,
           prompt: text,
           latex: latexRef.current,
           templateId: templateIdRef.current,
+          commit: false,
           ...(overrides?.compilerError
             ? { compilerError: overrides.compilerError }
             : {}),
@@ -480,60 +644,30 @@ export function EditorClient({
             ? result.data_json.latex
             : priorLatex;
 
-        pushMutatingSnapshot({
+        if (result.compileWarning) {
+          setCompileError(result.compileWarning);
+        }
+
+        presentProposal({
+          prompt: text,
+          reply: result.reply,
+          scope: "document",
           priorLatex,
           priorReply,
           nextLatex,
-          nextReply: result.reply,
-          prompt: text,
+          nextPdf: result.pdfBase64,
+          nextPageCount: result.pageCount,
+          lockedToOnePage: result.lockedToOnePage,
         });
-
-        setLatex(nextLatex);
-        setDirty(true);
-        setReview(null);
-        setReply(result.reply);
-        setGhostActive(true);
-
-        if (result.pdfBase64) {
-          setCompileError(null);
-          setPdfBase64(result.pdfBase64);
-          setPageCount(result.pageCount);
-          setOnePageLock(result.lockedToOnePage);
-        } else if (result.compileWarning) {
-          setCompileError(result.compileWarning);
-          // Edit saved; try a client recompile so the preview can still recover.
-          void compilePdf(nextLatex, { quiet: true }).catch(() => undefined);
-        } else {
-          setCompileError(null);
-        }
 
         const serverLines = result.steps.map(
           (s) => `[${s.index}/${s.total}] ${s.message}`,
         );
-        const hasRender = serverLines.some((l) => l.includes("PDF rendered"));
-        const hasCompileSkip = serverLines.some((l) =>
-          l.includes("PDF compile skipped"),
-        );
         setStatusLines(
-          hasRender || hasCompileSkip
+          serverLines.length
             ? serverLines
-            : [
-                ...CLIENT_STEPS,
-                `[4/4] PDF rendered successfully (${result.pageCount ?? "?"} page) in ${result.elapsedMs}ms.`,
-              ],
+            : ["Preview ready — whole resume. Not saved yet."],
         );
-
-        if (result.compileWarning) {
-          toast.success(overrides?.successTitle ?? "Vibe edit saved", {
-            description: `AI applied · preview unavailable: ${result.compileWarning}`,
-          });
-        } else {
-          toast.success(overrides?.successTitle ?? "Vibe edit applied", {
-            description: overrides?.successTitle
-              ? result.reply.trim()
-              : `${result.tokensUsed.toLocaleString()} tokens · ${result.pageCount ?? "?"} page PDF`,
-          });
-        }
       } catch {
         signal.cancelled = true;
         if (id !== runId.current) return;
@@ -582,91 +716,7 @@ export function EditorClient({
       prompt: FORMAT_CONSISTENCY_PROMPT,
       clearPrompt: false,
       successTitle: "House style applied",
-    });
-  }
-
-  function runSelectionEdit() {
-    const sel = selection;
-    const text = selectionPrompt.trim();
-    if (!sel || !sel.text.trim()) {
-      toast.message("Select a span in the source first");
-      return;
-    }
-    if (!text || busy) {
-      if (!text) toast.message("Describe how to change the selection");
-      return;
-    }
-
-    const priorLatex = latex;
-    const priorReply = reply;
-    const id = ++runId.current;
-    setStatusLines([]);
-    setQuotaOpen(false);
-    setAiBusy(true);
-
-    startTransition(async () => {
-      try {
-        const result = await selectionEditAction({
-          resumeId,
-          latex: priorLatex,
-          start: sel.start,
-          end: sel.end,
-          selectedText: sel.text,
-          prompt: text,
-        });
-        if (id !== runId.current) return;
-
-        if (!result.ok) {
-          if (result.status === 429 || result.code === "AI_DAILY_LIMIT") {
-            if (typeof result.used === "number") {
-              applyUsage(result.used, undefined, result.limit);
-            }
-            setQuotaTitle("Daily AI token limit reached");
-            setQuotaBody(
-              `${result.error} Quota resets at UTC midnight. Your current resume draft is safe.`,
-            );
-            setQuotaOpen(true);
-            return;
-          }
-          toast.error(result.error);
-          return;
-        }
-
-        applyUsage(result.dailyTokensUsed, result.dailyTokensRemaining);
-        setLastPrompt(text);
-        setSelectionPrompt("");
-        setSelection(null);
-
-        pushMutatingSnapshot({
-          priorLatex,
-          priorReply,
-          nextLatex: result.latex,
-          nextReply: result.reply,
-          prompt: text,
-        });
-
-        setLatex(result.latex);
-        setDirty(true);
-        setReview(null);
-        setReply(result.reply);
-        setGhostActive(true);
-        setStatusLines([`Selection updated · ${result.tokensUsed} tokens`]);
-        toast.success("Selection updated", {
-          description: "Recompiling preview…",
-        });
-        void compilePdf(result.latex, { quiet: true }).catch(() => undefined);
-      } catch {
-        if (id !== runId.current) return;
-        setQuotaTitle("Network interrupted");
-        setQuotaBody(
-          "We couldn't reach the typesetter. Your draft is intact — export .tex as a backup.",
-        );
-        setQuotaOpen(true);
-      } finally {
-        if (id === runId.current) {
-          setAiBusy(false);
-        }
-      }
+      forceDocument: true,
     });
   }
 
@@ -749,8 +799,6 @@ export function EditorClient({
   }
 
 
-  const hasSelection = Boolean(selection && selection.text.length > 0);
-
   function bumpZoom(delta: number) {
     setZoom((prev) => {
       const base = prev === "fit" ? 100 : prev;
@@ -817,38 +865,9 @@ export function EditorClient({
         </div>
       </div>
 
-      {hasSelection ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-studio-border bg-studio-paper px-3 py-2 sm:px-4">
-          <span className="text-[0.7rem] font-medium text-studio-ink">Edit selection</span>
-          <input
-            type="text"
-            value={selectionPrompt}
-            disabled={busy}
-            placeholder="e.g. Tighten this bullet"
-            onChange={(e) => setSelectionPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                runSelectionEdit();
-              }
-            }}
-            className="min-h-8 min-w-0 flex-1 rounded-md border border-studio-border bg-studio-bg px-2 py-1 text-xs text-studio-ink outline-none placeholder:text-studio-muted/70 focus:border-studio-ink/30 disabled:opacity-60"
-          />
-          <button
-            type="button"
-            data-testid="selection-edit-submit"
-            disabled={busy || !selectionPrompt.trim()}
-            onClick={runSelectionEdit}
-            className="min-h-8 rounded-md bg-studio-vermilion px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-45"
-          >
-            {busy ? "Editing…" : "Apply"}
-          </button>
-        </div>
-      ) : null}
-
       <LatexSourceEditor
         value={latex}
-        disabled={busy}
+        disabled={busy || Boolean(proposal)}
         onChange={(next) => {
           setLatex(next);
           setDirty(true);
@@ -937,6 +956,22 @@ export function EditorClient({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
+        {proposal ? (
+          <div
+            className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-2 text-[0.78rem] text-amber-950 sm:px-4"
+            data-testid="preview-proposal-banner"
+          >
+            Showing proposed edit
+            <span className="text-amber-800/80">
+              {" "}
+              · {proposal.scope === "selection" ? "highlighted text" : "whole resume"} · “
+              {proposal.prompt.length > 72
+                ? `${proposal.prompt.slice(0, 71)}…`
+                : proposal.prompt}
+              ”
+            </span>
+          </div>
+        ) : null}
         <div className="min-h-0 flex-1 p-3 sm:p-4">
           <div className="mx-auto h-full max-w-[8.5in]">
             <PDFPreview
@@ -1036,14 +1071,34 @@ export function EditorClient({
         compileError={compileError}
         statusLines={statusLines}
         promptIsReview={promptIsReview}
+        scope={
+          selection?.text.trim()
+            ? {
+                kind: "selection",
+                lineCount: selection.text.split("\n").length,
+                preview: selection.text,
+              }
+            : { kind: "document" }
+        }
+        proposal={
+          proposal
+            ? {
+                prompt: proposal.prompt,
+                reply: proposal.reply,
+                scope: proposal.scope,
+                diff: proposal.diff,
+              }
+            : null
+        }
         versionIndex={versions.index}
         versionTotal={versions.stack.length}
         onPromptChange={setPrompt}
         onPromptKeyDown={onPromptKeyDown}
         onPickRecipe={(recipePrompt, recipeId) => {
-          if (recipeId === "format") {
-            void formatForConsistency();
-            return;
+          const recipe = getPromptRecipe(recipeId);
+          if (recipe?.scope === "document" && selection?.text.trim()) {
+            setSelection(null);
+            toast.message("This action uses the whole resume");
           }
           setPrompt(recipePrompt);
           promptRef.current?.focus();
@@ -1056,6 +1111,9 @@ export function EditorClient({
             clearPrompt: false,
           })
         }
+        onClearScope={() => setSelection(null)}
+        onKeepProposal={keepProposal}
+        onDiscardProposal={discardProposal}
         onDismissCompileError={() => setCompileError(null)}
         onFixCompile={() => {
           if (!compileError) return;

@@ -22,6 +22,10 @@ test.describe("Vibe editor harness (mock AI)", () => {
       .getByTestId("vibe-prompt")
       .fill("Add AWS and Docker to my technical skills");
     await page.getByTestId("vibe-submit").click();
+    const keep = page.getByTestId("ai-proposal-keep");
+    if (await keep.isVisible().catch(() => false)) {
+      await keep.click();
+    }
 
     await expect(page.getByTestId("vermilion-loader")).toBeVisible();
     await expect(page.getByTestId("status-log")).toContainText(
@@ -103,8 +107,9 @@ test.describe("Authenticated vibe editor (optional)", () => {
       .getByTestId("vibe-prompt")
       .fill("Add AWS and Docker to my technical skills");
     await page.getByTestId("vibe-submit").click();
+    await page.getByTestId("ai-proposal-keep").click({ timeout: 120_000 });
 
-    await expect(page.getByTestId("status-log")).toContainText(/PDF rendered successfully/, {
+    await expect(page.getByTestId("status-log")).toContainText(/PDF rendered successfully|Changes kept|Preview ready/, {
       timeout: 120_000,
     });
     await expect(page.getByTestId("pdf-preview-canvas")).toHaveAttribute(
