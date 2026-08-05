@@ -8,7 +8,7 @@ import {
   onboardingPathWithNext,
   safeNextPath,
 } from "@/lib/auth-next";
-import { metadataNeedsOnboarding } from "@/lib/onboarding/gate";
+import { metadataNeedsOnboarding } from "@/lib/onboarding/needs-onboarding";
 import { PRODUCTION_SITE_ORIGIN } from "@/lib/site-url";
 
 function appOrigin(request: NextRequest): string {

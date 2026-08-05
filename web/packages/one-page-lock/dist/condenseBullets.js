@@ -36,7 +36,7 @@ function parseJsonObject(content) {
  */
 export async function condenseBulletsWithGroq(latex, options) {
     const baseUrl = (options.baseUrl ?? "https://api.groq.com/openai").replace(/\/$/, "");
-    const model = options.model ?? "llama-3.3-70b-versatile";
+    const model = options.model ?? "openai/gpt-oss-20b";
     const timeoutMs = options.timeoutMs ?? 20_000;
     const maxRetries = options.maxRetries ?? 3;
     const system = [

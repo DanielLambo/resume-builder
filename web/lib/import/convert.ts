@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DEFAULT_GROQ_MODEL } from "@/lib/groq-model";
 import { IMPORT_SOURCE_TEXT_MAX } from "@/lib/import/constants";
 import { latexValidationError } from "@/lib/import/validate";
 import { isMockAiEnabled } from "@/lib/mock-ai";
@@ -195,7 +196,7 @@ export async function convertImportedText(input: {
     /\/$/,
     "",
   );
-  const model = process.env.RESUMATE_MODEL ?? "llama-3.3-70b-versatile";
+  const model = DEFAULT_GROQ_MODEL;
 
   let healHint: string | undefined;
   let transportAttempt = 0;

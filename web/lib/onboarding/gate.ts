@@ -2,18 +2,16 @@ import type { User } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 import { SETUP_DONE_COOKIE } from "@/lib/auth-next";
+import { metadataNeedsOnboarding } from "@/lib/onboarding/needs-onboarding";
 import { createClient } from "@/lib/supabase/server";
 
-/** True when the user still needs the first-run wizard. */
-export function metadataNeedsOnboarding(user: User | null | undefined): boolean {
-  return user?.user_metadata?.onboarding_completed !== true;
-}
+export { metadataNeedsOnboarding } from "@/lib/onboarding/needs-onboarding";
 
 /**
  * Existing accounts that already have resumes should not be locked behind
- * onboarding (grandfather). New empty accounts still go through the wizard.
+ * onboarding (grandfather). New signups are flagged `onboarding_required`.
  *
- * On count failure, fail toward onboarding for unfinished profiles.
+ * On count failure, fail open so a login is never trapped in the wizard.
  */
 export async function shouldForceOnboarding(user: User): Promise<boolean> {
   if (!metadataNeedsOnboarding(user)) return false;
@@ -36,12 +34,12 @@ export async function shouldForceOnboarding(user: User): Promise<boolean> {
 
     if (error) {
       console.error("[onboarding/gate] resume count failed:", error.message);
-      return true;
+      return false;
     }
 
     return (count ?? 0) === 0;
   } catch (err) {
     console.error("[onboarding/gate] unexpected:", err);
-    return true;
+    return false;
   }
 }

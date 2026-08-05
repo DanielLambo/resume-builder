@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DEFAULT_GROQ_MODEL, GroqRateLimitError, throwIfGroqFailed } from "@/lib/groq-model";
 import { isMockAiEnabled, mockResumeReview, mockVibeEdit } from "@/lib/mock-ai";
 import {
   extractTargetRole,
@@ -51,7 +52,7 @@ function groqConfig(): { apiKey: string; baseUrl: string; model: string } {
   return {
     apiKey,
     baseUrl: (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai").replace(/\/$/, ""),
-    model: process.env.RESUMATE_MODEL ?? "llama-3.3-70b-versatile",
+    model: DEFAULT_GROQ_MODEL,
   };
 }
 
@@ -128,9 +129,7 @@ async function callGroqOnce(input: {
     }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Groq API error (HTTP ${response.status})`);
-  }
+  throwIfGroqFailed(response);
 
   const raw: unknown = await response.json();
   const completion = GroqChatCompletionSchema.parse(raw);
@@ -212,9 +211,17 @@ export async function invokeGroqVibeEdit(input: {
           });
           return { ...result, healed };
         } catch (err) {
+          if (err instanceof GroqRateLimitError) {
+            if (transportAttempt < 1) {
+              await sleep(err.retryAfterMs ?? 1500);
+              transportAttempt += 1;
+              continue;
+            }
+            throw err;
+          }
           const message = err instanceof Error ? err.message : String(err);
           const isTransport =
-            /HTTP 429|HTTP 5\d\d|fetch failed|network/i.test(message) &&
+            /HTTP 5\d\d|fetch failed|network/i.test(message) &&
             !message.startsWith("INVALID_JSON") &&
             !message.startsWith("LATEX_INVALID");
 
@@ -315,9 +322,7 @@ async function callGroqReviewOnce(input: {
     }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Groq API error (HTTP ${response.status})`);
-  }
+  throwIfGroqFailed(response);
 
   const raw: unknown = await response.json();
   const completion = GroqChatCompletionSchema.parse(raw);
@@ -400,9 +405,17 @@ export async function invokeGroqResumeReview(input: {
             model,
           });
         } catch (err) {
+          if (err instanceof GroqRateLimitError) {
+            if (transportAttempt < 1) {
+              await sleep(err.retryAfterMs ?? 1500);
+              transportAttempt += 1;
+              continue;
+            }
+            throw err;
+          }
           const message = err instanceof Error ? err.message : String(err);
           const isTransport =
-            /HTTP 429|HTTP 5\d\d|fetch failed|network/i.test(message) &&
+            /HTTP 5\d\d|fetch failed|network/i.test(message) &&
             !message.startsWith("INVALID_JSON");
 
           if (isTransport && transportAttempt < maxRetries) {

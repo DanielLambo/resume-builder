@@ -67,6 +67,10 @@ export async function signUpConfirmedAction(
       email,
       password,
       email_confirm: true,
+      user_metadata: {
+        onboarding_required: true,
+        onboarding_completed: false,
+      },
     });
 
     if (!error) return { ok: true };

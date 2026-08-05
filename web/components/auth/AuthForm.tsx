@@ -69,7 +69,9 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    const needsSetup = user?.user_metadata?.onboarding_completed !== true;
+    const needsSetup =
+      user?.user_metadata?.onboarding_completed !== true &&
+      user?.user_metadata?.onboarding_required === true;
     if (needsSetup) {
       rememberAfterSetup(next);
       return onboardingPathWithNext(next);

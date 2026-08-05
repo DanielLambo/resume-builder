@@ -4,6 +4,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import type { Json } from "@/lib/database.types";
+import {
+  DEFAULT_GROQ_MODEL,
+  GROQ_BUSY_MESSAGE,
+  isGroqRateLimitError,
+  throwIfGroqFailed,
+} from "@/lib/groq-model";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import {
   AiRateLimitError,
@@ -114,7 +120,7 @@ async function editSelectionWithGroq(input: {
   const baseUrl = (
     process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai"
   ).replace(/\/$/, "");
-  const model = process.env.RESUMATE_MODEL ?? "llama-3.3-70b-versatile";
+  const model = DEFAULT_GROQ_MODEL;
 
   const system = [
     "You edit one selected resume span only.",
@@ -150,9 +156,7 @@ async function editSelectionWithGroq(input: {
     }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Groq API error (HTTP ${response.status})`);
-  }
+  throwIfGroqFailed(response);
   const raw: unknown = await response.json();
   const content = (
     raw as { choices?: Array<{ message?: { content?: string } }>; usage?: { total_tokens?: number } }
@@ -313,6 +317,14 @@ export async function selectionEditAction(
         error: payload.error,
         used: payload.used,
         limit: payload.limit,
+      };
+    }
+    if (isGroqRateLimitError(err)) {
+      return {
+        ok: false,
+        status: 500,
+        code: "INTERNAL",
+        error: GROQ_BUSY_MESSAGE,
       };
     }
     return {
