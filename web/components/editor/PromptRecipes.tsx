@@ -22,10 +22,8 @@ export function PromptRecipes({ disabled, onPick }: PromptRecipesProps) {
           data-testid={`prompt-recipe-${recipe.id}`}
           onClick={() => onPick(recipe.prompt, recipe.id)}
           className={[
-            "min-h-8 border px-2.5 py-1 text-[0.7rem] transition disabled:opacity-45",
-            recipe.id === "format"
-              ? "border-studio-ink/30 bg-studio-ink text-white hover:bg-studio-ink/90"
-              : "border-studio-border bg-studio-paper text-studio-muted hover:border-studio-ink/25 hover:text-studio-ink",
+            "min-h-8 rounded-full border px-2.5 py-1 text-[0.7rem] transition disabled:opacity-45",
+            "border-studio-border bg-studio-paper text-studio-muted hover:border-studio-ink/25 hover:text-studio-ink",
           ].join(" ")}
         >
           {recipe.label}

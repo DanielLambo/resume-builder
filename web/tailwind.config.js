@@ -14,7 +14,7 @@ module.exports = {
           canvas: "#F2EFE9",
           paper: "#FFFFFF",
           ink: "#111111",
-          muted: "#66645E",
+          muted: "#534F48",
           border: "#E2DFD7",
           vermilion: "#E54B4B",
           "vermilion-hover": "#D9381E",

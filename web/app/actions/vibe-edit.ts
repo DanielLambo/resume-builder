@@ -124,7 +124,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
   }
 
   const { resumeId, prompt, compilerError } = parsed.data;
-  push("Parsing prompt and extracting Zod schema...");
+  push("Reading your request…");
 
   try {
     const supabase = await createClient();
@@ -143,7 +143,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       };
     }
 
-    push("Checking Upstash Redis daily token limit...");
+    push("Checking today’s AI quota…");
 
     if (!isMockAiEnabled()) {
       try {
@@ -282,7 +282,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       };
     }
 
-    push("Compiling LaTeX via 1-Page Lock engine...");
+    push("Updating the one-page preview…");
 
     let fittedLatex = editedLatex;
     let pdfBase64: string | null = null;

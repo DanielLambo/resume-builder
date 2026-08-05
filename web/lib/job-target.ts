@@ -5,7 +5,7 @@ import type { Json } from "@/lib/database.types";
 export const JobTargetSchema = z.object({
   company: z.string().trim().min(1).max(120),
   role: z.string().trim().min(1).max(120),
-  description: z.string().trim().min(40).max(20_000),
+  description: z.string().trim().min(20).max(20_000),
   createdAt: z.string().datetime().optional(),
 });
 

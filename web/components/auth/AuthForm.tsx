@@ -121,7 +121,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
 
   return (
     <main className="grid min-h-dvh place-items-center bg-studio-bg px-3 py-8 sm:px-4 sm:py-10">
-      <div className="w-full max-w-md border border-studio-border bg-studio-paper p-5 shadow-paper-sheet sm:p-8">
+      <div className="w-full max-w-md rounded-2xl border border-studio-border bg-studio-paper p-5 shadow-paper-sheet sm:p-8">
         <Link
           href="/"
           className="text-sm font-semibold tracking-tight text-studio-ink hover:opacity-80"
@@ -144,7 +144,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
           <label className="grid gap-1.5 text-xs text-studio-muted">
             Email
             <input
-              className="border border-studio-border bg-white px-3 py-2.5 text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion disabled:opacity-60"
+              className="rounded-lg border border-studio-border bg-white px-3 py-2.5 text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion disabled:opacity-60"
               type="email"
               autoComplete="email"
               required
@@ -157,7 +157,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
           <label className="grid gap-1.5 text-xs text-studio-muted">
             Password
             <input
-              className="border border-studio-border bg-white px-3 py-2.5 text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion disabled:opacity-60"
+              className="rounded-lg border border-studio-border bg-white px-3 py-2.5 text-sm text-studio-ink outline-none focus:ring-2 focus:ring-studio-vermilion disabled:opacity-60"
               type="password"
               autoComplete={isLogin ? "current-password" : "new-password"}
               required
@@ -180,7 +180,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
           <button
             type="submit"
             disabled={pending}
-            className="mt-1 min-h-11 bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-60"
+            className="mt-1 min-h-11 rounded-xl bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-60"
           >
             {pending
               ? isLogin
