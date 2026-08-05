@@ -37,30 +37,30 @@ export const AVATAR_COLORS = [
   "#5C4B7A",
 ] as const;
 
-export const OnboardingDataSchema = z
-  .object({
-    fullName: z
-      .string()
-      .trim()
-      .min(2, "Enter your full name")
-      .max(80, "Keep it under 80 characters"),
-    displayName: z.string().trim().max(40).optional().or(z.literal("")),
-    avatarColor: z.string().min(1),
-    avatarUrl: z.string().optional(),
-    referralSource: z.enum(REFERRAL_SOURCES).optional(),
-    referralOtherText: z.string().trim().max(120).optional().or(z.literal("")),
-    jobTypes: z.array(z.enum(JOB_TYPES)).default([]),
-    targetFields: z.array(z.enum(TARGET_FIELDS)).default([]),
-  })
-  .superRefine((data, ctx) => {
-    if (data.referralSource === "other" && !data.referralOtherText?.trim()) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Please specify how you heard about us",
-        path: ["referralOtherText"],
-      });
-    }
-  });
+export const OnboardingFieldsSchema = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .min(2, "Enter your full name")
+    .max(80, "Keep it under 80 characters"),
+  displayName: z.string().trim().max(40).optional().or(z.literal("")),
+  avatarColor: z.string().min(1),
+  avatarUrl: z.string().optional(),
+  referralSource: z.enum(REFERRAL_SOURCES).optional(),
+  referralOtherText: z.string().trim().max(120).optional().or(z.literal("")),
+  jobTypes: z.array(z.enum(JOB_TYPES)).default([]),
+  targetFields: z.array(z.enum(TARGET_FIELDS)).default([]),
+});
+
+export const OnboardingDataSchema = OnboardingFieldsSchema.superRefine((data, ctx) => {
+  if (data.referralSource === "other" && !data.referralOtherText?.trim()) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Please specify how you heard about us",
+      path: ["referralOtherText"],
+    });
+  }
+});
 
 export type OnboardingData = z.infer<typeof OnboardingDataSchema>;
 export type ReferralSource = (typeof REFERRAL_SOURCES)[number];

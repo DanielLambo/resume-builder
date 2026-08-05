@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_ONBOARDING,
   ONBOARDING_STORAGE_KEY,
-  OnboardingDataSchema,
+  OnboardingFieldsSchema,
   type OnboardingData,
 } from "@/lib/onboarding/schema";
 
@@ -21,7 +21,7 @@ export function useOnboardingState() {
     try {
       const raw = window.localStorage.getItem(ONBOARDING_STORAGE_KEY);
       if (raw) {
-        const parsed = OnboardingDataSchema.partial().safeParse(JSON.parse(raw));
+        const parsed = OnboardingFieldsSchema.partial().safeParse(JSON.parse(raw));
         if (parsed.success) {
           setData({ ...DEFAULT_ONBOARDING, ...parsed.data });
         }
@@ -65,7 +65,7 @@ export function useOnboardingState() {
   }, [goTo, step]);
 
   const step1Valid = useMemo(() => {
-    const result = OnboardingDataSchema.pick({ fullName: true }).safeParse({
+    const result = OnboardingFieldsSchema.pick({ fullName: true }).safeParse({
       fullName: data.fullName,
     });
     return result.success;
