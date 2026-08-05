@@ -10,8 +10,6 @@ import { StudioTour } from "@/components/dashboard/StudioTour";
 import { PrivacyNotice } from "@/components/PrivacyNotice";
 import type { Json, ResumeRow } from "@/lib/database.types";
 import { asDataRecord, getJobTargetFromDataJson } from "@/lib/job-target";
-import { onboardingPathWithNext } from "@/lib/auth-next";
-import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -95,10 +93,6 @@ export default async function DashboardPage({
 
   if (!user) {
     redirect("/login?next=/dashboard");
-  }
-
-  if (await shouldForceOnboarding(user)) {
-    redirect(onboardingPathWithNext("/dashboard"));
   }
 
   return (
