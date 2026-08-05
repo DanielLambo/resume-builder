@@ -4,7 +4,7 @@ import { PROMPT_RECIPES } from "@/lib/prompt-recipes";
 
 type PromptRecipesProps = {
   disabled?: boolean;
-  onPick: (prompt: string) => void;
+  onPick: (prompt: string, recipeId: string) => void;
 };
 
 export function PromptRecipes({ disabled, onPick }: PromptRecipesProps) {
@@ -20,8 +20,13 @@ export function PromptRecipes({ disabled, onPick }: PromptRecipesProps) {
           type="button"
           disabled={disabled}
           data-testid={`prompt-recipe-${recipe.id}`}
-          onClick={() => onPick(recipe.prompt)}
-          className="min-h-8 border border-studio-border bg-studio-paper px-2.5 py-1 text-[0.7rem] text-studio-muted transition hover:border-studio-ink/25 hover:text-studio-ink disabled:opacity-45"
+          onClick={() => onPick(recipe.prompt, recipe.id)}
+          className={[
+            "min-h-8 border px-2.5 py-1 text-[0.7rem] transition disabled:opacity-45",
+            recipe.id === "format"
+              ? "border-studio-ink/30 bg-studio-ink text-white hover:bg-studio-ink/90"
+              : "border-studio-border bg-studio-paper text-studio-muted hover:border-studio-ink/25 hover:text-studio-ink",
+          ].join(" ")}
         >
           {recipe.label}
         </button>

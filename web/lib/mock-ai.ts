@@ -1,3 +1,4 @@
+import { formatResumeLatex } from "@/lib/format-resume";
 import { extractTargetRole, type GroqResumeReviewResult } from "@/lib/resume-review";
 import type { GroqVibeEditResult, VibeEditModelOutput } from "@/lib/vibe-types";
 import { getLatexFromDataJson } from "@/lib/resume-template";
@@ -77,6 +78,15 @@ export function mockVibeEdit(input: {
       nextLatex = `\\documentclass{article}\n${nextLatex}`;
     }
     reply = "Mock AI: patched LaTeX so it can compile again.";
+  }
+
+  if (
+    prompt.includes("format this entire resume") ||
+    prompt.includes("recruiter-grade consistency") ||
+    prompt.includes("format consistently")
+  ) {
+    nextLatex = formatResumeLatex(nextLatex);
+    reply = "Mock AI: normalized dates, bullets, and section spacing.";
   }
 
   if (
