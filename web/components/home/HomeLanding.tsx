@@ -31,7 +31,6 @@ function useTypewriter(lines: readonly string[], active: boolean) {
 
     const current = lines[lineIndex] ?? "";
     if (charIndex < current.length) {
-      // Slightly slower cadence — reads more like a typewriter than a laptop.
       const t = window.setTimeout(() => setCharIndex((c) => c + 1), 42 + (charIndex % 4) * 10);
       return () => window.clearTimeout(t);
     }
@@ -54,6 +53,9 @@ function useTypewriter(lines: readonly string[], active: boolean) {
 export function HomeLanding() {
   const [motionOn, setMotionOn] = useState(true);
   const { lineIndex, charIndex } = useTypewriter(TYPING_LINES, motionOn);
+  const liveLine =
+    (TYPING_LINES[lineIndex] ?? "").slice(0, charIndex) ||
+    TYPING_LINES[0].slice(0, 1);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -65,8 +67,7 @@ export function HomeLanding() {
 
   return (
     <div className="bg-studio-bg">
-      <section className="relative isolate min-h-dvh overflow-hidden">
-        {/* Dominant full-bleed hero plane */}
+      <section className="relative isolate min-h-dvh overflow-x-hidden">
         <div
           className={`absolute inset-0 ${motionOn ? "animate-hero-ken" : ""}`}
           aria-hidden="true"
@@ -77,66 +78,83 @@ export function HomeLanding() {
             fill
             priority
             sizes="100vw"
-            className="object-cover object-[70%_35%] sm:object-[74%_32%]"
+            className="object-cover object-[62%_28%] sm:object-[70%_35%] md:object-[74%_32%]"
           />
         </div>
 
-        {/* Readability wash — not a promo sticker */}
+        {/* Stronger wash on phones so type stays readable over the photo */}
         <div
-          className="absolute inset-0 bg-gradient-to-r from-[#FAF8F5] via-[#FAF8F5]/90 to-[#FAF8F5]/25 sm:via-[#FAF8F5]/80 sm:to-transparent"
-          aria-hidden="true"
-        />
-        <div
-          className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[#FAF8F5]/70 to-transparent sm:hidden"
+          className="absolute inset-0 bg-gradient-to-b from-[#FAF8F5]/95 via-[#FAF8F5]/88 to-[#FAF8F5]/55 sm:bg-gradient-to-r sm:from-[#FAF8F5] sm:via-[#FAF8F5]/80 sm:to-transparent"
           aria-hidden="true"
         />
 
-        <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-5 pb-10 pt-5 sm:px-8 sm:pb-16 lg:px-10">
-          <div className="flex items-center justify-between gap-3">
+        <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-8 sm:pb-16 lg:px-10">
+          <header className="flex shrink-0 items-center justify-between gap-3">
             <Link
               href="/"
-              className="font-semibold tracking-tight text-studio-ink transition hover:text-studio-ink/80"
+              className="text-[0.95rem] font-semibold tracking-tight text-studio-ink transition hover:text-studio-ink/80 sm:text-base"
             >
               Resumate
             </Link>
             <Link
               href="/login"
-              className="rounded-lg px-3 py-2 text-sm font-medium text-studio-ink/70 transition hover:bg-white/55 hover:text-studio-ink"
+              className="min-h-10 rounded-lg px-3 py-2 text-sm font-medium text-studio-ink/70 transition hover:bg-white/55 hover:text-studio-ink"
             >
               Sign in
             </Link>
-          </div>
+          </header>
 
+          {/* Mobile: top-aligned stack. Desktop: vertically centered copy. */}
           <div
-            className={`mt-auto max-w-xl sm:mt-0 sm:flex sm:min-h-0 sm:flex-1 sm:flex-col sm:justify-center ${motionOn ? "animate-hero-rise" : ""}`}
+            className={[
+              "flex min-h-0 flex-1 flex-col",
+              "pt-8 sm:pt-0 sm:justify-center",
+              motionOn ? "animate-hero-rise" : "",
+            ].join(" ")}
           >
-            <p className="font-semibold tracking-tight text-studio-ink text-[clamp(2.75rem,8.2vw,4.65rem)] leading-[0.92]">
-              Resumate
-            </p>
-            <h1 className="mt-5 max-w-[18ch] text-[1.55rem] font-semibold leading-snug tracking-tight text-studio-ink sm:text-[2rem]">
-              A sharper resume for every job you want.
-            </h1>
-            <p className="mt-3 max-w-md text-base leading-relaxed text-studio-ink/70 sm:text-[1.05rem]">
-              Honest AI edits, hiring-manager feedback, and a locked one-page
-              PDF. Apply faster without inventing anything.
-            </p>
-            <div className="mt-7 flex w-full max-w-sm flex-col gap-2.5 sm:max-w-none sm:flex-row sm:gap-3">
-              <Link
-                href="/signup"
-                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-studio-vermilion px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(229,75,75,0.22)] transition hover:bg-studio-vermilion-hover hover:shadow-[0_10px_24px_rgba(229,75,75,0.3)]"
+            <div className="max-w-xl">
+              <p className="font-semibold tracking-tight text-studio-ink text-[clamp(2.35rem,11vw,4.65rem)] leading-[0.92]">
+                Resumate
+              </p>
+              <h1 className="mt-4 max-w-[18ch] text-[1.35rem] font-semibold leading-snug tracking-tight text-studio-ink sm:mt-5 sm:text-[2rem]">
+                A sharper resume for every job you want.
+              </h1>
+              <p className="mt-3 max-w-md text-[0.95rem] leading-relaxed text-studio-ink/70 sm:text-[1.05rem]">
+                Honest AI edits, hiring-manager feedback, and a locked one-page
+                PDF. Apply faster without inventing anything.
+              </p>
+              <div className="mt-6 flex w-full flex-col gap-2.5 sm:mt-7 sm:max-w-none sm:flex-row sm:gap-3">
+                <Link
+                  href="/signup"
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-studio-vermilion px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(229,75,75,0.22)] transition hover:bg-studio-vermilion-hover sm:w-auto"
+                >
+                  Start free
+                </Link>
+                <Link
+                  href="/import"
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-studio-ink/12 bg-white/80 px-5 py-3 text-sm font-semibold text-studio-ink backdrop-blur-sm transition hover:bg-white sm:w-auto"
+                >
+                  Import resume
+                </Link>
+              </div>
+
+              {/* Mobile: single live line — no multi-line mono wall */}
+              <p
+                className="mt-6 flex min-h-[1.5rem] items-center gap-1 overflow-hidden font-mono text-[0.72rem] text-studio-ink/75 lg:hidden"
+                aria-live="polite"
               >
-                Start free
-              </Link>
-              <Link
-                href="/import"
-                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-studio-ink/12 bg-white/70 px-5 py-3 text-sm font-semibold text-studio-ink backdrop-blur-sm transition hover:border-studio-ink/20 hover:bg-white"
-              >
-                Import resume
-              </Link>
+                <span className="shrink-0 text-studio-vermilion" aria-hidden>
+                  ›
+                </span>
+                <span className="truncate">{liveLine}</span>
+                {motionOn ? (
+                  <span className="animate-caret-blink inline-block h-[0.9em] w-[0.35em] shrink-0 bg-studio-vermilion" />
+                ) : null}
+              </p>
             </div>
           </div>
 
-          {/* Paper feed typing — sits with the typewriter page, not a laptop screen */}
+          {/* Desktop paper card */}
           <div
             className="pointer-events-none absolute right-[8%] top-[38%] hidden w-[min(18rem,30vw)] lg:block xl:right-[12%] xl:top-[36%]"
             aria-hidden="true"
@@ -161,34 +179,10 @@ export function HomeLanding() {
               })}
             </div>
           </div>
-
-          {/* Mobile: typewriter strip under CTAs */}
-          <div
-            className={`mt-8 max-w-md border-l-2 border-studio-vermilion/45 pl-3 font-mono text-[0.75rem] leading-relaxed text-studio-ink/80 lg:hidden ${motionOn ? "animate-hero-rise" : ""}`}
-            style={motionOn ? { animationDelay: "120ms" } : undefined}
-            aria-live="polite"
-          >
-            <p className="mb-1 text-[0.62rem] font-semibold tracking-[0.18em] text-studio-muted">
-              RESUME
-            </p>
-            {TYPING_LINES.map((line, i) => {
-              if (i > lineIndex) return null;
-              const shown = i < lineIndex ? line : line.slice(0, charIndex);
-              const showCaret = i === lineIndex && motionOn;
-              return (
-                <p key={line}>
-                  {shown}
-                  {showCaret ? (
-                    <span className="animate-caret-blink ml-0.5 inline-block h-[0.9em] w-[0.4em] translate-y-[0.08em] bg-studio-vermilion align-middle" />
-                  ) : null}
-                </p>
-              );
-            })}
-          </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-3xl px-5 py-10 sm:px-8">
+      <section className="mx-auto max-w-3xl px-4 py-8 sm:px-8 sm:py-10">
         <PrivacyNotice />
       </section>
     </div>
