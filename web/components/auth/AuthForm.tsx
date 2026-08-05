@@ -63,19 +63,8 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
       : null,
   );
 
-  async function destinationAfterSignIn(
-    supabase: ReturnType<typeof createClient>,
-  ): Promise<string> {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const needsSetup =
-      user?.user_metadata?.onboarding_completed !== true &&
-      user?.user_metadata?.onboarding_required === true;
-    if (needsSetup) {
-      rememberAfterSetup(next);
-      return onboardingPathWithNext(next);
-    }
+  /** Login never enters the wizard — setup is signup-only. */
+  function destinationAfterLogin(): string {
     if (isSetupDestination(next)) return "/dashboard";
     return next;
   }
@@ -115,7 +104,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
             const { error: existingSignError } = await signInWithPassword(supabase);
             if (!existingSignError) {
               toast.success("Welcome back");
-              go(await destinationAfterSignIn(supabase));
+              go(destinationAfterLogin());
               return;
             }
             const msg =
@@ -163,7 +152,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
       }
 
       toast.success("Welcome back");
-      go(await destinationAfterSignIn(supabase));
+      go(destinationAfterLogin());
     } catch (err) {
       const message = err instanceof Error ? err.message : "Authentication failed";
       setError(message);

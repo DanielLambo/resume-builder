@@ -1,10 +1,8 @@
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/AppHeader";
 import { ImportResumeClient } from "@/components/import/ImportResumeClient";
 import { PrivacyNotice } from "@/components/PrivacyNotice";
-import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +13,6 @@ export default async function ImportPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  if (user && (await shouldForceOnboarding(user))) {
-    redirect("/onboarding?next=%2Fimport");
-  }
 
   return (
     <div className="min-h-dvh bg-studio-bg">

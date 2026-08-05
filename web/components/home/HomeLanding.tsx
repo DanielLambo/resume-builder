@@ -6,8 +6,7 @@ import { useEffect, useState } from "react";
 
 import { PrivacyNotice } from "@/components/PrivacyNotice";
 
-const TYPING_LINES = [
-  "Alex Rivera — Software Engineer",
+const DEMO_BULLETS = [
   "Cut checkout API p95 latency ~40%",
   "Shipped React dashboard for 12k weekly users",
   "Tailored for Backend SWE Intern · Stripe",
@@ -25,13 +24,16 @@ function useTypewriter(lines: readonly string[], active: boolean) {
         setLineIndex(0);
         setCharIndex(0);
         setDone(false);
-      }, 2600);
+      }, 2800);
       return () => window.clearTimeout(restart);
     }
 
     const current = lines[lineIndex] ?? "";
     if (charIndex < current.length) {
-      const t = window.setTimeout(() => setCharIndex((c) => c + 1), 42 + (charIndex % 4) * 10);
+      const t = window.setTimeout(
+        () => setCharIndex((c) => c + 1),
+        38 + (charIndex % 4) * 8,
+      );
       return () => window.clearTimeout(t);
     }
 
@@ -39,23 +41,122 @@ function useTypewriter(lines: readonly string[], active: boolean) {
       const t = window.setTimeout(() => {
         setLineIndex((i) => i + 1);
         setCharIndex(0);
-      }, 420);
+      }, 480);
       return () => window.clearTimeout(t);
     }
 
-    const t = window.setTimeout(() => setDone(true), 900);
+    const t = window.setTimeout(() => setDone(true), 1100);
     return () => window.clearTimeout(t);
   }, [active, charIndex, done, lineIndex, lines]);
 
-  return { lineIndex, charIndex, done };
+  return { lineIndex, charIndex };
+}
+
+function ProductStage({ motionOn }: { motionOn: boolean }) {
+  const { lineIndex, charIndex } = useTypewriter(DEMO_BULLETS, motionOn);
+
+  return (
+    <div
+      className={[
+        "relative mx-auto w-full max-w-[34rem] lg:max-w-none",
+        motionOn ? "animate-hero-stage" : "",
+      ].join(" ")}
+      data-testid="home-product-stage"
+    >
+      <div
+        className="overflow-hidden rounded-xl border border-ide-border/80 bg-ide-gutter shadow-[0_28px_60px_-20px_rgba(26,23,22,0.55)]"
+        aria-hidden="true"
+      >
+        {/* Title bar */}
+        <div className="flex items-center gap-2 border-b border-ide-border/70 bg-ide-panel px-3 py-2">
+          <span className="text-[0.7rem] font-semibold tracking-tight text-ide-ink">
+            Resumate
+          </span>
+          <span className="truncate text-[0.65rem] text-ide-faint">
+            Alex Rivera · Backend SWE
+          </span>
+          <span className="ml-auto inline-flex items-center gap-1 rounded-sm border border-ide-accent/40 bg-ide-accent/15 px-1.5 py-0.5 font-mono text-[0.58rem] font-medium text-ide-ink">
+            <span className="h-1.5 w-1.5 rounded-full bg-ide-accent" />
+            1 page
+          </span>
+        </div>
+
+        {/* Split: source | preview */}
+        <div className="grid min-h-[15.5rem] grid-cols-[0.92fr_1.08fr] sm:min-h-[17.5rem]">
+          <div className="border-r border-ide-border/60 bg-ide-bg px-2.5 py-2.5 font-mono text-[0.58rem] leading-[1.55] text-ide-muted sm:text-[0.62rem]">
+            <p className="text-ide-faint">{"\\section*{Experience}"}</p>
+            <p className="text-ide-ink/90">{"\\entry{Stripe Intern}{2025}{Backend}"}</p>
+            <p className="text-ide-faint">{"\\begin{itemize}"}</p>
+            {DEMO_BULLETS.map((line, i) => {
+              if (i > lineIndex) return null;
+              const shown = i < lineIndex ? line : line.slice(0, charIndex);
+              const showCaret = i === lineIndex && motionOn;
+              return (
+                <p key={line} className="pl-2 text-ide-ink">
+                  {"\\item "}
+                  {shown}
+                  {showCaret ? (
+                    <span className="animate-caret-blink ml-px inline-block h-[0.85em] w-[0.4em] translate-y-[0.08em] bg-ide-accent align-middle" />
+                  ) : null}
+                </p>
+              );
+            })}
+            <p className="text-ide-faint">{"\\end{itemize}"}</p>
+          </div>
+
+          <div className="relative bg-ide-gutter px-2.5 py-2.5 sm:px-3 sm:py-3">
+            <div className="h-full rounded-sm bg-[#FFFEFA] px-3 py-2.5 text-[0.62rem] leading-snug text-studio-ink shadow-[0_6px_18px_rgba(0,0,0,0.18)] sm:text-[0.68rem]">
+              <p className="text-center text-[0.85rem] font-semibold tracking-tight sm:text-[0.95rem]">
+                Alex Rivera
+              </p>
+              <p className="mt-0.5 text-center text-[0.55rem] text-studio-muted sm:text-[0.6rem]">
+                Backend · alex@email.com
+              </p>
+              <p className="mt-2.5 border-b border-studio-border pb-0.5 text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-studio-ink/70">
+                Experience
+              </p>
+              <p className="mt-1.5 text-[0.62rem] font-semibold">
+                Stripe Intern{" "}
+                <span className="float-right font-normal text-studio-muted">
+                  2025
+                </span>
+              </p>
+              <p className="text-[0.58rem] italic text-studio-muted">Backend</p>
+              <ul className="mt-1 space-y-1 pl-3 text-[0.58rem] text-studio-ink/85 sm:text-[0.62rem]">
+                {DEMO_BULLETS.map((line, i) => {
+                  if (i > lineIndex) return null;
+                  const shown = i < lineIndex ? line : line.slice(0, charIndex);
+                  if (!shown) return null;
+                  return (
+                    <li key={line} className="list-disc">
+                      {shown}
+                      {i === lineIndex && motionOn ? (
+                        <span className="animate-caret-blink ml-px inline-block h-[0.85em] w-[0.35em] translate-y-[0.08em] bg-studio-vermilion align-middle" />
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* AI dock strip */}
+        <div className="flex items-center gap-2 border-t border-ide-border/70 bg-ide-panel px-3 py-2">
+          <span className="truncate rounded-md border border-ide-border bg-ide-raised px-2.5 py-1.5 text-[0.65rem] text-ide-faint">
+            Tailor this bullet for a Stripe backend intern role…
+          </span>
+          <span className="shrink-0 rounded-md bg-ide-accent px-2.5 py-1.5 text-[0.65rem] font-semibold text-white">
+            Apply
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function HomeLanding() {
   const [motionOn, setMotionOn] = useState(true);
-  const { lineIndex, charIndex } = useTypewriter(TYPING_LINES, motionOn);
-  const liveLine =
-    (TYPING_LINES[lineIndex] ?? "").slice(0, charIndex) ||
-    TYPING_LINES[0].slice(0, 1);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -68,6 +169,7 @@ export function HomeLanding() {
   return (
     <div className="bg-studio-bg">
       <section className="relative isolate min-h-dvh overflow-x-hidden">
+        {/* Typist photo — right-weighted atmosphere; copy sits on a solid scrim */}
         <div
           className={`absolute inset-0 ${motionOn ? "animate-hero-ken" : ""}`}
           aria-hidden="true"
@@ -78,106 +180,68 @@ export function HomeLanding() {
             fill
             priority
             sizes="100vw"
-            className="object-cover object-[62%_28%] sm:object-[70%_35%] md:object-[74%_32%]"
+            className="object-cover object-[68%_28%] sm:object-[74%_32%] lg:object-[78%_30%]"
           />
         </div>
-
-        {/* Stronger wash on phones so type stays readable over the photo */}
         <div
-          className="absolute inset-0 bg-gradient-to-b from-[#FAF8F5]/95 via-[#FAF8F5]/88 to-[#FAF8F5]/55 sm:bg-gradient-to-r sm:from-[#FAF8F5] sm:via-[#FAF8F5]/80 sm:to-transparent"
+          className="absolute inset-0 bg-gradient-to-b from-[#F4F3F1] via-[#F4F3F1]/94 to-[#F4F3F1]/72 sm:bg-gradient-to-r sm:from-[#F4F3F1] sm:via-[#F4F3F1]/92 sm:to-[#F4F3F1]/25 lg:via-[#F4F3F1]/88 lg:to-transparent"
+          aria-hidden="true"
+        />
+        <div
+          className="pointer-events-none absolute inset-y-0 right-0 hidden w-[55%] bg-gradient-to-l from-black/20 via-transparent to-transparent lg:block"
           aria-hidden="true"
         />
 
-        <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-8 sm:pb-16 lg:px-10">
+        <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 pb-[max(1.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-8 sm:pb-16 lg:px-10">
           <header className="flex shrink-0 items-center justify-between gap-3">
             <Link
               href="/"
-              className="text-[0.95rem] font-semibold tracking-tight text-studio-ink transition hover:text-studio-ink/80 sm:text-base"
+              className="text-[1.05rem] font-semibold tracking-tight text-studio-ink transition hover:text-studio-ink/80 sm:text-[1.15rem]"
             >
               Resumate
             </Link>
             <Link
               href="/login"
-              className="min-h-10 rounded-lg px-3 py-2 text-sm font-medium text-studio-ink/70 transition hover:bg-white/55 hover:text-studio-ink"
+              className="min-h-10 rounded-lg px-3 py-2 text-sm font-medium text-studio-muted transition hover:bg-black/[0.04] hover:text-studio-ink"
             >
               Sign in
             </Link>
           </header>
 
-          {/* Mobile: top-aligned stack. Desktop: vertically centered copy. */}
           <div
             className={[
-              "flex min-h-0 flex-1 flex-col",
-              "pt-8 sm:pt-0 sm:justify-center",
+              "grid min-h-0 flex-1 grid-cols-1 items-center gap-10 pt-10 sm:gap-12 sm:pt-12 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-14 lg:pt-4",
               motionOn ? "animate-hero-rise" : "",
             ].join(" ")}
           >
             <div className="max-w-xl">
-              <p className="font-semibold tracking-tight text-studio-ink text-[clamp(2.35rem,11vw,4.65rem)] leading-[0.92]">
-                Resumate
-              </p>
-              <h1 className="mt-4 max-w-[18ch] text-[1.35rem] font-semibold leading-snug tracking-tight text-studio-ink sm:mt-5 sm:text-[2rem]">
+              <h1 className="max-w-[16ch] text-[clamp(2.15rem,7.5vw,3.55rem)] font-semibold leading-[1.02] tracking-tight text-studio-ink">
                 A sharper resume for every job you want.
               </h1>
-              <p className="mt-3 max-w-md text-[0.95rem] leading-relaxed text-studio-ink/70 sm:text-[1.05rem]">
+              <p className="mt-4 max-w-md text-[1rem] leading-relaxed text-studio-muted sm:text-[1.08rem]">
                 Honest AI edits, hiring-manager feedback, and a locked one-page
                 PDF. Apply faster without inventing anything.
               </p>
-              <div className="mt-6 flex w-full flex-col gap-2.5 sm:mt-7 sm:max-w-none sm:flex-row sm:gap-3">
+              <div className="mt-7 flex w-full flex-col gap-2.5 sm:mt-8 sm:flex-row sm:gap-3">
                 <Link
                   href="/signup"
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-studio-vermilion px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(229,75,75,0.22)] transition hover:bg-studio-vermilion-hover sm:w-auto"
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-studio-ink px-5 py-3 text-sm font-semibold text-white transition hover:bg-studio-ink/90 sm:w-auto"
                 >
                   Start free
                 </Link>
                 <Link
                   href="/import"
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-studio-ink/12 bg-white/80 px-5 py-3 text-sm font-semibold text-studio-ink backdrop-blur-sm transition hover:bg-white sm:w-auto"
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-lg border border-studio-ink/15 bg-white/90 px-5 py-3 text-sm font-semibold text-studio-ink transition hover:border-studio-ink/25 hover:bg-white sm:w-auto"
                 >
                   Import resume
                 </Link>
               </div>
-
-              {/* Mobile: single live line — no multi-line mono wall */}
-              <p
-                className="mt-6 flex min-h-[1.5rem] items-center gap-1 overflow-hidden font-mono text-[0.72rem] text-studio-ink/75 lg:hidden"
-                aria-live="polite"
-              >
-                <span className="shrink-0 text-studio-vermilion" aria-hidden>
-                  ›
-                </span>
-                <span className="truncate">{liveLine}</span>
-                {motionOn ? (
-                  <span className="animate-caret-blink inline-block h-[0.9em] w-[0.35em] shrink-0 bg-studio-vermilion" />
-                ) : null}
+              <p className="mt-5 text-[0.8rem] text-studio-muted/90">
+                LaTeX source · live PDF · AI that stays honest
               </p>
             </div>
-          </div>
 
-          {/* Desktop paper card */}
-          <div
-            className="pointer-events-none absolute right-[8%] top-[38%] hidden w-[min(18rem,30vw)] lg:block xl:right-[12%] xl:top-[36%]"
-            aria-hidden="true"
-          >
-            <div className="min-h-[7.5rem] rotate-[-1.25deg] border border-[#d8d2c6] bg-[#FFFEFA]/94 px-4 py-3.5 font-mono text-[0.7rem] leading-relaxed text-studio-ink shadow-[0_14px_36px_rgba(0,0,0,0.1)]">
-              <p className="mb-2 text-[0.62rem] font-semibold tracking-[0.18em] text-studio-ink/55">
-                RESUME
-              </p>
-              {TYPING_LINES.map((line, i) => {
-                if (i > lineIndex) return null;
-                const shown =
-                  i < lineIndex ? line : line.slice(0, charIndex);
-                const showCaret = i === lineIndex && motionOn;
-                return (
-                  <p key={line} className="whitespace-pre-wrap">
-                    {shown}
-                    {showCaret ? (
-                      <span className="animate-caret-blink ml-0.5 inline-block h-[0.95em] w-[0.45em] translate-y-[0.1em] bg-studio-vermilion align-middle" />
-                    ) : null}
-                  </p>
-                );
-              })}
-            </div>
+            <ProductStage motionOn={motionOn} />
           </div>
         </div>
       </section>
