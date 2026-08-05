@@ -339,10 +339,12 @@ export function EditorClient({
         const data = await parseCompileResponse(res);
         if (!data.success) {
           const message = data.hint?.trim() || data.error.trim() || "Compile failed";
+          const short =
+            message.length > 140 ? `${message.slice(0, 137)}…` : message;
           if (gen === compileGen.current) {
-            setCompileError(message);
+            setCompileError(short);
           }
-          throw new Error(message);
+          throw new Error(short);
         }
         if (gen !== compileGen.current) return data; // stale response
         setCompileError(null);
@@ -362,8 +364,10 @@ export function EditorClient({
       } catch (err) {
         if (gen === compileGen.current) {
           const message = err instanceof Error ? err.message : "Compile failed";
-          setCompileError(message);
-          if (!quiet) toast.error(message);
+          const short =
+            message.length > 140 ? `${message.slice(0, 137)}…` : message;
+          setCompileError(short);
+          if (!quiet) toast.error("PDF compile failed", { description: short });
         }
         throw err;
       } finally {

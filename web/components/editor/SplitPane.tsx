@@ -108,7 +108,7 @@ export function SplitPane({
     >
       <div
         className={[
-          "min-h-0 min-w-0 flex-col overflow-hidden",
+          "h-full min-h-0 min-w-0 flex-col overflow-hidden",
           mobileShow === "primary" ? "flex flex-1" : "hidden",
           "lg:flex lg:flex-none lg:basis-[var(--split-pct)] lg:grow-0 lg:shrink-0",
         ].join(" ")}
@@ -127,7 +127,7 @@ export function SplitPane({
       </button>
       <div
         className={[
-          "min-h-0 min-w-0 flex-col overflow-hidden",
+          "h-full min-h-0 min-w-0 flex-col overflow-hidden",
           mobileShow === "secondary" ? "flex flex-1" : "hidden",
           "lg:flex lg:min-w-0 lg:flex-1",
         ].join(" ")}
