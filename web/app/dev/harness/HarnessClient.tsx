@@ -55,18 +55,15 @@ export function HarnessClient() {
       try {
         const res = await fetch("/api/compile", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/pdf",
+          },
           body: JSON.stringify({ latex: next, autoFit: true }),
         });
-        const data = (await res.json()) as {
-          success?: boolean;
-          pdfBase64?: string;
-          pageCount?: number;
-          lockedToOnePage?: boolean;
-          error?: string;
-          elapsedMs?: number;
-        };
-        if (!res.ok || !data.success || !data.pdfBase64) {
+        const { parseCompileResponse } = await import("@/lib/compile-client");
+        const data = await parseCompileResponse(res);
+        if (!data.success) {
           throw new Error(data.error || "Compile failed");
         }
         const elapsed = Math.round(data.elapsedMs ?? performance.now() - started);

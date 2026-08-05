@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 
 import { DAILY_AI_TOKEN_LIMIT } from "@/lib/ratelimit-constants";
 
@@ -24,14 +25,29 @@ export type TokenUsageState = {
 
 const TokenUsageContext = createContext<TokenUsageState | null>(null);
 
+function isPublicPath(pathname: string | null): boolean {
+  if (!pathname) return true;
+  return (
+    pathname === "/" ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/signup")
+  );
+}
+
 export function TokenUsageProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const skipFetch = isPublicPath(pathname);
   const [used, setUsed] = useState(0);
   const [limit, setLimit] = useState(DAILY_AI_TOKEN_LIMIT);
   const [remaining, setRemaining] = useState(DAILY_AI_TOKEN_LIMIT);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!skipFetch);
   const [warning, setWarning] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (isPublicPath(pathname)) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/ai/usage", { cache: "no-store" });
@@ -54,14 +70,17 @@ export function TokenUsageProvider({ children }: { children: ReactNode }) {
       setRemaining(
         Number(
           data.remaining ??
-            Math.max(0, Number(data.limit ?? DAILY_AI_TOKEN_LIMIT) - Number(data.used ?? 0)),
+            Math.max(
+              0,
+              Number(data.limit ?? DAILY_AI_TOKEN_LIMIT) - Number(data.used ?? 0),
+            ),
         ),
       );
       setWarning(typeof data.warning === "string" ? data.warning : null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pathname]);
 
   const applyUsage = useCallback(
     (nextUsed: number, nextRemaining?: number, nextLimit?: number) => {

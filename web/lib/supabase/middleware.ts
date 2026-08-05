@@ -39,6 +39,12 @@ export async function updateSession(request: NextRequest) {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const { pathname } = request.nextUrl;
 
+  const PUBLIC_STATIC = new Set(["/", "/login", "/signup"]);
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some((c) => c.name.includes("auth-token") || c.name.includes("sb-"));
+
+  // Anonymous traffic on marketing/auth pages: skip Supabase round-trip so CDN can cache.
   if (!url || !anonKey) {
     if (isProtected(pathname)) {
       const login = request.nextUrl.clone();
@@ -46,6 +52,10 @@ export async function updateSession(request: NextRequest) {
       login.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
       return NextResponse.redirect(login);
     }
+    return NextResponse.next({ request });
+  }
+
+  if (PUBLIC_STATIC.has(pathname) && !hasAuthCookie) {
     return NextResponse.next({ request });
   }
 
@@ -73,6 +83,14 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Signed-in users hitting the marketing home go straight to the product.
+  if (user && pathname === "/") {
+    const dest = new URL("/dashboard", request.nextUrl.origin);
+    const redirect = NextResponse.redirect(dest);
+    applyCookies(redirect, cookiesToApply);
+    return redirect;
+  }
 
   if (!user && isProtected(pathname)) {
     if (pathname.startsWith("/api/")) {

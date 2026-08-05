@@ -15,6 +15,7 @@ import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 import { writingProfileFromMetadata } from "@/lib/writing-profile";
 
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 type EditorPageProps = {
@@ -49,8 +50,8 @@ export default async function EditorPage({ params }: EditorPageProps) {
   const job = getJobTargetFromDataJson(resume.data_json);
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
-      <AppHeader email={user.email} dense />
+    <div className="editor-shell flex h-dvh flex-col overflow-hidden">
+      <AppHeader email={user.email} dense variant="ide" />
       <div className="min-h-0 flex-1 overflow-hidden">
         <EditorClient
           resumeId={resume.id}

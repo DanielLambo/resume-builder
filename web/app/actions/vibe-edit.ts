@@ -317,7 +317,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       };
     }
 
-    push("Updating the one-page preview…");
+    push(commit ? "Updating the one-page preview…" : "Preparing edit preview…");
 
     let fittedLatex = editedLatex;
     let pdfBase64: string | null = null;
@@ -327,23 +327,24 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     let layout: unknown = undefined;
     let fitElapsedMs = 0;
 
-    try {
-      const fit = await fitResumeToSinglePage(editedLatex, {
-        allowGroqCondense: false,
-      });
-      fittedLatex = injectLaTeXConfig(editedLatex, fit.finalConfig);
-      pdfBase64 = fit.compiledPdf.toString("base64");
-      pageCount = fit.pageCount;
-      lockedToOnePage = fit.lockedToOnePage;
-      layout = fit.finalConfig;
-      fitElapsedMs = fit.elapsedMs;
-      if (commit) {
+    // Preview (!commit): return latex immediately — client compiles async (optimistic UI).
+    // Commit path: fit + PDF on the server so Keep/persist stays consistent.
+    if (commit) {
+      try {
+        const fit = await fitResumeToSinglePage(editedLatex, {
+          allowGroqCondense: false,
+        });
+        fittedLatex = injectLaTeXConfig(editedLatex, fit.finalConfig);
+        pdfBase64 = fit.compiledPdf.toString("base64");
+        pageCount = fit.pageCount;
+        lockedToOnePage = fit.lockedToOnePage;
+        layout = fit.finalConfig;
+        fitElapsedMs = fit.elapsedMs;
         await persistResumePdf(supabase, user.id, resumeId, fit.compiledPdf);
+      } catch (compileErr) {
+        compileWarning = sanitizeCompileError(compileErr);
+        push(`PDF compile skipped: ${compileWarning}`);
       }
-    } catch (compileErr) {
-      // Persist the AI edit even when TeX host is down — demo must not look broken.
-      compileWarning = sanitizeCompileError(compileErr);
-      push(`PDF compile skipped: ${compileWarning}`);
     }
 
     const usage = isMockAiEnabled()
@@ -435,19 +436,30 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
     }
 
     const elapsedMs = Date.now() - started;
-    if (!compileWarning) {
+    if (commit && !compileWarning) {
       push(
-        commit
-          ? `PDF rendered successfully (${pageCount} page${pageCount === 1 ? "" : "s"}) in ${fitElapsedMs}ms.`
-          : `Preview ready (${pageCount} page${pageCount === 1 ? "" : "s"}). Not saved yet.`,
+        `PDF rendered successfully (${pageCount} page${pageCount === 1 ? "" : "s"}) in ${fitElapsedMs}ms.`,
       );
+    } else if (!commit) {
+      push("Edit ready — preview compiling in the editor. Not saved yet.");
     }
+
+    // Strip bulky history from the wire — client only needs latex + reply for preview.
+    const wireDataJson: Record<string, unknown> = {
+      latex: nextDataJson.latex,
+      version: nextDataJson.version,
+      template: nextDataJson.template,
+      pageCount: nextDataJson.pageCount,
+      layout: nextDataJson.layout,
+      last_ai_reply: nextDataJson.last_ai_reply,
+      last_ai_prompt: nextDataJson.last_ai_prompt,
+    };
 
     return {
       ok: true,
       mode: "edit",
       resumeId,
-      data_json: nextDataJson,
+      data_json: wireDataJson,
       reply: groqResult.output.reply,
       tokensUsed: groqResult.totalTokens,
       dailyTokensUsed: usage.used,

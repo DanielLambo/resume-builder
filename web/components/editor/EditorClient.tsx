@@ -9,6 +9,7 @@ import {
   useTransition,
   type KeyboardEvent,
 } from "react";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 
 import { selectionEditAction } from "@/app/actions/selection-edit";
@@ -19,12 +20,11 @@ import {
   AiComposerDock,
   type ComposerProposal,
 } from "@/components/editor/AiComposerDock";
-import { LatexSourceEditor } from "@/components/editor/LatexSourceEditor";
 import { LineOptimizerToggle, useLineOptimizerPreference } from "@/components/editor/LineOptimizerToggle";
 import { OrphanHeatmapPanel } from "@/components/editor/OrphanHeatmapPanel";
 import { PDFPreview } from "@/components/editor/PDFPreview";
 import { QuotaModal } from "@/components/editor/QuotaModal";
-import { SplitPane } from "@/components/editor/SplitPane";
+import { SplitPane, BottomDock } from "@/components/editor/SplitPane";
 import type { SourceSelection } from "@/components/editor/source-selection";
 import { WritingProfileModal } from "@/components/editor/WritingProfileModal";
 import { TemplatePicker } from "@/components/templates/TemplatePicker";
@@ -34,6 +34,7 @@ import {
 } from "@/lib/ai-history";
 import { summarizeLatexDiff } from "@/lib/ai/latex-diff";
 import { analyzeOrphans, type OrphanBullet } from "@/lib/analyzer/orphanDetector";
+import { parseCompileResponse } from "@/lib/compile-client";
 import {
   FORMAT_CONSISTENCY_PROMPT,
   polishResumeLatex,
@@ -55,6 +56,21 @@ import {
   type WritingProfile,
 } from "@/lib/writing-profile";
 import { VIBE_CLIENT_STEPS } from "@/lib/vibe-steps";
+
+const LatexSourceEditor = dynamic(
+  () =>
+    import("@/components/editor/LatexSourceEditor").then(
+      (m) => m.LatexSourceEditor,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-0 flex-1 items-center justify-center bg-ide-bg font-mono text-[0.7rem] text-ide-muted">
+        Loading editor…
+      </div>
+    ),
+  },
+);
 
 type EditorClientProps = {
   resumeId: string;
@@ -301,25 +317,19 @@ export function EditorClient({
       try {
         const res = await fetch("/api/compile", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/pdf",
+          },
           body: JSON.stringify({
             latex: source,
             autoFit: true,
             resumeId,
           }),
         });
-        const data = (await res.json()) as {
-          success?: boolean;
-          pdfBase64?: string;
-          pageCount?: number;
-          lockedToOnePage?: boolean;
-          error?: string;
-          hint?: string;
-          elapsedMs?: number;
-        };
-        if (!res.ok || !data.success || !data.pdfBase64) {
-          const message =
-            data.hint?.trim() || data.error?.trim() || "Compile failed";
+        const data = await parseCompileResponse(res);
+        if (!data.success) {
+          const message = data.hint?.trim() || data.error.trim() || "Compile failed";
           if (gen === compileGen.current) {
             setCompileError(message);
           }
@@ -551,6 +561,11 @@ export function EditorClient({
           void compilePdf(result.latex, { quiet: true })
             .then((compiled) => {
               if (!compiled?.pdfBase64) return;
+              setPdfBase64(compiled.pdfBase64);
+              setPageCount(compiled.pageCount ?? null);
+              setOnePageLock(
+                Boolean(compiled.lockedToOnePage ?? compiled.pageCount === 1),
+              );
               setProposal((current) =>
                 current
                   ? {
@@ -660,6 +675,7 @@ export function EditorClient({
           setCompileError(result.compileWarning);
         }
 
+        // Paint latex immediately; compile PDF off the critical path (optimistic).
         presentProposal({
           prompt: text,
           reply: result.reply,
@@ -672,13 +688,38 @@ export function EditorClient({
           lockedToOnePage: result.lockedToOnePage,
         });
 
+        if (!result.pdfBase64) {
+          void compilePdf(nextLatex, { quiet: true })
+            .then((compiled) => {
+              if (!compiled?.pdfBase64) return;
+              setPdfBase64(compiled.pdfBase64);
+              setPageCount(compiled.pageCount ?? null);
+              setOnePageLock(
+                Boolean(compiled.lockedToOnePage ?? compiled.pageCount === 1),
+              );
+              setProposal((current) =>
+                current
+                  ? {
+                      ...current,
+                      nextPdf: compiled.pdfBase64 ?? null,
+                      nextPageCount: compiled.pageCount ?? null,
+                      lockedToOnePage: Boolean(
+                        compiled.lockedToOnePage ?? compiled.pageCount === 1,
+                      ),
+                    }
+                  : current,
+              );
+            })
+            .catch(() => undefined);
+        }
+
         const serverLines = result.steps.map(
           (s) => `[${s.index}/${s.total}] ${s.message}`,
         );
         setStatusLines(
           serverLines.length
             ? serverLines
-            : ["Preview ready — whole resume. Not saved yet."],
+            : ["Edit ready — compiling preview…"],
         );
       } catch {
         signal.cancelled = true;
@@ -825,24 +866,24 @@ export function EditorClient({
   }
 
   const sourcePane = (
-    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-studio-bg">
-      <div className="flex items-center justify-between gap-3 px-3 py-2.5 sm:px-4">
+    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-ide-bg">
+      <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-ide-border px-2 sm:px-2.5">
         <div className="min-w-0">
-          <div className="flex min-w-0 items-baseline gap-2">
-            <h1 className="truncate text-[0.95rem] font-semibold tracking-tight text-studio-ink">
+          <div className="flex min-w-0 items-baseline gap-1.5">
+            <h1 className="truncate text-[0.75rem] font-medium tracking-tight text-ide-ink">
               {title}
             </h1>
             <span
-              className={`shrink-0 text-[0.7rem] ${
-                dirty ? "text-studio-muted" : "text-emerald-700"
+              className={`shrink-0 font-mono text-[0.6rem] ${
+                dirty ? "text-ide-faint" : "text-ide-accent"
               }`}
             >
-              {dirty ? "Unsaved" : "Saved"}
+              {dirty ? "unsaved" : "saved"}
             </span>
           </div>
           {jobLabel ? (
             <p
-              className="mt-0.5 truncate text-[0.7rem] text-studio-vermilion"
+              className="truncate font-mono text-[0.58rem] text-ide-muted"
               data-testid="job-target-label"
               title={jobLabel}
             >
@@ -850,10 +891,10 @@ export function EditorClient({
             </p>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1 text-xs text-studio-muted">
+        <div className="flex shrink-0 items-center gap-px text-[0.68rem] text-ide-muted">
           <button
             type="button"
-            className="min-h-8 rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink"
+            className="min-h-6 rounded-sm px-1.5 transition hover:bg-ide-hover hover:text-ide-ink"
             data-testid="writing-profile-open"
             onClick={() => setProfileOpen(true)}
           >
@@ -861,7 +902,7 @@ export function EditorClient({
           </button>
           <button
             type="button"
-            className="min-h-8 max-w-[9rem] truncate rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink sm:max-w-[12rem]"
+            className="min-h-6 max-w-[8rem] truncate rounded-sm px-1.5 transition hover:bg-ide-hover hover:text-ide-ink sm:max-w-[11rem]"
             onClick={() => setTemplatePickerOpen(true)}
             data-testid="template-switch"
             title={getTemplate(templateId).description}
@@ -870,7 +911,7 @@ export function EditorClient({
           </button>
           <button
             type="button"
-            className="min-h-8 rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink disabled:opacity-50"
+            className="min-h-6 rounded-sm px-1.5 transition hover:bg-ide-hover hover:text-ide-ink disabled:opacity-50"
             data-testid="format-consistency"
             title="Normalize dates, bullets, and tense. Facts stay put."
             disabled={compiling || busy}
@@ -896,28 +937,26 @@ export function EditorClient({
   );
 
   const previewPane = (
-    <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-studio-canvas">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-studio-border bg-studio-canvas/95 px-3 py-2 sm:px-4">
+    <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-ide-gutter">
+      <div className="flex h-8 shrink-0 flex-wrap items-center justify-between gap-1.5 border-b border-ide-border bg-ide-panel px-2 sm:px-2.5">
         <button
           type="button"
           onClick={onCompile}
           disabled={compiling || busy}
-          className="min-h-9 rounded-md bg-studio-vermilion px-3.5 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-50"
+          className="min-h-6 rounded bg-ide-accent px-2.5 text-[0.72rem] font-semibold text-white transition hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:bg-ide-raised disabled:text-ide-faint"
         >
           {compiling ? "Compiling…" : "Recompile"}
         </button>
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           <span
             data-testid="one-page-lock"
-            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.68rem] font-semibold tracking-wide ${
+            className={`inline-flex items-center rounded-sm px-1.5 py-0.5 font-mono text-[0.6rem] tracking-wide ${
               onePageLock
-                ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
-                : "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
+                ? "bg-ide-raised text-ide-accent ring-1 ring-ide-border"
+                : "bg-ide-raised text-ide-muted ring-1 ring-ide-border"
             }`}
           >
-            {onePageLock
-              ? "[ 🟢 1-PAGE LOCK ACTIVE ]"
-              : `[ wrapping · ${pageCount ?? "?"}p ]`}
+            {onePageLock ? "1 page" : `${pageCount ?? "?"}p`}
           </span>
           <LineOptimizerToggle
             enabled={heatmapOn}
@@ -925,16 +964,17 @@ export function EditorClient({
             onChange={setHeatmapOn}
             ready={heatmapReady}
             compact
+            variant="ide"
           />
           <div
-            className="inline-flex items-center rounded-full border border-slate-200/80 bg-white p-0.5 shadow-sm"
+            className="inline-flex items-center rounded-sm border border-ide-border bg-ide-raised p-0.5"
             data-testid="preview-zoom"
           >
             <button
               type="button"
               aria-label="Zoom out"
               disabled={zoom !== "fit" && zoom <= 50}
-              className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas disabled:opacity-35"
+              className="grid h-6 w-6 place-items-center rounded-sm text-sm text-ide-muted transition hover:bg-ide-hover hover:text-ide-ink disabled:opacity-35"
               onClick={() => bumpZoom(-10)}
             >
               −
@@ -942,10 +982,10 @@ export function EditorClient({
             <button
               type="button"
               aria-label="Reset zoom to 100 percent"
-              className={`min-h-8 min-w-[3.25rem] rounded-full px-2 text-[0.7rem] font-semibold transition ${
+              className={`min-h-6 min-w-[2.5rem] rounded-sm px-1.5 font-mono text-[0.62rem] font-medium transition ${
                 zoom === 100
-                  ? "bg-amber-500 text-white"
-                  : "text-studio-ink hover:bg-studio-canvas"
+                  ? "bg-ide-hover text-ide-ink"
+                  : "text-ide-muted hover:bg-ide-hover hover:text-ide-ink"
               }`}
               onClick={() => setZoom(100)}
             >
@@ -955,17 +995,17 @@ export function EditorClient({
               type="button"
               aria-label="Zoom in"
               disabled={zoom !== "fit" && zoom >= 200}
-              className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas disabled:opacity-35"
+              className="grid h-6 w-6 place-items-center rounded-sm text-sm text-ide-muted transition hover:bg-ide-hover hover:text-ide-ink disabled:opacity-35"
               onClick={() => bumpZoom(10)}
             >
               +
             </button>
             <button
               type="button"
-              className={`min-h-8 rounded-full px-2.5 text-[0.7rem] font-semibold transition ${
+              className={`min-h-6 rounded-sm px-1.5 font-mono text-[0.62rem] font-medium transition ${
                 zoom === "fit"
-                  ? "bg-amber-500 text-white"
-                  : "text-studio-ink hover:bg-studio-canvas"
+                  ? "bg-ide-hover text-ide-ink"
+                  : "text-ide-muted hover:bg-ide-hover hover:text-ide-ink"
               }`}
               onClick={() => setZoom("fit")}
             >
@@ -978,13 +1018,13 @@ export function EditorClient({
       <div className="flex min-h-0 flex-1 flex-col">
         {proposal ? (
           <div
-            className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-2 text-[0.78rem] text-amber-950 sm:px-4"
+            className="shrink-0 border-b border-ide-border bg-ide-raised px-2.5 py-1.5 font-mono text-[0.72rem] text-ide-ink sm:px-3"
             data-testid="preview-proposal-banner"
           >
             Showing proposed edit
-            <span className="text-amber-800/80">
+            <span className="text-ide-muted">
               {" "}
-              · {proposal.scope === "selection" ? "highlighted text" : "whole resume"} · “
+              · {proposal.scope === "selection" ? "selection" : "document"} · “
               {proposal.prompt.length > 72
                 ? `${proposal.prompt.slice(0, 71)}…`
                 : proposal.prompt}
@@ -992,7 +1032,7 @@ export function EditorClient({
             </span>
           </div>
         ) : null}
-        <div className="min-h-0 flex-1 p-3 sm:p-4">
+        <div className="min-h-0 flex-1 p-2 sm:p-2.5">
           <div className="h-full min-h-0">
             <PDFPreview
               pdfBase64={pdfBase64}
@@ -1004,7 +1044,7 @@ export function EditorClient({
           </div>
         </div>
         {heatmapOn && heatmapReady ? (
-          <div className="max-h-[28vh] shrink-0 overflow-auto border-t border-studio-border bg-studio-bg px-4 py-3 sm:px-5">
+          <div className="max-h-[28vh] shrink-0 overflow-auto border-t border-ide-border bg-ide-panel px-3 py-2 sm:px-4">
             <OrphanHeatmapPanel
               latex={latex}
               enabled
@@ -1021,7 +1061,7 @@ export function EditorClient({
 
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col bg-studio-bg"
+      className="relative flex h-full min-h-0 flex-col bg-ide-bg"
       data-testid="vibe-harness"
       data-token-used={tokensUsed}
     >
@@ -1030,12 +1070,12 @@ export function EditorClient({
           className="pointer-events-none absolute inset-x-0 top-0 z-30 h-0.5 overflow-hidden"
           data-testid="vermilion-loader"
         >
-          <div className="h-full w-full origin-left animate-pulse bg-studio-vermilion" />
+          <div className="h-full w-full origin-left animate-pulse bg-ide-accent" />
         </div>
       )}
 
       <div
-        className="flex shrink-0 border-b border-studio-border lg:hidden"
+        className="flex shrink-0 border-b border-ide-border lg:hidden"
         role="tablist"
         aria-label="Editor panes"
       >
@@ -1045,10 +1085,10 @@ export function EditorClient({
           aria-selected={mobilePane === "edit"}
           data-testid="mobile-pane-edit"
           onClick={() => setMobilePane("edit")}
-          className={`flex-1 px-3 py-3 text-center text-sm font-medium transition ${
+          className={`flex-1 px-3 py-2 text-center text-sm font-medium transition ${
             mobilePane === "edit"
-              ? "border-b-2 border-studio-vermilion text-studio-ink"
-              : "text-studio-muted"
+              ? "border-b-2 border-ide-accent text-ide-ink"
+              : "text-ide-muted"
           }`}
         >
           Source
@@ -1059,93 +1099,103 @@ export function EditorClient({
           aria-selected={mobilePane === "preview"}
           data-testid="mobile-pane-preview"
           onClick={() => setMobilePane("preview")}
-          className={`flex-1 px-3 py-3 text-center text-sm font-medium transition ${
+          className={`flex-1 px-3 py-2 text-center text-sm font-medium transition ${
             mobilePane === "preview"
-              ? "border-b-2 border-studio-vermilion text-studio-ink"
-              : "text-studio-muted"
+              ? "border-b-2 border-ide-accent text-ide-ink"
+              : "text-ide-muted"
           }`}
         >
           Preview
           {pageCount != null ? (
-            <span className="ml-1 text-[0.7rem] font-normal text-studio-muted">
+            <span className="ml-1 text-[0.7rem] font-normal text-ide-faint">
               {pageCount}p
             </span>
           ) : null}
         </button>
       </div>
 
-      <SplitPane
-        mobileShow={mobilePane === "preview" ? "right" : "left"}
-        left={sourcePane}
-        right={previewPane}
-      />
-
-      <AiComposerDock
-        prompt={prompt}
-        promptRef={promptRef}
-        busy={busy}
-        compiling={compiling}
-        lastPrompt={lastPrompt}
-        reply={reply}
-        review={review}
-        compileError={compileError}
-        statusLines={statusLines}
-        promptIsReview={promptIsReview}
-        scope={
-          selection?.text.trim()
-            ? {
-                kind: "selection",
-                lineCount: selection.text.split("\n").length,
-                preview: selection.text,
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <SplitPane
+            storageKey="resumate_editor_split_pct"
+            defaultPercent={48}
+            minPercent={18}
+            maxPercent={82}
+            resizeLabel="Resize source and preview"
+            mobileShow={mobilePane === "preview" ? "secondary" : "primary"}
+            primary={sourcePane}
+            secondary={previewPane}
+          />
+        </div>
+        <BottomDock defaultHeight={128} minHeight={72} maxHeight={280}>
+          <AiComposerDock
+            prompt={prompt}
+            promptRef={promptRef}
+            busy={busy}
+            compiling={compiling}
+            lastPrompt={lastPrompt}
+            reply={reply}
+            review={review}
+            compileError={compileError}
+            statusLines={statusLines}
+            promptIsReview={promptIsReview}
+            scope={
+              selection?.text.trim()
+                ? {
+                    kind: "selection",
+                    lineCount: selection.text.split("\n").length,
+                    preview: selection.text,
+                  }
+                : { kind: "document" }
+            }
+            proposal={
+              proposal
+                ? {
+                    prompt: proposal.prompt,
+                    reply: proposal.reply,
+                    scope: proposal.scope,
+                    diff: proposal.diff,
+                  }
+                : null
+            }
+            versionIndex={versions.index}
+            versionTotal={versions.stack.length}
+            onPromptChange={setPrompt}
+            onPromptKeyDown={onPromptKeyDown}
+            onPickRecipe={(recipePrompt, recipeId) => {
+              const recipe = getPromptRecipe(recipeId);
+              if (recipe?.scope === "document" && selection?.text.trim()) {
+                setSelection(null);
+                toast.message("This action uses the whole resume");
               }
-            : { kind: "document" }
-        }
-        proposal={
-          proposal
-            ? {
-                prompt: proposal.prompt,
-                reply: proposal.reply,
-                scope: proposal.scope,
-                diff: proposal.diff,
-              }
-            : null
-        }
-        versionIndex={versions.index}
-        versionTotal={versions.stack.length}
-        onPromptChange={setPrompt}
-        onPromptKeyDown={onPromptKeyDown}
-        onPickRecipe={(recipePrompt, recipeId) => {
-          const recipe = getPromptRecipe(recipeId);
-          if (recipe?.scope === "document" && selection?.text.trim()) {
-            setSelection(null);
-            toast.message("This action uses the whole resume");
-          }
-          setPrompt(recipePrompt);
-          promptRef.current?.focus();
-        }}
-        onRun={() => runVibeEdit()}
-        onStop={stopVibeEdit}
-        onRegenerate={() =>
-          runVibeEdit({
-            prompt: lastPrompt ?? "",
-            clearPrompt: false,
-          })
-        }
-        onClearScope={() => setSelection(null)}
-        onKeepProposal={keepProposal}
-        onDiscardProposal={discardProposal}
-        onDismissCompileError={() => setCompileError(null)}
-        onFixCompile={() => {
-          if (!compileError) return;
-          runVibeEdit({
-            prompt: COMPILE_FIX_PROMPT,
-            compilerError: compileError,
-            clearPrompt: false,
-          });
-        }}
-        onVersionPrev={() => restoreVersion(versions.index - 1)}
-        onVersionNext={() => restoreVersion(versions.index + 1)}
-      />
+              setPrompt(recipePrompt);
+              promptRef.current?.focus();
+            }}
+            onRun={() => runVibeEdit()}
+            onStop={stopVibeEdit}
+            onRegenerate={() =>
+              runVibeEdit({
+                prompt: lastPrompt ?? "",
+                clearPrompt: false,
+              })
+            }
+            onClearScope={() => setSelection(null)}
+            onKeepProposal={keepProposal}
+            onDiscardProposal={discardProposal}
+            onDismissCompileError={() => setCompileError(null)}
+            onFixCompile={() => {
+              if (!compileError) return;
+              runVibeEdit({
+                prompt: COMPILE_FIX_PROMPT,
+                compilerError: compileError,
+                clearPrompt: false,
+              });
+            }}
+            onVersionPrev={() => restoreVersion(versions.index - 1)}
+            onVersionNext={() => restoreVersion(versions.index + 1)}
+          />
+        </BottomDock>
+      </div>
 
       <QuotaModal
         open={quotaOpen}

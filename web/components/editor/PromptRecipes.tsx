@@ -1,57 +1,53 @@
 "use client";
 
 import {
-  PROMPT_RECIPES,
-  RECIPE_KIND_LABEL,
-  type PromptRecipeKind,
-} from "@/lib/prompt-recipes";
+  AlignLeft,
+  Crosshair,
+  Maximize2,
+  MessageSquareText,
+  Sparkles,
+  Type,
+} from "lucide-react";
+
+import { PROMPT_RECIPES } from "@/lib/prompt-recipes";
 
 type PromptRecipesProps = {
   disabled?: boolean;
   onPick: (prompt: string, recipeId: string) => void;
 };
 
-const KIND_ORDER: PromptRecipeKind[] = ["layout", "rewrite", "review"];
-
-const KIND_PILL: Record<PromptRecipeKind, string> = {
-  layout:
-    "border-slate-300 bg-white text-studio-muted hover:border-studio-ink/30 hover:text-studio-ink",
-  rewrite:
-    "border-amber-300/80 bg-amber-50 text-amber-950 hover:border-amber-500/70",
-  review:
-    "border-emerald-300/80 bg-emerald-50 text-emerald-950 hover:border-emerald-500/70",
+const RECIPE_ICON: Record<string, typeof AlignLeft> = {
+  format: Type,
+  tighten: AlignLeft,
+  "one-page": Maximize2,
+  humanize: Sparkles,
+  metrics: Crosshair,
+  "review-swe": MessageSquareText,
 };
 
+/** Single compact row — never stacks into half the viewport. */
 export function PromptRecipes({ disabled, onPick }: PromptRecipesProps) {
   return (
-    <div className="space-y-2" data-testid="prompt-recipes" aria-label="Suggested edits">
-      {KIND_ORDER.map((kind) => {
-        const recipes = PROMPT_RECIPES.filter((recipe) => recipe.kind === kind);
-        if (recipes.length === 0) return null;
+    <div
+      className="-mx-0.5 flex gap-0.5 overflow-x-auto px-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      data-testid="prompt-recipes"
+      aria-label="Suggested edits"
+    >
+      {PROMPT_RECIPES.map((recipe) => {
+        const Icon = RECIPE_ICON[recipe.id] ?? AlignLeft;
         return (
-          <div key={kind} className="space-y-1">
-            <p className="text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-studio-muted">
-              {RECIPE_KIND_LABEL[kind]}
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {recipes.map((recipe) => (
-                <button
-                  key={recipe.id}
-                  type="button"
-                  disabled={disabled}
-                  title={recipe.hint}
-                  data-testid={`prompt-recipe-${recipe.id}`}
-                  onClick={() => onPick(recipe.prompt, recipe.id)}
-                  className={[
-                    "min-h-8 rounded-full border px-2.5 py-1 text-[0.7rem] transition disabled:opacity-45",
-                    KIND_PILL[kind],
-                  ].join(" ")}
-                >
-                  {recipe.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <button
+            key={recipe.id}
+            type="button"
+            disabled={disabled}
+            title={recipe.hint}
+            data-testid={`prompt-recipe-${recipe.id}`}
+            onClick={() => onPick(recipe.prompt, recipe.id)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-[0.68rem] text-ide-muted transition hover:bg-ide-hover hover:text-ide-ink disabled:opacity-40"
+          >
+            <Icon className="h-3 w-3 shrink-0" strokeWidth={1.75} aria-hidden />
+            {recipe.label}
+          </button>
         );
       })}
     </div>
