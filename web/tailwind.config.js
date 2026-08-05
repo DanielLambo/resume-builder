@@ -20,25 +20,26 @@ module.exports = {
           "vermilion-hover": "#D9381E",
           amber: "#d97706",
         },
-        /** Overleaf-style dark IDE chrome (editor shell only). */
+        /** Dark IDE chrome — warm charcoal + brand vermilion (matches site). */
         ide: {
           /** Code editor surface */
-          bg: "#222831",
-          /** Toolbars, header, AI dock */
-          panel: "#2a313c",
-          /** Chips, inputs, elevated controls */
-          raised: "#353d4a",
-          hover: "#414b5a",
-          /** Separators — stronger so panes read as distinct */
-          border: "#4d5666",
+          bg: "#252220",
+          /** Toolbars, header */
+          panel: "#2e2928",
+          /** Chips, inputs, AI dock */
+          raised: "#3a3432",
+          hover: "#46403d",
+          /** Separators */
+          border: "#5c534e",
           /** Preview canvas around the white page */
-          gutter: "#181c24",
-          ink: "#f1f3f6",
-          muted: "#aeb6c2",
-          faint: "#808a99",
-          accent: "#5cbf60",
-          "accent-hover": "#4caf50",
-          "accent-muted": "#3d8b40",
+          gutter: "#1a1716",
+          ink: "#f3f0ec",
+          muted: "#b5aea6",
+          faint: "#8a827a",
+          /** Same vermilion as marketing / studio CTAs */
+          accent: "#E54B4B",
+          "accent-hover": "#D9381E",
+          "accent-muted": "#b53a3a",
         },
       },
       fontFamily: {
