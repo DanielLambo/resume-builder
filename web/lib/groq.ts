@@ -8,6 +8,8 @@ import {
   type GroqResumeReviewResult,
   type ResumeReview,
 } from "@/lib/resume-review";
+import { detectContentWipe } from "@/lib/latex-preservation";
+import { getLatexFromDataJson } from "@/lib/resume-template";
 import {
   VibeEditModelOutputSchema,
   type GroqVibeEditResult,
@@ -88,7 +90,11 @@ async function callGroqOnce(input: {
     "Return JSON only matching:",
     '{"data_json": object, "reply": string}',
     "data_json MUST include a full compilable LaTeX string in the `latex` field.",
-    "Update data_json based on the user prompt. Keep facts honest. Do not invent employers or metrics.",
+    "Make the smallest possible surgical edit that satisfies the prompt.",
+    "Never delete, rewrite, or omit unrelated jobs, bullets, education, skills, or sections.",
+    "If the user adds one role (for example an internship at Rippling), INSERT that role and keep every other entry verbatim.",
+    "Do not invent employers, dates, or metrics. If a detail is missing, use a short placeholder the user can fill.",
+    "Reply in one sentence listing only what changed.",
     input.writingProfileNote?.trim() || "",
   ]
     .filter(Boolean)
@@ -150,6 +156,13 @@ async function callGroqOnce(input: {
   const latexError = looksLikeLatex(output.data_json);
   if (latexError) {
     throw new Error(`LATEX_INVALID: ${latexError}`);
+  }
+
+  const previousLatex = getLatexFromDataJson(input.dataJson);
+  const nextLatex = getLatexFromDataJson(output.data_json);
+  const wipe = detectContentWipe(previousLatex, nextLatex);
+  if (wipe) {
+    throw new Error(wipe);
   }
 
   return {
@@ -218,6 +231,7 @@ export async function invokeGroqVibeEdit(input: {
       const healable =
         message.startsWith("INVALID_JSON") ||
         message.startsWith("LATEX_INVALID") ||
+        message.startsWith("CONTENT_WIPED") ||
         message.includes("Zod") ||
         message.includes("non-JSON");
 
