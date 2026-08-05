@@ -10,7 +10,7 @@ type PromptRecipesProps = {
 export function PromptRecipes({ disabled, onPick }: PromptRecipesProps) {
   return (
     <div
-      className="mb-2 flex flex-wrap gap-1.5"
+      className="flex flex-wrap gap-1.5"
       data-testid="prompt-recipes"
       aria-label="Suggested prompts"
     >

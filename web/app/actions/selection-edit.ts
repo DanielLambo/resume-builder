@@ -6,8 +6,8 @@ import { z } from "zod";
 import type { Json } from "@/lib/database.types";
 import {
   DEFAULT_GROQ_MODEL,
-  GROQ_BUSY_MESSAGE,
   isGroqRateLimitError,
+  messageForGroqLimit,
   throwIfGroqFailed,
 } from "@/lib/groq-model";
 import { isMockAiEnabled } from "@/lib/mock-ai";
@@ -142,6 +142,7 @@ async function editSelectionWithGroq(input: {
       model,
       temperature: 0.2,
       max_tokens: 800,
+      ...(model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
@@ -156,7 +157,7 @@ async function editSelectionWithGroq(input: {
     }),
   });
 
-  throwIfGroqFailed(response);
+  await throwIfGroqFailed(response);
   const raw: unknown = await response.json();
   const content = (
     raw as { choices?: Array<{ message?: { content?: string } }>; usage?: { total_tokens?: number } }
@@ -324,7 +325,7 @@ export async function selectionEditAction(
         ok: false,
         status: 500,
         code: "INTERNAL",
-        error: GROQ_BUSY_MESSAGE,
+        error: messageForGroqLimit(err),
       };
     }
     return {
