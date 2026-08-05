@@ -50,7 +50,7 @@ export default async function EditorPage({ params }: EditorPageProps) {
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
-      <AppHeader email={user.email} />
+      <AppHeader email={user.email} dense />
       <div className="min-h-0 flex-1 overflow-hidden">
         <EditorClient
           resumeId={resume.id}
