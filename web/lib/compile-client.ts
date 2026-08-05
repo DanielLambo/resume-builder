@@ -15,6 +15,8 @@ export type CompilePdfError = {
   success: false;
   error: string;
   hint?: string;
+  /** 1-based TeX source line when the compiler reported `l.N`. */
+  line?: number | null;
 };
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -53,6 +55,7 @@ export async function parseCompileResponse(
     lockedToOnePage?: boolean;
     error?: string;
     hint?: string;
+    line?: number | null;
     elapsedMs?: number;
   } | null;
 
@@ -66,9 +69,19 @@ export async function parseCompileResponse(
     };
   }
 
+  const message = data?.hint?.trim() || data?.error?.trim() || "Compile failed";
+  const fromMsg = /^Line (\d+):/i.exec(message);
+  const line =
+    typeof data?.line === "number"
+      ? data.line
+      : fromMsg
+        ? Number(fromMsg[1])
+        : null;
+
   return {
     success: false,
-    error: data?.error?.trim() || "Compile failed",
+    error: message,
     hint: data?.hint?.trim(),
+    line,
   };
 }
