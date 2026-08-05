@@ -22,18 +22,23 @@ module.exports = {
         },
         /** Overleaf-style dark IDE chrome (editor shell only). */
         ide: {
-          bg: "#1a1d23",
-          panel: "#16181c",
-          raised: "#22262e",
-          hover: "#2a2f38",
-          border: "#2e333c",
-          gutter: "#12141a",
-          ink: "#e6e8ec",
-          muted: "#8b919c",
-          faint: "#5c6370",
-          accent: "#4caf50",
-          "accent-hover": "#43a047",
-          "accent-muted": "#2e7d32",
+          /** Code editor surface */
+          bg: "#222831",
+          /** Toolbars, header, AI dock */
+          panel: "#2a313c",
+          /** Chips, inputs, elevated controls */
+          raised: "#353d4a",
+          hover: "#414b5a",
+          /** Separators — stronger so panes read as distinct */
+          border: "#4d5666",
+          /** Preview canvas around the white page */
+          gutter: "#181c24",
+          ink: "#f1f3f6",
+          muted: "#aeb6c2",
+          faint: "#808a99",
+          accent: "#5cbf60",
+          "accent-hover": "#4caf50",
+          "accent-muted": "#3d8b40",
         },
       },
       fontFamily: {
