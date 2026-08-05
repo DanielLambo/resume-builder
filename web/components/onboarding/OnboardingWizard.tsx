@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -14,10 +13,10 @@ import {
   ONBOARDING_DONE_KEY,
   ONBOARDING_STORAGE_KEY,
 } from "@/lib/onboarding/schema";
+import { STUDIO_TOUR_PENDING_KEY } from "@/lib/studio-tour";
 import { useOnboardingState } from "@/lib/onboarding/useOnboardingState";
 
 export function OnboardingWizard() {
-  const router = useRouter();
   const state = useOnboardingState();
   const [submitting, setSubmitting] = useState(false);
 
@@ -32,23 +31,12 @@ export function OnboardingWizard() {
       try {
         window.localStorage.setItem(ONBOARDING_DONE_KEY, "1");
         window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
+        window.localStorage.setItem(STUDIO_TOUR_PENDING_KEY, "1");
       } catch {
         /* ignore */
       }
-      try {
-        const { default: confetti } = await import("canvas-confetti");
-        confetti({
-          particleCount: 90,
-          spread: 70,
-          origin: { y: 0.7 },
-          colors: ["#C44B3B", "#2F3A33", "#E8E4DC", "#1A1A1A"],
-        });
-      } catch {
-        /* confetti is optional polish */
-      }
       toast.success("Welcome to Typesetter");
-      router.replace("/dashboard");
-      router.refresh();
+      window.location.assign("/dashboard?tour=1");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not finish setup");
     } finally {

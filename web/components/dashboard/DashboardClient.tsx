@@ -192,13 +192,17 @@ export function DashboardClient({
           disabled={pending}
           className="inline-flex min-h-11 w-full items-center justify-center bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white hover:bg-studio-vermilion-hover disabled:opacity-60 sm:w-auto"
           data-testid="create-resume"
+          data-tour="create-resume"
         >
           {pending && !busyId ? "Creating…" : "Create New Resume"}
         </button>
       </div>
 
       {resumes.length === 0 ? (
-        <div className="grid place-items-center gap-3 border border-studio-border bg-studio-paper px-6 py-16 text-center shadow-paper-sheet">
+        <div
+          data-tour="library"
+          className="grid place-items-center gap-3 border border-studio-border bg-studio-paper px-6 py-16 text-center shadow-paper-sheet"
+        >
           <h2 className="text-lg font-semibold text-studio-ink">
             Nothing on the desk yet
           </h2>
@@ -215,7 +219,10 @@ export function DashboardClient({
           </button>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          data-tour="library"
+          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        >
           {resumes.map((resume) => {
             const busy = busyId === resume.id;
             const job = getJobTargetFromDataJson(resume.data_json);

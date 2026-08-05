@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { OnboardingDataSchema, type OnboardingData } from "@/lib/onboarding/schema";
 import { createClient } from "@/lib/supabase/server";
 
@@ -51,5 +53,8 @@ export async function completeOnboardingAction(
     return { ok: false, error: error.message };
   }
 
+  revalidatePath("/dashboard");
+  revalidatePath("/onboarding");
+  revalidatePath("/", "layout");
   return { ok: true };
 }
