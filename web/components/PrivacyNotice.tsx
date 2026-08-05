@@ -16,6 +16,7 @@ export function PrivacyNotice({ className = "" }: { className?: string }) {
         </li>
         <li>
           Vibe edits send your prompt and resume text to Groq to apply changes.
+          PDF import sends extracted resume text to Groq the same way.
         </li>
         <li>
           PDF compile uses your private TeX host when{" "}

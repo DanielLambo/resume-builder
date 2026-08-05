@@ -114,6 +114,12 @@ export function HomeLanding() {
                 Start free
               </Link>
               <Link
+                href="/import"
+                className="inline-flex min-h-12 items-center justify-center border border-studio-ink/15 bg-studio-paper/80 px-5 py-3 text-sm font-semibold text-studio-ink backdrop-blur-sm transition hover:bg-studio-paper"
+              >
+                Import resume
+              </Link>
+              <Link
                 href="/login"
                 className="inline-flex min-h-12 items-center justify-center border border-studio-ink/15 bg-studio-paper/80 px-5 py-3 text-sm font-semibold text-studio-ink backdrop-blur-sm transition hover:bg-studio-paper"
               >

@@ -11,6 +11,7 @@ const ALLOWED_NEXT = [
   /^\/dashboard(?:\/|$)/,
   /^\/editor(?:\/|$)/,
   /^\/onboarding(?:\/|$)/,
+  /^\/import(?:\/|$|\?)/,
 ] as const;
 
 function safeNextPath(next: string | null): string {
