@@ -84,6 +84,31 @@ select {
   .editor-shell *::-webkit-scrollbar-thumb:hover {
     background-color: #827870;
   }
+
+  /* CodeMirror source pane — always show a usable scrollbar track */
+  .editor-shell .cm-scroller {
+    scrollbar-width: auto;
+    scrollbar-color: #8a827a #1f1c1b;
+  }
+
+  .editor-shell .cm-scroller::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+
+  .editor-shell .cm-scroller::-webkit-scrollbar-track {
+    background: #1f1c1b;
+  }
+
+  .editor-shell .cm-scroller::-webkit-scrollbar-thumb {
+    background-color: #8a827a;
+    border-radius: 6px;
+    border: 2px solid #1f1c1b;
+  }
+
+  .editor-shell .cm-scroller::-webkit-scrollbar-thumb:hover {
+    background-color: #a39a90;
+  }
 }
 
 @keyframes hero-ken {

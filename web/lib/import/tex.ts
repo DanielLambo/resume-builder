@@ -17,6 +17,34 @@ const JAKE_MARKERS =
 const NEEDS_REWRITE =
   /\\usepackage\{fontspec\}|\\setmainfont|\\documentclass(?:\[[^\]]*\])?\{(awesome-cv|moderncv|altacv|resume|cv)\}|\\input\{(?!glyphtounicode)/i;
 
+/**
+ * Soften common Jake-template paste issues before conversion.
+ * Unwraps nested font commands and strips files this host cannot load.
+ */
+export function softenJakeSource(src: string): string {
+  let s = src;
+
+  s = s.replace(/\\input\{glyphtounicode\}/gi, "");
+  s = s.replace(/\\pdfgentounicode\s*=\s*1/gi, "");
+  s = s.replace(/\\href\{\}\s*\{([^{}]*)\}/g, "$1");
+
+  for (const cmd of ["textbf", "textit", "emph", "underline", "scshape", "bfseries"]) {
+    let prev = "";
+    while (prev !== s) {
+      prev = s;
+      s = s.replace(new RegExp(`\\\\${cmd}\\{([^{}]*)\\}`, "g"), "$1");
+    }
+  }
+
+  s = s.replace(
+    /\{\s*(\\(?:resumeItem|resumeSubheading|resumeProjectHeading|resumeItemListStart|resumeSubHeadingListStart)\b)/g,
+    "$1",
+  );
+  s = s.replace(/\|\s*\|/g, "|");
+
+  return s;
+}
+
 function extractBraced(src: string, openIdx: number): { inner: string; end: number } | null {
   if (src[openIdx] !== "{") return null;
   let depth = 0;
@@ -207,7 +235,7 @@ export function planTexImport(raw: string): TexPlan {
   }
 
   if (JAKE_MARKERS.test(source)) {
-    const body = documentBody(source) ?? source;
+    const body = documentBody(softenJakeSource(source)) ?? softenJakeSource(source);
     const { header, rest } = headerFromCenterBlock(body);
     const converted = convertJakeBody(rest);
     const latex = `${HOUSE_LATEX_PREAMBLE}
