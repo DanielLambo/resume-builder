@@ -45,6 +45,10 @@ import {
   getTemplate,
   type ResumeTemplateId,
 } from "@/lib/resume-template";
+import {
+  GROQ_BUSY_MESSAGE,
+  looksLikeGroqLimitMessage,
+} from "@/lib/groq-messages";
 import { useTokenUsage } from "@/lib/token-usage";
 import {
   EMPTY_WRITING_PROFILE,
@@ -510,6 +514,12 @@ export function EditorClient({
           signal.cancelled = true;
           if (id !== runId.current) return;
           if (!result.ok) {
+            if (result.code === "GROQ_BUSY" || looksLikeGroqLimitMessage(result.error)) {
+              toast.error(
+                result.code === "GROQ_BUSY" ? result.error : GROQ_BUSY_MESSAGE,
+              );
+              return;
+            }
             if (result.status === 429 || result.code === "AI_DAILY_LIMIT") {
               if (typeof result.used === "number") {
                 applyUsage(result.used, undefined, result.limit);
@@ -587,8 +597,10 @@ export function EditorClient({
               result.steps.map((s) => `[${s.index}/${s.total}] ${s.message}`),
             );
           }
-          if (result.code === "GROQ_BUSY") {
-            toast.error(result.error);
+          if (result.code === "GROQ_BUSY" || looksLikeGroqLimitMessage(result.error)) {
+            toast.error(
+              result.code === "GROQ_BUSY" ? result.error : GROQ_BUSY_MESSAGE,
+            );
             return;
           }
           if (result.status === 429 || result.code === "AI_DAILY_LIMIT") {
@@ -766,6 +778,12 @@ export function EditorClient({
         kind: bullet.kind,
       });
       if (!result.ok) {
+        if (result.code === "GROQ_BUSY" || looksLikeGroqLimitMessage(result.error)) {
+          toast.error(
+            result.code === "GROQ_BUSY" ? result.error : GROQ_BUSY_MESSAGE,
+          );
+          return;
+        }
         if (result.code === "AI_DAILY_LIMIT") {
           setQuotaTitle("Daily AI token limit reached");
           setQuotaBody(result.error);
@@ -915,7 +933,8 @@ export function EditorClient({
             <button
               type="button"
               aria-label="Zoom out"
-              className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas"
+              disabled={zoom !== "fit" && zoom <= 50}
+              className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas disabled:opacity-35"
               onClick={() => bumpZoom(-10)}
             >
               −
@@ -930,12 +949,13 @@ export function EditorClient({
               }`}
               onClick={() => setZoom(100)}
             >
-              100%
+              {zoom === "fit" ? "Fit" : `${zoom}%`}
             </button>
             <button
               type="button"
               aria-label="Zoom in"
-              className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas"
+              disabled={zoom !== "fit" && zoom >= 200}
+              className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas disabled:opacity-35"
               onClick={() => bumpZoom(10)}
             >
               +
@@ -973,7 +993,7 @@ export function EditorClient({
           </div>
         ) : null}
         <div className="min-h-0 flex-1 p-3 sm:p-4">
-          <div className="mx-auto h-full max-w-[8.5in]">
+          <div className="h-full min-h-0">
             <PDFPreview
               pdfBase64={pdfBase64}
               pageCount={pageCount}
