@@ -826,14 +826,14 @@ export function EditorClient({
 
   const sourcePane = (
     <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-studio-bg">
-      <div className="flex items-center justify-between gap-3 px-3 py-2.5 sm:px-4">
+      <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-studio-border/70 px-2.5 sm:px-3">
         <div className="min-w-0">
-          <div className="flex min-w-0 items-baseline gap-2">
-            <h1 className="truncate text-[0.95rem] font-semibold tracking-tight text-studio-ink">
+          <div className="flex min-w-0 items-baseline gap-1.5">
+            <h1 className="truncate text-[0.82rem] font-semibold tracking-tight text-studio-ink">
               {title}
             </h1>
             <span
-              className={`shrink-0 text-[0.7rem] ${
+              className={`shrink-0 text-[0.65rem] ${
                 dirty ? "text-studio-muted" : "text-emerald-700"
               }`}
             >
@@ -842,7 +842,7 @@ export function EditorClient({
           </div>
           {jobLabel ? (
             <p
-              className="mt-0.5 truncate text-[0.7rem] text-studio-vermilion"
+              className="truncate text-[0.62rem] text-studio-vermilion"
               data-testid="job-target-label"
               title={jobLabel}
             >
@@ -850,10 +850,10 @@ export function EditorClient({
             </p>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1 text-xs text-studio-muted">
+        <div className="flex shrink-0 items-center gap-0.5 text-[0.7rem] text-studio-muted">
           <button
             type="button"
-            className="min-h-8 rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink"
+            className="min-h-7 rounded px-1.5 transition hover:bg-studio-paper hover:text-studio-ink"
             data-testid="writing-profile-open"
             onClick={() => setProfileOpen(true)}
           >
@@ -861,7 +861,7 @@ export function EditorClient({
           </button>
           <button
             type="button"
-            className="min-h-8 max-w-[9rem] truncate rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink sm:max-w-[12rem]"
+            className="min-h-7 max-w-[8rem] truncate rounded px-1.5 transition hover:bg-studio-paper hover:text-studio-ink sm:max-w-[11rem]"
             onClick={() => setTemplatePickerOpen(true)}
             data-testid="template-switch"
             title={getTemplate(templateId).description}
@@ -870,7 +870,7 @@ export function EditorClient({
           </button>
           <button
             type="button"
-            className="min-h-8 rounded-md px-2 transition hover:bg-studio-paper hover:text-studio-ink disabled:opacity-50"
+            className="min-h-7 rounded px-1.5 transition hover:bg-studio-paper hover:text-studio-ink disabled:opacity-50"
             data-testid="format-consistency"
             title="Normalize dates, bullets, and tense. Facts stay put."
             disabled={compiling || busy}
@@ -897,27 +897,25 @@ export function EditorClient({
 
   const previewPane = (
     <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-studio-canvas">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-studio-border bg-studio-canvas/95 px-3 py-2 sm:px-4">
+      <div className="flex h-9 shrink-0 flex-wrap items-center justify-between gap-1.5 border-b border-studio-border bg-studio-canvas/95 px-2.5 sm:px-3">
         <button
           type="button"
           onClick={onCompile}
           disabled={compiling || busy}
-          className="min-h-9 rounded-md bg-studio-vermilion px-3.5 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-50"
+          className="min-h-7 rounded-md bg-studio-vermilion px-2.5 text-[0.75rem] font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-50"
         >
           {compiling ? "Compiling…" : "Recompile"}
         </button>
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           <span
             data-testid="one-page-lock"
-            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.68rem] font-semibold tracking-wide ${
+            className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[0.62rem] font-medium tracking-wide ${
               onePageLock
                 ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
                 : "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
             }`}
           >
-            {onePageLock
-              ? "[ 🟢 1-PAGE LOCK ACTIVE ]"
-              : `[ wrapping · ${pageCount ?? "?"}p ]`}
+            {onePageLock ? "1 page" : `${pageCount ?? "?"}p`}
           </span>
           <LineOptimizerToggle
             enabled={heatmapOn}
@@ -927,14 +925,14 @@ export function EditorClient({
             compact
           />
           <div
-            className="inline-flex items-center rounded-full border border-slate-200/80 bg-white p-0.5 shadow-sm"
+            className="inline-flex items-center rounded-md border border-slate-200/80 bg-white p-0.5"
             data-testid="preview-zoom"
           >
             <button
               type="button"
               aria-label="Zoom out"
               disabled={zoom !== "fit" && zoom <= 50}
-              className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas disabled:opacity-35"
+              className="grid h-7 w-7 place-items-center rounded text-sm text-studio-ink transition hover:bg-studio-canvas disabled:opacity-35"
               onClick={() => bumpZoom(-10)}
             >
               −
@@ -942,7 +940,7 @@ export function EditorClient({
             <button
               type="button"
               aria-label="Reset zoom to 100 percent"
-              className={`min-h-8 min-w-[3.25rem] rounded-full px-2 text-[0.7rem] font-semibold transition ${
+              className={`min-h-7 min-w-[2.75rem] rounded px-1.5 text-[0.65rem] font-semibold transition ${
                 zoom === 100
                   ? "bg-amber-500 text-white"
                   : "text-studio-ink hover:bg-studio-canvas"
@@ -955,14 +953,14 @@ export function EditorClient({
               type="button"
               aria-label="Zoom in"
               disabled={zoom !== "fit" && zoom >= 200}
-              className="grid h-8 w-8 place-items-center rounded-full text-sm text-studio-ink transition hover:bg-studio-canvas disabled:opacity-35"
+              className="grid h-7 w-7 place-items-center rounded text-sm text-studio-ink transition hover:bg-studio-canvas disabled:opacity-35"
               onClick={() => bumpZoom(10)}
             >
               +
             </button>
             <button
               type="button"
-              className={`min-h-8 rounded-full px-2.5 text-[0.7rem] font-semibold transition ${
+              className={`min-h-7 rounded px-2 text-[0.65rem] font-semibold transition ${
                 zoom === "fit"
                   ? "bg-amber-500 text-white"
                   : "text-studio-ink hover:bg-studio-canvas"
