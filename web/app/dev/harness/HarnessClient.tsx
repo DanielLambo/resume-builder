@@ -216,7 +216,6 @@ export function HarnessClient() {
             pdfBase64={pdfBase64}
             pageCount={pageCount}
             ghostActive={ghostActive}
-            pendingLatex={latex}
             compiling={pending}
           />
         </section>
