@@ -5,9 +5,23 @@ import {
   analyzeOrphans,
   didShortenBullet,
   extractItems,
+  latexToDisplayText,
   mockShortenBullet,
   replaceItemText,
 } from "./orphanDetector";
+
+describe("latexToDisplayText", () => {
+  it("unescapes common resume LaTeX", () => {
+    assert.equal(
+      latexToDisplayText(String.raw`cut bugs by 35\%.`),
+      "cut bugs by 35%.",
+    );
+    assert.equal(
+      latexToDisplayText(String.raw`benchmarked 1.8$\times$ throughput vs.\ mutex`),
+      "benchmarked 1.8× throughput vs. mutex",
+    );
+  });
+});
 
 describe("extractItems", () => {
   it("extracts bare \\item bullets and preserves sibling indentation on replace", () => {

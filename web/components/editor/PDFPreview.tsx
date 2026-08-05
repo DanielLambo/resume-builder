@@ -59,7 +59,7 @@ export function PDFPreview({
 
   return (
     <article
-      className="relative w-full max-w-[min(100%,8.5in)] aspect-[1/1.29] overflow-hidden border border-studio-border bg-studio-paper shadow-paper-sheet"
+      className="relative h-full min-h-0 w-full max-w-[min(100%,8.5in)] overflow-hidden border border-studio-border bg-white shadow-paper-sheet"
       aria-label="Resume paper preview"
       data-testid="pdf-preview-canvas"
       data-page-count={measuredPages != null ? String(measuredPages) : undefined}
@@ -68,8 +68,8 @@ export function PDFPreview({
       {ready && objectUrl ? (
         <iframe
           title="Compiled resume PDF"
-          src={`${objectUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-          className="h-full w-full border-0 bg-white"
+          src={`${objectUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&zoom=page-width`}
+          className="absolute inset-0 h-full w-full border-0 bg-white"
         />
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center sm:p-8">

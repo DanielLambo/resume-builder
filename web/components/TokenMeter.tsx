@@ -34,12 +34,18 @@ export function TokenMeter({ compact = false }: TokenMeterProps) {
           </span>
         </div>
         <div className="h-1 overflow-hidden rounded-full bg-studio-canvas">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${
-              nearLimit || warning ? "bg-studio-vermilion" : "bg-studio-ink"
-            }`}
-            style={{ width: `${loading ? 8 : pct}%` }}
-          />
+          {loading || pct > 0 ? (
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                loading
+                  ? "w-1/5 animate-pulse bg-studio-border"
+                  : nearLimit || warning
+                    ? "bg-studio-vermilion"
+                    : "bg-studio-ink"
+              }`}
+              style={loading ? undefined : { width: `${pct}%` }}
+            />
+          ) : null}
         </div>
       </div>
     );
@@ -76,12 +82,18 @@ export function TokenMeter({ compact = false }: TokenMeterProps) {
         </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-studio-canvas">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${
-            nearLimit || warning ? "bg-studio-vermilion" : "bg-studio-ink"
-          }`}
-          style={{ width: `${loading ? 8 : pct}%` }}
-        />
+        {loading || pct > 0 ? (
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${
+              loading
+                ? "w-1/5 animate-pulse bg-studio-border"
+                : nearLimit || warning
+                  ? "bg-studio-vermilion"
+                  : "bg-studio-ink"
+            }`}
+            style={loading ? undefined : { width: `${pct}%` }}
+          />
+        ) : null}
       </div>
     </div>
   );
