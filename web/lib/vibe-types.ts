@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { ResumeOp } from "@/lib/ai/resume-ops";
+
 export type VibeEditModelOutput = {
   reply: string;
   data_json: Record<string, unknown> & { latex: string };
@@ -40,4 +42,5 @@ export type GroqVibeEditResult = {
   output: VibeEditModelOutput;
   totalTokens: number;
   healed?: boolean;
+  opsApplied?: ResumeOp[];
 };

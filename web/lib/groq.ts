@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+import { parseAgentThread } from "@/lib/ai/agent-thread";
+import { buildEditContextPack, buildReviewContextPack } from "@/lib/ai/context-pack";
+import { indexLatex } from "@/lib/ai/resume-index";
+import { applyResumeOps, ResumeOpSchema, type ResumeOp } from "@/lib/ai/resume-ops";
 import { DEFAULT_GROQ_MODEL, GroqRateLimitError, throwIfGroqFailed } from "@/lib/groq-model";
 import { isMockAiEnabled, mockResumeReview, mockVibeEdit } from "@/lib/mock-ai";
 import {
@@ -16,6 +20,13 @@ import {
   type GroqVibeEditResult,
   type VibeEditModelOutput,
 } from "@/lib/vibe-types";
+
+const AgentReplySchema = z.object({
+  reply: z.string().min(1),
+  ops: z.array(ResumeOpSchema).max(24).optional(),
+  latex: z.string().optional(),
+  data_json: z.record(z.string(), z.unknown()).optional(),
+});
 
 export {
   VibeEditModelOutputSchema,
@@ -60,18 +71,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function estimateTokens(text: string): number {
-  return Math.max(1, Math.ceil(text.length / 3.5));
-}
-
-/** Stay under Groq on-demand TPM (~8k) including reserved max_tokens. */
-function completionBudget(latex: string, prompt: string): number {
-  const promptTokens = estimateTokens(latex) + estimateTokens(prompt) + 220;
-  const remaining = 7200 - promptTokens;
-  const needed = estimateTokens(latex) + 280;
-  return Math.max(500, Math.min(2800, remaining, needed));
-}
-
 function looksLikeLatex(latex: string): string | null {
   if (!latex.trim()) {
     return "latex missing or empty";
@@ -101,6 +100,29 @@ function parseModelJson(content: string): unknown {
   }
 }
 
+function resolveEditedLatex(
+  previousLatex: string,
+  index: ReturnType<typeof indexLatex>,
+  parsed: z.infer<typeof AgentReplySchema>,
+): { latex: string; opsApplied?: ResumeOp[] } {
+  if (parsed.ops && parsed.ops.length > 0) {
+    return {
+      latex: applyResumeOps(previousLatex, index, parsed.ops),
+      opsApplied: parsed.ops,
+    };
+  }
+
+  const nestedLatex =
+    parsed.data_json && typeof parsed.data_json.latex === "string"
+      ? parsed.data_json.latex
+      : "";
+  const latex = (parsed.latex?.trim() ? parsed.latex : nestedLatex).trim();
+  if (!latex) {
+    throw new Error("INVALID_JSON: missing ops and latex");
+  }
+  return { latex };
+}
+
 async function callGroqOnce(input: {
   prompt: string;
   dataJson: Record<string, unknown>;
@@ -111,31 +133,18 @@ async function callGroqOnce(input: {
   model: string;
 }): Promise<GroqVibeEditResult> {
   const previousLatex = getLatexFromDataJson(input.dataJson);
-  const system = [
-    "You are Resumate's vibe editor.",
-    'Return JSON only: {"latex":"<full compilable LaTeX>","reply":"<one sentence>"}',
-    "Escape backslashes in latex so the JSON is valid.",
-    "Make the smallest surgical edit that satisfies the prompt.",
-    "Never delete unrelated jobs, bullets, education, skills, or sections.",
-    "If the user adds one role, INSERT it and keep every other entry verbatim.",
-    "Do not invent employers, dates, or metrics.",
-    input.writingProfileNote?.trim() || "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  const userPayload: Record<string, unknown> = {
-    prompt: input.prompt,
+  const index = indexLatex(previousLatex);
+  const thread = parseAgentThread(input.dataJson.agent_thread);
+  const pack = buildEditContextPack({
     latex: previousLatex,
-  };
-  if (input.healHint) {
-    userPayload.compiler_error = input.healHint;
-    userPayload.instruction =
-      "Previous output failed validation/compile. Fix the LaTeX and return valid JSON only.";
-  }
+    index,
+    prompt: input.prompt,
+    thread,
+    writingProfileNote: input.writingProfileNote,
+    healHint: input.healHint,
+  });
 
-  const maxTokens = completionBudget(previousLatex, input.prompt);
-  if (estimateTokens(previousLatex) + estimateTokens(input.prompt) + maxTokens > 7800) {
+  if (pack.estimatedPromptTokens + pack.completionBudget > 7800) {
     throw new Error(
       "Resume is too long for one AI pass. Trim the source slightly, or try a smaller edit.",
     );
@@ -144,12 +153,9 @@ async function callGroqOnce(input: {
   const requestBody: Record<string, unknown> = {
     model: input.model,
     temperature: 0.2,
-    max_tokens: maxTokens,
+    max_tokens: pack.completionBudget,
     response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: JSON.stringify(userPayload) },
-    ],
+    messages: pack.messages,
   };
   if (input.model.includes("gpt-oss")) {
     requestBody.reasoning_effort = "low";
@@ -180,28 +186,51 @@ async function callGroqOnce(input: {
     throw new Error("INVALID_JSON: Groq returned non-JSON content");
   }
 
-  let output: VibeEditModelOutput;
+  let parsed: z.infer<typeof AgentReplySchema>;
   try {
-    output = VibeEditModelOutputSchema.parse(parsedJson);
+    parsed = AgentReplySchema.parse(parsedJson);
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "schema mismatch";
-    throw new Error(`INVALID_JSON: ${detail}`);
+    try {
+      const legacy = VibeEditModelOutputSchema.parse(parsedJson);
+      parsed = { reply: legacy.reply, latex: legacy.data_json.latex };
+    } catch {
+      const detail = err instanceof Error ? err.message : "schema mismatch";
+      throw new Error(`INVALID_JSON: ${detail}`);
+    }
   }
-  const nextLatex =
-    typeof output.data_json.latex === "string" ? output.data_json.latex : "";
-  const latexError = looksLikeLatex(nextLatex);
+
+  let resolved: { latex: string; opsApplied?: ResumeOp[] };
+  try {
+    resolved = resolveEditedLatex(previousLatex, index, parsed);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "apply failed";
+    if (message.startsWith("APPLY_FAILED")) {
+      throw new Error(message);
+    }
+    throw err;
+  }
+
+  const latexError = looksLikeLatex(resolved.latex);
   if (latexError) {
     throw new Error(`LATEX_INVALID: ${latexError}`);
   }
 
-  const wipe = detectContentWipe(previousLatex, nextLatex);
+  const wipe = detectContentWipe(previousLatex, resolved.latex);
   if (wipe) {
     throw new Error(wipe);
   }
 
+  const output: VibeEditModelOutput = {
+    reply: parsed.reply,
+    data_json: {
+      latex: resolved.latex,
+    },
+  };
+
   return {
     output,
     totalTokens: completion.usage.total_tokens,
+    opsApplied: resolved.opsApplied,
   };
 }
 
@@ -274,6 +303,7 @@ export async function invokeGroqVibeEdit(input: {
         message.startsWith("INVALID_JSON") ||
         message.startsWith("LATEX_INVALID") ||
         message.startsWith("CONTENT_WIPED") ||
+        message.startsWith("APPLY_FAILED") ||
         message.includes("Zod") ||
         message.includes("non-JSON");
 
@@ -302,52 +332,21 @@ async function callGroqReviewOnce(input: {
   baseUrl: string;
   model: string;
 }): Promise<GroqResumeReviewResult> {
-  const system = [
-    "You are Resumate's resume reviewer — a sharp hiring manager and technical recruiter.",
-    "This is ANALYSIS ONLY. Do not rewrite the resume. Do not invent employers, titles, degrees, tools, or metrics.",
-    "Ground every claim in the resume text. Prefer specific, prioritized advice a candidate can act on today.",
-    "When a target role is given, judge fit for that role; call out keyword gaps only when the resume lacks related evidence.",
-    "Score fitScore from 1–10 for the stated role (or general new-grad SWE if none).",
-    "bulletAdvice must quote real phrases from the resume when possible.",
-    "actionItems must be concrete next steps (not vague 'network more').",
-    input.writingProfileNote?.trim() || "",
-    "Return JSON only matching:",
-    JSON.stringify({
-      targetRole: "string|null",
-      fitScore: "1-10",
-      summary: "2-4 sentence verdict",
-      strengths: [{ title: "string", detail: "string" }],
-      gaps: [{ title: "string", detail: "string", severity: "high|medium|low" }],
-      bulletAdvice: [{ quote: "string", issue: "string", suggestion: "string" }],
-      keywordGaps: ["string"],
-      actionItems: ["string"],
-      reply: "short UI blurb",
-    }),
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  const userPayload: Record<string, unknown> = {
+  const pack = buildReviewContextPack({
+    resumeBody: input.resumeBody,
     prompt: input.prompt,
-    target_role: input.targetRole,
-    job_context: input.jobContext,
-    resume_body: input.resumeBody,
-  };
-  if (input.healHint) {
-    userPayload.validation_error = input.healHint;
-    userPayload.instruction =
-      "Previous output failed schema validation. Fix and return valid JSON only.";
-  }
+    targetRole: input.targetRole,
+    jobContext: input.jobContext,
+    writingProfileNote: input.writingProfileNote,
+    healHint: input.healHint,
+  });
 
   const reviewBody: Record<string, unknown> = {
     model: input.model,
     temperature: 0.35,
-    max_tokens: 1800,
+    max_tokens: pack.completionBudget,
     response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: JSON.stringify(userPayload) },
-    ],
+    messages: pack.messages,
   };
   if (input.model.includes("gpt-oss")) {
     reviewBody.reasoning_effort = "low";

@@ -19,6 +19,7 @@ import {
   incrementDailyAiTokens,
   rateLimitExceededPayload,
 } from "@/lib/ratelimit";
+import { parseAgentThread, pushAgentTurns } from "@/lib/ai/agent-thread";
 import { pushAiHistory } from "@/lib/ai-history";
 import {
   extractTargetRole,
@@ -248,12 +249,27 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       push("Structured feedback ready — resume unchanged.");
       const pageCount =
         typeof dataJson.pageCount === "number" ? dataJson.pageCount : null;
+      const reviewedDataJson: Record<string, unknown> = {
+        ...dataJson,
+        agent_thread: pushAgentTurns(
+          parseAgentThread(dataJson.agent_thread),
+          prompt,
+          reviewResult.review.reply,
+        ),
+        last_ai_reply: reviewResult.review.reply,
+        last_ai_prompt: prompt,
+      };
+      await supabase
+        .from("resumes")
+        .update({ data_json: reviewedDataJson as unknown as Json })
+        .eq("id", resumeId)
+        .eq("user_id", user.id);
 
       return {
         ok: true,
         mode: "review",
         resumeId: resume.id,
-        data_json: dataJson,
+        data_json: reviewedDataJson,
         reply: reviewResult.review.reply,
         review: reviewResult.review,
         tokensUsed: reviewResult.totalTokens,
@@ -367,6 +383,11 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
       latex: fittedLatex,
       version: prevVersion + 1,
       ai_history: nextHistory,
+      agent_thread: pushAgentTurns(
+        parseAgentThread(prevData.agent_thread),
+        prompt,
+        groqResult.output.reply,
+      ),
       last_ai_reply: groqResult.output.reply,
       last_ai_prompt: prompt,
       template:
