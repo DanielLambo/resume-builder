@@ -1,6 +1,11 @@
 "use client";
 
-import type { KeyboardEvent, ReactNode, RefObject } from "react";
+import {
+  useLayoutEffect,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { CompileErrorBanner } from "@/components/editor/CompileErrorBanner";
 import { PromptRecipes } from "@/components/editor/PromptRecipes";
@@ -9,6 +14,9 @@ import { StatusLog } from "@/components/editor/StatusLog";
 import { VersionStepper } from "@/components/editor/VersionStepper";
 import type { LatexDiffSummary } from "@/lib/ai/latex-diff";
 import type { ResumeReview } from "@/lib/resume-review";
+
+const PROMPT_SOFT_MAX = 4000;
+const TEXTAREA_MAX_PX = 168;
 
 export type ComposerScope = {
   kind: "selection" | "document";
@@ -53,7 +61,7 @@ type AiComposerDockProps = {
   onVersionNext: () => void;
 };
 
-/** Compact bottom AI bar — must not steal the editor viewport. */
+/** Compact bottom AI bar — expands modestly for long pasted prompts. */
 export function AiComposerDock({
   prompt,
   promptRef,
@@ -85,6 +93,15 @@ export function AiComposerDock({
 }: AiComposerDockProps) {
   const canSubmit = Boolean(prompt.trim()) && !busy && !proposal;
   const selectionScoped = scope.kind === "selection";
+  const promptLen = prompt.length;
+  const nearLimit = promptLen >= PROMPT_SOFT_MAX * 0.9;
+
+  useLayoutEffect(() => {
+    const el = promptRef.current;
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_PX)}px`;
+  }, [prompt, promptRef]);
 
   return (
     <section
@@ -134,55 +151,83 @@ export function AiComposerDock({
         {!proposal ? (
           <>
             <PromptRecipes disabled={busy} onPick={onPickRecipe} />
-            <div className="flex shrink-0 items-center gap-1.5">
-              <textarea
-                ref={promptRef}
-                data-testid="vibe-prompt"
-                rows={1}
-                className="max-h-16 min-h-8 w-full resize-none rounded border border-ide-border bg-ide-bg px-2 py-1.5 font-mono text-[0.78rem] leading-snug text-ide-ink outline-none placeholder:text-ide-faint focus:border-ide-faint disabled:opacity-50"
-                placeholder={
-                  selectionScoped ? "Edit the highlight…" : "Describe an edit…"
-                }
-                value={prompt}
-                disabled={busy}
-                onChange={(event) => onPromptChange(event.target.value)}
-                onKeyDown={onPromptKeyDown}
-              />
-              {busy ? (
+            <div className="flex min-h-0 items-end gap-1.5">
+              <div className="min-w-0 flex-1">
+                <textarea
+                  ref={promptRef}
+                  data-testid="vibe-prompt"
+                  rows={1}
+                  maxLength={PROMPT_SOFT_MAX}
+                  spellCheck
+                  className="max-h-[10.5rem] min-h-8 w-full resize-y rounded border border-ide-border bg-ide-bg px-2 py-1.5 font-mono text-[0.78rem] leading-snug text-ide-ink outline-none placeholder:text-ide-faint focus:border-ide-faint disabled:opacity-50"
+                  placeholder={
+                    selectionScoped
+                      ? "Edit the highlight… (paste job notes OK)"
+                      : "Describe an edit… (paste long notes or a JD)"
+                  }
+                  value={prompt}
+                  disabled={busy}
+                  onChange={(event) => onPromptChange(event.target.value)}
+                  onKeyDown={onPromptKeyDown}
+                  onPaste={() => {
+                    requestAnimationFrame(() => {
+                      const el = promptRef.current;
+                      if (!el) return;
+                      el.style.height = "0px";
+                      el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_PX)}px`;
+                    });
+                  }}
+                />
+                {promptLen > 120 ? (
+                  <p
+                    className={[
+                      "mt-0.5 font-mono text-[0.58rem] tabular-nums",
+                      nearLimit ? "text-amber-400" : "text-ide-faint",
+                    ].join(" ")}
+                    data-testid="prompt-char-count"
+                  >
+                    {promptLen.toLocaleString()}/{PROMPT_SOFT_MAX} · ⌘/Ctrl+Enter
+                    to apply
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 flex-col gap-1 pb-px">
+                {busy ? (
+                  <button
+                    type="button"
+                    data-testid="vibe-stop"
+                    onClick={onStop}
+                    className="min-h-8 rounded border border-ide-border px-2 text-[0.7rem] text-ide-ink hover:bg-ide-hover"
+                  >
+                    Stop
+                  </button>
+                ) : null}
+                {!busy && lastPrompt ? (
+                  <button
+                    type="button"
+                    data-testid="vibe-regenerate"
+                    onClick={onRegenerate}
+                    className="min-h-8 rounded border border-ide-border px-2 text-[0.7rem] text-ide-muted hover:bg-ide-hover hover:text-ide-ink"
+                  >
+                    Retry
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  data-testid="vibe-stop"
-                  onClick={onStop}
-                  className="min-h-8 shrink-0 rounded border border-ide-border px-2 text-[0.7rem] text-ide-ink hover:bg-ide-hover"
+                  data-testid="vibe-submit"
+                  data-selection-submit={selectionScoped ? "true" : "false"}
+                  disabled={!canSubmit}
+                  onClick={onRun}
+                  title={
+                    canSubmit
+                      ? "Apply (⌘/Ctrl+Enter)"
+                      : "Type an edit first"
+                  }
+                  className="min-h-8 rounded bg-ide-accent px-3 text-[0.72rem] font-semibold text-white transition hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:bg-ide-raised disabled:text-ide-faint"
                 >
-                  Stop
+                  {promptIsReview ? "Review" : "Apply"}
                 </button>
-              ) : null}
-              {!busy && lastPrompt ? (
-                <button
-                  type="button"
-                  data-testid="vibe-regenerate"
-                  onClick={onRegenerate}
-                  className="min-h-8 shrink-0 rounded border border-ide-border px-2 text-[0.7rem] text-ide-muted hover:bg-ide-hover hover:text-ide-ink"
-                >
-                  Retry
-                </button>
-              ) : null}
-              <button
-                type="button"
-                data-testid="vibe-submit"
-                data-selection-submit={selectionScoped ? "true" : "false"}
-                disabled={!canSubmit}
-                onClick={onRun}
-                title={
-                  canSubmit
-                    ? "Apply (⌘/Ctrl+Enter)"
-                    : "Type an edit first"
-                }
-                className="min-h-8 shrink-0 rounded bg-ide-accent px-3 text-[0.72rem] font-semibold text-white transition hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:bg-ide-raised disabled:text-ide-faint"
-              >
-                {promptIsReview ? "Review" : "Apply"}
-              </button>
+              </div>
             </div>
           </>
         ) : null}
