@@ -1,3 +1,5 @@
+import { FORMAT_CONSISTENCY_PROMPT } from "@/lib/format-resume";
+
 export type PromptRecipe = {
   id: string;
   label: string;
@@ -10,6 +12,11 @@ export type PromptRecipe = {
  * Keep labels short; prompts must be clear enough to run as-is.
  */
 export const PROMPT_RECIPES: readonly PromptRecipe[] = [
+  {
+    id: "format",
+    label: "Format consistently",
+    prompt: FORMAT_CONSISTENCY_PROMPT,
+  },
   {
     id: "tighten",
     label: "Tighten bullets",

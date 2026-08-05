@@ -33,6 +33,10 @@ import {
   type LocalAiSnapshot,
 } from "@/lib/ai-history";
 import { analyzeOrphans, type OrphanBullet } from "@/lib/analyzer/orphanDetector";
+import {
+  FORMAT_CONSISTENCY_PROMPT,
+  formatResumeLatex,
+} from "@/lib/format-resume";
 import { isResumeReviewPrompt, type ResumeReview } from "@/lib/resume-review";
 import {
   getTemplate,
@@ -521,6 +525,39 @@ export function EditorClient({
     });
   }
 
+  async function formatForConsistency() {
+    if (busy || compiling) return;
+
+    const current = latexRef.current;
+    const formatted = formatResumeLatex(current);
+    const next = formatted !== current ? formatted : current;
+
+    if (next !== current || dirty) {
+      latexRef.current = next;
+      if (next !== current) {
+        setLatex(next);
+        setDirty(true);
+      }
+      const saved = await saveResumeLatexAction(
+        resumeId,
+        next,
+        title,
+        templateIdRef.current,
+      );
+      if (!saved.ok) {
+        toast.error(saved.error);
+        return;
+      }
+      setDirty(false);
+    }
+
+    toast.message("Formatting for consistency…");
+    runVibeEdit({
+      prompt: FORMAT_CONSISTENCY_PROMPT,
+      clearPrompt: false,
+    });
+  }
+
   function runSelectionEdit() {
     const sel = selection;
     const text = selectionPrompt.trim() || prompt.trim();
@@ -826,6 +863,18 @@ export function EditorClient({
             </button>
             <button
               type="button"
+              className="min-h-8 border border-studio-ink/15 px-2.5 font-medium text-studio-ink transition hover:bg-studio-ink hover:text-white disabled:opacity-50"
+              data-testid="format-consistency"
+              title="Unify dates, bullets, headers, and spacing — recruiter-safe, no invented facts"
+              disabled={compiling || busy}
+              onClick={() => {
+                void formatForConsistency();
+              }}
+            >
+              Format
+            </button>
+            <button
+              type="button"
               className="min-h-8 px-2 transition hover:text-studio-ink disabled:opacity-50"
               onClick={onCompile}
               disabled={compiling || busy}
@@ -936,7 +985,11 @@ export function EditorClient({
               ) : null}
               <PromptRecipes
                 disabled={busy}
-                onPick={(recipePrompt) => {
+                onPick={(recipePrompt, recipeId) => {
+                  if (recipeId === "format") {
+                    void formatForConsistency();
+                    return;
+                  }
                   setPrompt(recipePrompt);
                   promptRef.current?.focus();
                 }}
