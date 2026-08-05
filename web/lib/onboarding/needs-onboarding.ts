@@ -6,8 +6,9 @@ type OnboardingUser = {
 } | null | undefined;
 
 /**
- * Wizard is signup-only. Login never enters setup unless this account was
- * flagged at createUser time and has not finished yet.
+ * True when createUser flagged this account for the signup wizard and it
+ * has not been completed. Used by `/onboarding` to decide whether to show
+ * the wizard vs bounce to the product — login / middleware never force it.
  */
 export function metadataNeedsOnboarding(user: OnboardingUser): boolean {
   const meta = user?.user_metadata ?? {};
