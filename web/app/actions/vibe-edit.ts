@@ -7,6 +7,10 @@ import type { Json } from "@/lib/database.types";
 import { sanitizeCompileError } from "@/lib/compile-latex";
 import { fitResumeToSinglePage } from "@/lib/fit-resume";
 import { invokeGroqResumeReview, invokeGroqVibeEdit } from "@/lib/groq";
+import {
+  GROQ_BUSY_MESSAGE,
+  isGroqRateLimitError,
+} from "@/lib/groq-model";
 import { getJobTargetFromDataJson } from "@/lib/job-target";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import { persistResumePdf } from "@/lib/persist-resume-pdf";
@@ -73,6 +77,7 @@ export type VibeEditFailure = {
   error: string;
   code?:
     | "AI_DAILY_LIMIT"
+    | "GROQ_BUSY"
     | "UNAUTHORIZED"
     | "VALIDATION"
     | "NOT_FOUND"
@@ -305,7 +310,7 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
 
     try {
       const fit = await fitResumeToSinglePage(editedLatex, {
-        allowGroqCondense: true,
+        allowGroqCondense: false,
       });
       fittedLatex = injectLaTeXConfig(editedLatex, fit.finalConfig);
       pdfBase64 = fit.compiledPdf.toString("base64");
@@ -436,6 +441,16 @@ export async function vibeEditAction(rawInput: unknown): Promise<VibeEditResult>
         used: payload.used,
         limit: payload.limit,
         resetHint: utcMidnightResetHint(),
+        steps,
+      };
+    }
+
+    if (isGroqRateLimitError(err)) {
+      return {
+        ok: false,
+        status: 429,
+        code: "GROQ_BUSY",
+        error: GROQ_BUSY_MESSAGE,
         steps,
       };
     }

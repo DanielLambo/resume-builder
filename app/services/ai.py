@@ -18,7 +18,7 @@ GROQ_BASE_URL = os.environ.get(
     "GROQ_BASE_URL",
     os.environ.get("OPENAI_BASE_URL", "https://api.groq.com/openai"),
 ).rstrip("/")
-MODEL = os.environ.get("RESUMATE_MODEL", "llama-3.3-70b-versatile")
+MODEL = os.environ.get("RESUMATE_MODEL", "openai/gpt-oss-20b")
 
 MAX_RETRIES = 3
 BACKOFF_SECONDS = [2, 4, 8]

@@ -6,6 +6,7 @@ import {
   onboardingPathWithNext,
   trySafeNextPath,
 } from "@/lib/auth-next";
+import { metadataNeedsOnboarding } from "@/lib/onboarding/needs-onboarding";
 import type { Database } from "@/lib/database.types";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/editor", "/api/ai", "/onboarding"] as const;
@@ -91,15 +92,13 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && isAuthRoute(pathname)) {
-    // Unfinished profiles → setup (keep deep link). Completed → requested next.
-    // Grandfather (has resumes, no metadata flag) is resolved on /onboarding.
+    // Signup-flagged unfinished profiles → setup. Everyone else → product.
     const requested = trySafeNextPath(request.nextUrl.searchParams.get("next"));
-    const target =
-      user.user_metadata?.onboarding_completed === true
-        ? requested && !isSetupDestination(requested)
-          ? requested
-          : "/dashboard"
-        : onboardingPathWithNext(requested);
+    const target = metadataNeedsOnboarding(user)
+      ? onboardingPathWithNext(requested)
+      : requested && !isSetupDestination(requested)
+        ? requested
+        : "/dashboard";
     const dest = new URL(target, request.nextUrl.origin);
     const redirect = NextResponse.redirect(dest);
     applyCookies(redirect, cookiesToApply);
