@@ -12,7 +12,13 @@ import type { ResumeRow } from "@/lib/database.types";
 import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
 
-async function DashboardBody({ userId }: { userId: string }) {
+async function DashboardBody({
+  userId,
+  openTemplates = false,
+}: {
+  userId: string;
+  openTemplates?: boolean;
+}) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("resumes")
@@ -43,7 +49,10 @@ async function DashboardBody({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
-      <DashboardClient initialResumes={(data ?? []) as ResumeRow[]} />
+      <DashboardClient
+        initialResumes={(data ?? []) as ResumeRow[]}
+        openTemplates={openTemplates}
+      />
       <div className="mx-auto max-w-6xl px-4 pb-10 sm:px-6">
         <PrivacyNotice />
       </div>
@@ -54,7 +63,7 @@ async function DashboardBody({ userId }: { userId: string }) {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ tour?: string }>;
+  searchParams?: Promise<{ tour?: string; new?: string }>;
 }) {
   const params = searchParams ? await searchParams : {};
   const supabase = await createClient();
@@ -74,7 +83,7 @@ export default async function DashboardPage({
     <>
       <AppHeader email={user.email} />
       <Suspense fallback={<DashboardSkeleton />}>
-        <DashboardBody userId={user.id} />
+        <DashboardBody userId={user.id} openTemplates={params.new === "1"} />
       </Suspense>
       <StudioTour welcome={params.tour === "1"} />
     </>

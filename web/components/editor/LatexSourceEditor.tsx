@@ -60,7 +60,7 @@ export function LatexSourceEditor({
   onSelectionChange,
 }: LatexSourceEditorProps) {
   return (
-    <div className="min-h-0 flex-1 overflow-hidden border-t border-studio-border bg-[#fffcf7]">
+    <div className="min-h-0 flex-1 overflow-hidden bg-[#fffcf7]">
       <CodeMirror
         value={value}
         height="100%"

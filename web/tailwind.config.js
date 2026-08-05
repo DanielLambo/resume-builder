@@ -10,14 +10,15 @@ module.exports = {
     extend: {
       colors: {
         studio: {
-          bg: "#FAF8F5",
-          canvas: "#F2EFE9",
+          bg: "#fbfbfa",
+          canvas: "#f4f3f1",
           paper: "#FFFFFF",
-          ink: "#111111",
-          muted: "#534F48",
-          border: "#E2DFD7",
+          ink: "#1a1a1a",
+          muted: "#5c5852",
+          border: "#e7e4dc",
           vermilion: "#E54B4B",
           "vermilion-hover": "#D9381E",
+          amber: "#d97706",
         },
       },
       fontFamily: {
