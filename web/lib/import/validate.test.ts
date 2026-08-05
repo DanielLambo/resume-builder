@@ -40,8 +40,16 @@ describe("latexValidationError", () => {
   it("flags badly unbalanced braces", () => {
     const latex = String.raw`\documentclass{article}
 \begin{document}
-{{{ oops
+{{{{{{{{{{ oops
 \end{document}`;
     assert.match(latexValidationError(latex) ?? "", /unbalanced/);
+  });
+
+  it("ignores escaped brace literals when checking balance", () => {
+    const latex = String.raw`\documentclass{article}
+\begin{document}
+Use \{ and \} in prose.
+\end{document}`;
+    assert.equal(latexValidationError(latex), null);
   });
 });
