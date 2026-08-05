@@ -12,6 +12,7 @@ type LineOptimizerToggleProps = {
   ready?: boolean;
   /** Shorter label for narrow preview toolbars. */
   compact?: boolean;
+  variant?: "default" | "ide";
 };
 
 export function LineOptimizerToggle({
@@ -20,15 +21,21 @@ export function LineOptimizerToggle({
   onChange,
   ready = true,
   compact = false,
+  variant = "default",
 }: LineOptimizerToggleProps) {
+  const ide = variant === "ide";
+
   return (
     <div
-      className="inline-flex items-center gap-2 select-none"
+      className="inline-flex items-center gap-1.5 select-none"
       data-testid="line-optimizer-toggle"
     >
       <span
         id="line-optimizer-label"
-        className="font-mono text-[0.65rem] uppercase tracking-wide text-studio-muted"
+        className={[
+          "font-mono text-[0.6rem] uppercase tracking-wide",
+          ide ? "text-ide-muted" : "text-studio-muted",
+        ].join(" ")}
       >
         {compact ? (
           <>
@@ -47,22 +54,33 @@ export function LineOptimizerToggle({
         disabled={!ready}
         onClick={() => onChange(!enabled)}
         className={[
-          "relative h-6 w-10 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-50 sm:h-5 sm:w-9",
-          ready && enabled ? "bg-amber-500" : "bg-slate-200",
+          "relative h-5 w-8 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-1 disabled:opacity-50",
+          ide ? "focus-visible:ring-ide-accent" : "focus-visible:ring-amber-500",
+          ready && enabled
+            ? ide
+              ? "bg-ide-accent"
+              : "bg-amber-500"
+            : ide
+              ? "bg-ide-border"
+              : "bg-slate-200",
         ].join(" ")}
       >
         <span
           className={[
-            "absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform sm:top-0.5",
-            ready && enabled
-              ? "translate-x-[1.35rem] sm:translate-x-4"
-              : "translate-x-0.5",
+            "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+            ready && enabled ? "translate-x-3.5" : "translate-x-0.5",
           ].join(" ")}
         />
       </button>
       <span
-        className={`text-[0.7rem] font-medium ${
-          ready && enabled ? "text-amber-700" : "text-studio-muted"
+        className={`font-mono text-[0.62rem] ${
+          ready && enabled
+            ? ide
+              ? "text-ide-accent"
+              : "text-amber-700"
+            : ide
+              ? "text-ide-faint"
+              : "text-studio-muted"
         }`}
         aria-live="polite"
       >

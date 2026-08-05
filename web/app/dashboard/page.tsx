@@ -8,10 +8,30 @@ import {
 } from "@/components/dashboard/DashboardClient";
 import { StudioTour } from "@/components/dashboard/StudioTour";
 import { PrivacyNotice } from "@/components/PrivacyNotice";
-import type { ResumeRow } from "@/lib/database.types";
+import type { Json, ResumeRow } from "@/lib/database.types";
+import { asDataRecord, getJobTargetFromDataJson } from "@/lib/job-target";
 import { onboardingPathWithNext } from "@/lib/auth-next";
 import { shouldForceOnboarding } from "@/lib/onboarding/gate";
 import { createClient } from "@/lib/supabase/server";
+
+/** List rows without shipping full latex / ai_history to the browser. */
+function slimResumeForLibrary(row: ResumeRow): ResumeRow {
+  const job = getJobTargetFromDataJson(row.data_json);
+  const record = asDataRecord(row.data_json);
+  const template =
+    typeof record.template === "string" ? record.template : undefined;
+  const data_json = (
+    job ? { job } : template ? { template } : {}
+  ) as Json;
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    title: row.title,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    data_json,
+  };
+}
 
 async function DashboardBody({
   userId,
@@ -23,7 +43,7 @@ async function DashboardBody({
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("resumes")
-    .select("*")
+    .select("id, user_id, title, created_at, updated_at, data_json")
     .eq("user_id", userId)
     .order("updated_at", { ascending: false });
 
@@ -48,12 +68,11 @@ async function DashboardBody({
     );
   }
 
+  const slim = ((data ?? []) as ResumeRow[]).map(slimResumeForLibrary);
+
   return (
     <div className="space-y-6">
-      <DashboardClient
-        initialResumes={(data ?? []) as ResumeRow[]}
-        openTemplates={openTemplates}
-      />
+      <DashboardClient initialResumes={slim} openTemplates={openTemplates} />
       <div className="mx-auto max-w-6xl px-4 pb-10 sm:px-6">
         <PrivacyNotice />
       </div>

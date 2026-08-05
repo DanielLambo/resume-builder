@@ -13,6 +13,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   transpilePackages: ["@resumate/one-page-lock"],
   poweredByHeader: false,
+  /** Gzip/brotli response bodies (HTML, JSON, PDF) under `next start` / Node. */
+  compress: true,
   experimental: {
     serverActions: {
       bodySizeLimit: "4mb",
@@ -23,6 +25,16 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+      {
+        // Long-cache hashed Next assets (CDN-friendly).
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
       },
     ];
   },

@@ -14,6 +14,8 @@ type AppHeaderProps = {
   showMeter?: boolean;
   /** Slim chrome for the editor — keeps vertical space for source + preview. */
   dense?: boolean;
+  /** Dark IDE chrome used on the resume editor. */
+  variant?: "default" | "ide";
 };
 
 function initialFromEmail(email: string): string {
@@ -25,11 +27,13 @@ export function AppHeader({
   email,
   showMeter = true,
   dense = false,
+  variant = "default",
 }: AppHeaderProps) {
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const onResumes =
     pathname.startsWith("/dashboard") || pathname.startsWith("/editor");
+  const ide = variant === "ide";
 
   function onSignOut() {
     startTransition(async () => {
@@ -48,14 +52,16 @@ export function AppHeader({
   return (
     <header
       className={[
-        "sticky top-0 z-40 border-b border-studio-border/80 bg-[#fbfbfa]/95 backdrop-blur-sm",
-        dense ? "shrink-0" : "",
+        "sticky top-0 z-40 shrink-0 border-b",
+        ide
+          ? "border-ide-border bg-ide-panel"
+          : "border-studio-border/80 bg-[#fbfbfa]/95 backdrop-blur-sm",
       ].join(" ")}
     >
       <div
         className={[
           "mx-auto flex w-full items-center justify-between gap-2 sm:px-6",
-          dense ? "h-10 px-3 sm:px-4" : "gap-3 px-3 py-2.5",
+          dense ? "h-9 px-3 sm:px-4" : "gap-3 px-3 py-2.5",
         ].join(" ")}
       >
         <div
@@ -67,8 +73,9 @@ export function AppHeader({
           <Link
             href="/dashboard"
             className={[
-              "shrink-0 font-semibold tracking-tight text-[#1a1a1a]",
+              "shrink-0 font-semibold tracking-tight",
               dense ? "text-[0.8rem]" : "text-sm",
+              ide ? "text-ide-ink" : "text-[#1a1a1a]",
             ].join(" ")}
           >
             Resumate
@@ -95,7 +102,12 @@ export function AppHeader({
           ) : (
             <Link
               href="/dashboard"
-              className="hidden text-[0.72rem] text-studio-muted transition hover:text-[#1a1a1a] sm:inline"
+              className={[
+                "hidden text-[0.72rem] transition sm:inline",
+                ide
+                  ? "text-ide-muted hover:text-ide-ink"
+                  : "text-studio-muted hover:text-[#1a1a1a]",
+              ].join(" ")}
             >
               ← Resumes
             </Link>
@@ -105,32 +117,25 @@ export function AppHeader({
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
           {showMeter ? (
             <div data-tour="ai-quota">
-              {dense ? (
-                <TokenMeter compact />
-              ) : (
-                <>
-                  <div className="md:hidden">
-                    <TokenMeter compact />
-                  </div>
-                  <div className="hidden md:block">
-                    <TokenMeter />
-                  </div>
-                </>
-              )}
+              <TokenMeter compact variant={ide ? "ide" : "default"} />
             </div>
           ) : null}
           <div
             className={[
-              "flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-white shadow-sm",
-              dense ? "min-h-7 py-0 pl-0.5 pr-0.5" : "min-h-9 gap-2 py-0.5 pl-0.5 pr-1",
+              "flex items-center gap-1.5",
+              dense ? "min-h-7 py-0" : "min-h-9 gap-2 py-0.5 pl-0.5 pr-1",
+              ide
+                ? "rounded border border-ide-border bg-ide-raised pl-0.5 pr-0.5"
+                : "rounded-full border border-slate-200/80 bg-white shadow-sm pl-0.5 pr-1",
             ].join(" ")}
           >
             <span
               className={[
-                "grid shrink-0 place-items-center rounded-full bg-[#1a1a1a] font-semibold text-white",
-                dense
-                  ? "h-6 w-6 text-[0.65rem]"
-                  : "h-7 w-7 text-[0.7rem]",
+                "grid shrink-0 place-items-center font-semibold",
+                dense ? "h-6 w-6 text-[0.65rem]" : "h-7 w-7 text-[0.7rem]",
+                ide
+                  ? "rounded bg-ide-hover text-ide-ink"
+                  : "rounded-full bg-[#1a1a1a] text-white",
               ].join(" ")}
               aria-hidden="true"
             >
@@ -146,10 +151,11 @@ export function AppHeader({
               onClick={onSignOut}
               disabled={pending}
               className={[
-                "shrink-0 rounded-full font-medium text-studio-muted transition hover:bg-studio-canvas hover:text-[#1a1a1a] disabled:opacity-60",
-                dense
-                  ? "min-h-6 px-2 text-[0.65rem]"
-                  : "min-h-8 px-2.5 text-xs",
+                "shrink-0 font-medium transition disabled:opacity-60",
+                dense ? "min-h-6 px-2 text-[0.65rem]" : "min-h-8 px-2.5 text-xs",
+                ide
+                  ? "rounded text-ide-muted hover:bg-ide-hover hover:text-ide-ink"
+                  : "rounded-full text-studio-muted hover:bg-studio-canvas hover:text-[#1a1a1a]",
               ].join(" ")}
             >
               {pending ? "…" : "Sign out"}
