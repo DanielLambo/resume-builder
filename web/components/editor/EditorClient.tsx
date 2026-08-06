@@ -24,6 +24,7 @@ import { EditableResumeTitle } from "@/components/editor/EditableResumeTitle";
 import { LineOptimizerToggle, useLineOptimizerPreference } from "@/components/editor/LineOptimizerToggle";
 import { OrphanHeatmapPanel } from "@/components/editor/OrphanHeatmapPanel";
 import { PDFPreview } from "@/components/editor/PDFPreview";
+import { findLatexLineForPdfText } from "@/lib/pdf-locate-in-source";
 import { QuotaModal } from "@/components/editor/QuotaModal";
 import { SplitPane, BottomDock } from "@/components/editor/SplitPane";
 import type { SourceSelection } from "@/components/editor/source-selection";
@@ -862,6 +863,18 @@ export function EditorClient({
     });
   }
 
+  function onLocateInSourceFromPdf(pdfText: string) {
+    const line = findLatexLineForPdfText(latexRef.current || latex, pdfText);
+    if (line == null) {
+      toast.message("Couldn’t find that in the source", {
+        description: "Try double-clicking a clearer heading or bullet.",
+      });
+      return;
+    }
+    setJumpToLine(line);
+    setMobilePane("edit");
+  }
+
   function applyTemplate(nextId: ResumeTemplateId) {
     if (nextId === templateId) {
       setTemplatePickerOpen(false);
@@ -1127,6 +1140,7 @@ export function EditorClient({
               ghostActive={ghostActive}
               compiling={compiling || busy}
               zoom={zoom}
+              onLocateInSource={onLocateInSourceFromPdf}
             />
           </div>
         </div>
