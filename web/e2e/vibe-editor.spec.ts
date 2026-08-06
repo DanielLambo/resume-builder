@@ -49,7 +49,7 @@ test.describe("Vibe editor harness (mock AI)", () => {
       timeout: 10_000,
     });
     await expect(preview).toHaveAttribute("data-page-count", "1");
-    await expect(preview.locator("iframe[title='Compiled resume PDF']")).toBeVisible();
+    await expect(preview.locator("img[alt^='Resume PDF page']")).toBeVisible();
     await expect(page.getByTestId("harness-latex-skills")).toContainText(/AWS/i);
     await expect(page.getByTestId("harness-latex-skills")).toContainText(/Docker/i);
     await expect(page.getByTestId("one-page-lock")).toContainText(
