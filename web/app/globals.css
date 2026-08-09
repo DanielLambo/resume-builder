@@ -106,10 +106,20 @@ select {
     border: 2px solid #1f1c1b;
   }
 
-  .editor-shell .cm-scroller::-webkit-scrollbar-thumb:hover {
-    background-color: #a39a90;
+  /* Selection must show through transparent .cm-content (drawSelection is behind text). */
+  .editor-shell .cm-content,
+  .editor-shell .cm-line {
+    background-color: transparent !important;
   }
-}
+
+  .editor-shell .cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+  .editor-shell .cm-selectionLayer .cm-selectionBackground {
+    background-color: #2f6fed !important;
+  }
+
+  .editor-shell .cm-activeLine {
+    background-color: rgba(255, 255, 255, 0.045);
+  }
 
 @keyframes hero-ken {
   0% {
