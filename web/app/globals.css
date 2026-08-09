@@ -121,6 +121,11 @@ select {
     background-color: rgba(255, 255, 255, 0.045);
   }
 
+  .editor-shell .cm-scroller::-webkit-scrollbar-thumb:hover {
+    background-color: #a39a90;
+  }
+}
+
 @keyframes hero-ken {
   0% {
     transform: scale(1.04) translate3d(0, 0, 0);
