@@ -13,19 +13,14 @@ import {
   StreamLanguage,
   syntaxHighlighting,
 } from "@codemirror/language";
-import {
-  defaultKeymap,
-  historyKeymap,
-  redo,
-  selectAll,
-  undo,
-} from "@codemirror/commands";
-import { searchKeymap, openSearchPanel } from "@codemirror/search";
-import { EditorView, keymap } from "@codemirror/view";
+import { redo, selectAll, undo } from "@codemirror/commands";
+import { openSearchPanel } from "@codemirror/search";
+import { EditorView } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import { tags as t } from "@lezer/highlight";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import { Redo2, Search, Undo2 } from "lucide-react";
+import type { ViewUpdate } from "@codemirror/view";
+import { Redo2, Search, TextSelect, Undo2 } from "lucide-react";
 
 import type { SourceSelection } from "@/components/editor/source-selection";
 
@@ -63,6 +58,9 @@ const IDE_BG = "#252220";
 const IDE_GUTTER = "#1f1c1b";
 const IDE_LINE = "#2e2928";
 const IDE_INK = "#E6EDF3";
+/** High-contrast selection — previous #5c3a38 was nearly invisible on IDE_BG. */
+const SELECTION_BG = "#2f6fed";
+const SELECTION_BG_BLUR = "#1e4a9a";
 
 const ideEditorTheme = EditorView.theme(
   {
@@ -85,7 +83,8 @@ const ideEditorTheme = EditorView.theme(
       overflowX: "auto",
       overflowY: "scroll",
       overscrollBehavior: "contain",
-      touchAction: "pan-x pan-y",
+      /* Allow click-drag text selection; pan still works for scrollbars/wheel. */
+      touchAction: "auto",
       scrollbarGutter: "stable",
       scrollbarWidth: "auto",
       scrollbarColor: `#8a827a ${IDE_GUTTER}`,
@@ -132,8 +131,27 @@ const ideEditorTheme = EditorView.theme(
     ".cm-activeLine": {
       backgroundColor: `${IDE_LINE} !important`,
     },
-    ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-      backgroundColor: "#5c3a38 !important",
+    /* Drawn selection (drawSelection) */
+    ".cm-selectionBackground": {
+      backgroundColor: `${SELECTION_BG_BLUR} !important`,
+    },
+    "&.cm-focused .cm-selectionBackground": {
+      backgroundColor: `${SELECTION_BG} !important`,
+    },
+    ".cm-selectionLayer .cm-selectionBackground": {
+      backgroundColor: `${SELECTION_BG_BLUR} !important`,
+    },
+    "&.cm-focused .cm-selectionLayer .cm-selectionBackground": {
+      backgroundColor: `${SELECTION_BG} !important`,
+    },
+    /* Native selection fallback */
+    ".cm-content ::selection": {
+      backgroundColor: `${SELECTION_BG} !important`,
+      color: "#ffffff !important",
+    },
+    ".cm-content ::-moz-selection": {
+      backgroundColor: `${SELECTION_BG} !important`,
+      color: "#ffffff !important",
     },
     ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "#E54B4B",
@@ -168,24 +186,27 @@ const EDITOR_BASIC_SETUP = {
   lintKeymap: true,
 } as const;
 
-/** Keep keymap stable and ensure select-all works with Ctrl and Cmd. */
-const editingKeymap = Prec.high(
-  keymap.of([
-    { key: "Mod-a", run: selectAll, preventDefault: true },
-    // Windows/Linux use Ctrl; macOS Mod is Cmd — also bind Ctrl-a for muscle memory.
-    { key: "Ctrl-a", run: selectAll, preventDefault: true },
-    ...historyKeymap,
-    ...searchKeymap,
-    ...defaultKeymap,
-  ]),
+/**
+ * Beat CodeMirror's macOS emacs binding (Ctrl-a = line start) and guarantee
+ * select-all for both Ctrl and Cmd before any other keymap runs.
+ */
+const selectAllDomHandler = Prec.highest(
+  EditorView.domEventHandlers({
+    keydown(event, view) {
+      if (event.altKey || event.isComposing) return false;
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      if (key !== "a" && key !== "A") return false;
+      if (!event.ctrlKey && !event.metaKey) return false;
+      event.preventDefault();
+      event.stopPropagation();
+      selectAll(view);
+      return true;
+    },
+  }),
 );
 
-const editorExtensions = [
-  latexLanguage,
-  syntaxHighlighting(latexHighlightStyle),
-  EditorView.lineWrapping,
-  editingKeymap,
-];
+/** Prefer extending the caret selection over drag-moving selected text. */
+const preferSelectOverDrag = EditorView.dragMovesSelection.of(() => false);
 
 type LatexSourceEditorProps = {
   value: string;
@@ -230,31 +251,36 @@ export function LatexSourceEditor({
     onChangeRef.current(next);
   }, []);
 
-  const handleUpdate = useCallback(
-    (viewUpdate: {
-      selectionSet: boolean;
-      docChanged: boolean;
-      state: {
-        selection: { main: { empty: boolean; from: number; to: number } };
-        sliceDoc: (from: number, to: number) => string;
-      };
-    }) => {
-      if (!viewUpdate.selectionSet && !viewUpdate.docChanged) return;
-      const range = viewUpdate.state.selection.main;
-      if (range.empty) {
-        onSelectionChangeRef.current(null);
-        return;
-      }
-      onSelectionChangeRef.current({
-        start: range.from,
-        end: range.to,
-        text: viewUpdate.state.sliceDoc(range.from, range.to),
-      });
-    },
+  /** Keep selection tracking out of the `onUpdate` prop (avoids reconfigure thrash). */
+  const selectionListener = useMemo(
+    () =>
+      EditorView.updateListener.of((viewUpdate: ViewUpdate) => {
+        if (!viewUpdate.selectionSet && !viewUpdate.docChanged) return;
+        const range = viewUpdate.state.selection.main;
+        if (range.empty) {
+          onSelectionChangeRef.current(null);
+          return;
+        }
+        onSelectionChangeRef.current({
+          start: range.from,
+          end: range.to,
+          text: viewUpdate.state.sliceDoc(range.from, range.to),
+        });
+      }),
     [],
   );
 
-  const extensions = useMemo(() => editorExtensions, []);
+  const extensions = useMemo(
+    () => [
+      latexLanguage,
+      syntaxHighlighting(latexHighlightStyle),
+      EditorView.lineWrapping,
+      preferSelectOverDrag,
+      selectAllDomHandler,
+      selectionListener,
+    ],
+    [selectionListener],
+  );
 
   function withView(run: (view: EditorView) => void) {
     const view = cmRef.current?.view;
@@ -286,6 +312,16 @@ export function LatexSourceEditor({
         >
           <Redo2 className="h-3.5 w-3.5" strokeWidth={1.75} />
         </ToolbarIcon>
+        <ToolbarIcon
+          label="Select all"
+          disabled={disabled}
+          onClick={() => withView((view) => {
+            selectAll(view);
+            view.focus();
+          })}
+        >
+          <TextSelect className="h-3.5 w-3.5" strokeWidth={1.75} />
+        </ToolbarIcon>
         <span className="mx-1 h-3.5 w-px bg-ide-border" aria-hidden />
         <ToolbarIcon
           label="Search"
@@ -310,7 +346,6 @@ export function LatexSourceEditor({
           basicSetup={EDITOR_BASIC_SETUP}
           extensions={extensions}
           onChange={handleChange}
-          onUpdate={handleUpdate}
         />
       </div>
     </div>
