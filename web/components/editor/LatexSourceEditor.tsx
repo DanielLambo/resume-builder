@@ -1,15 +1,28 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
 import {
   HighlightStyle,
   StreamLanguage,
   syntaxHighlighting,
 } from "@codemirror/language";
-import { redo, undo } from "@codemirror/commands";
-import { openSearchPanel } from "@codemirror/search";
-import { EditorView } from "@codemirror/view";
+import {
+  defaultKeymap,
+  historyKeymap,
+  redo,
+  selectAll,
+  undo,
+} from "@codemirror/commands";
+import { searchKeymap, openSearchPanel } from "@codemirror/search";
+import { EditorView, keymap } from "@codemirror/view";
+import { Prec } from "@codemirror/state";
 import { tags as t } from "@lezer/highlight";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { Redo2, Search, Undo2 } from "lucide-react";
@@ -98,14 +111,19 @@ const ideEditorTheme = EditorView.theme(
       minHeight: "100%",
       backgroundColor: `${IDE_BG} !important`,
       color: IDE_INK,
+      userSelect: "text",
+      WebkitUserSelect: "text",
     },
     ".cm-line": {
       backgroundColor: "transparent",
+      userSelect: "text",
+      WebkitUserSelect: "text",
     },
     ".cm-gutters": {
       backgroundColor: `${IDE_GUTTER} !important`,
       borderRight: "1px solid #5c534e",
       color: "#8a827a",
+      userSelect: "none",
     },
     ".cm-activeLineGutter": {
       backgroundColor: IDE_LINE,
@@ -123,6 +141,51 @@ const ideEditorTheme = EditorView.theme(
   },
   { dark: true },
 );
+
+/** Stable — new object each render would reconfigure CodeMirror and break shortcuts. */
+const EDITOR_BASIC_SETUP = {
+  lineNumbers: true,
+  foldGutter: true,
+  highlightActiveLine: true,
+  highlightActiveLineGutter: true,
+  highlightSpecialChars: true,
+  drawSelection: true,
+  dropCursor: true,
+  allowMultipleSelections: true,
+  indentOnInput: true,
+  bracketMatching: true,
+  closeBrackets: true,
+  autocompletion: true,
+  rectangularSelection: true,
+  crosshairCursor: false,
+  highlightSelectionMatches: true,
+  defaultKeymap: true,
+  historyKeymap: true,
+  searchKeymap: true,
+  history: true,
+  foldKeymap: true,
+  completionKeymap: true,
+  lintKeymap: true,
+} as const;
+
+/** Keep keymap stable and ensure select-all works with Ctrl and Cmd. */
+const editingKeymap = Prec.high(
+  keymap.of([
+    { key: "Mod-a", run: selectAll, preventDefault: true },
+    // Windows/Linux use Ctrl; macOS Mod is Cmd — also bind Ctrl-a for muscle memory.
+    { key: "Ctrl-a", run: selectAll, preventDefault: true },
+    ...historyKeymap,
+    ...searchKeymap,
+    ...defaultKeymap,
+  ]),
+);
+
+const editorExtensions = [
+  latexLanguage,
+  syntaxHighlighting(latexHighlightStyle),
+  EditorView.lineWrapping,
+  editingKeymap,
+];
 
 type LatexSourceEditorProps = {
   value: string;
@@ -143,6 +206,10 @@ export function LatexSourceEditor({
   onSelectionChange,
 }: LatexSourceEditorProps) {
   const cmRef = useRef<ReactCodeMirrorRef>(null);
+  const onChangeRef = useRef(onChange);
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onChangeRef.current = onChange;
+  onSelectionChangeRef.current = onSelectionChange;
 
   useEffect(() => {
     if (jumpToLine == null) return;
@@ -158,6 +225,36 @@ export function LatexSourceEditor({
     view.focus();
     onJumped?.();
   }, [jumpToLine, onJumped]);
+
+  const handleChange = useCallback((next: string) => {
+    onChangeRef.current(next);
+  }, []);
+
+  const handleUpdate = useCallback(
+    (viewUpdate: {
+      selectionSet: boolean;
+      docChanged: boolean;
+      state: {
+        selection: { main: { empty: boolean; from: number; to: number } };
+        sliceDoc: (from: number, to: number) => string;
+      };
+    }) => {
+      if (!viewUpdate.selectionSet && !viewUpdate.docChanged) return;
+      const range = viewUpdate.state.selection.main;
+      if (range.empty) {
+        onSelectionChangeRef.current(null);
+        return;
+      }
+      onSelectionChangeRef.current({
+        start: range.from,
+        end: range.to,
+        text: viewUpdate.state.sliceDoc(range.from, range.to),
+      });
+    },
+    [],
+  );
+
+  const extensions = useMemo(() => editorExtensions, []);
 
   function withView(run: (view: EditorView) => void) {
     const view = cmRef.current?.view;
@@ -210,37 +307,10 @@ export function LatexSourceEditor({
           theme={ideEditorTheme}
           className="absolute inset-0 h-full min-h-0 bg-ide-bg [&_.cm-editor]:h-full [&_.cm-editor]:max-h-full [&_.cm-editor]:bg-ide-bg [&_.cm-scroller]:bg-ide-bg [&_.cm-scroller]:overscroll-contain [&_.cm-content]:bg-ide-bg"
           editable={!disabled}
-          basicSetup={{
-            lineNumbers: true,
-            foldGutter: true,
-            highlightActiveLine: true,
-            highlightActiveLineGutter: true,
-            bracketMatching: true,
-            indentOnInput: true,
-            searchKeymap: true,
-            history: true,
-          }}
-          extensions={[
-            latexLanguage,
-            syntaxHighlighting(latexHighlightStyle),
-            EditorView.lineWrapping,
-          ]}
-          onChange={(next) => {
-            onChange(next);
-          }}
-          onUpdate={(viewUpdate) => {
-            if (!viewUpdate.selectionSet && !viewUpdate.docChanged) return;
-            const range = viewUpdate.state.selection.main;
-            if (range.empty) {
-              onSelectionChange(null);
-              return;
-            }
-            onSelectionChange({
-              start: range.from,
-              end: range.to,
-              text: viewUpdate.state.sliceDoc(range.from, range.to),
-            });
-          }}
+          basicSetup={EDITOR_BASIC_SETUP}
+          extensions={extensions}
+          onChange={handleChange}
+          onUpdate={handleUpdate}
         />
       </div>
     </div>
