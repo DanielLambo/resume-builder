@@ -104,17 +104,23 @@ const ideEditorTheme = EditorView.theme(
     ".cm-scroller::-webkit-scrollbar-thumb:hover": {
       backgroundColor: "#a39a90",
     },
+    /*
+     * CRITICAL: drawSelection paints .cm-selectionLayer *behind* .cm-content
+     * (z-index -1). Opaque backgrounds on .cm-content / .cm-line / .cm-activeLine
+     * completely hide the highlight. Keep those transparent; put the editor
+     * fill on .cm-scroller / root instead.
+     */
     ".cm-content": {
       padding: "8px 0 28px",
       caretColor: IDE_INK,
       minHeight: "100%",
-      backgroundColor: `${IDE_BG} !important`,
+      backgroundColor: "transparent !important",
       color: IDE_INK,
       userSelect: "text",
       WebkitUserSelect: "text",
     },
     ".cm-line": {
-      backgroundColor: "transparent",
+      backgroundColor: "transparent !important",
       userSelect: "text",
       WebkitUserSelect: "text",
     },
@@ -128,30 +134,19 @@ const ideEditorTheme = EditorView.theme(
       backgroundColor: IDE_LINE,
       color: IDE_INK,
     },
+    /* Soft so selection still shows through on the active line */
     ".cm-activeLine": {
-      backgroundColor: `${IDE_LINE} !important`,
+      backgroundColor: "rgba(255, 255, 255, 0.045)",
     },
-    /* Drawn selection (drawSelection) */
+    /* Match CodeMirror’s own selector specificity */
     ".cm-selectionBackground": {
       backgroundColor: `${SELECTION_BG_BLUR} !important`,
     },
-    "&.cm-focused .cm-selectionBackground": {
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
       backgroundColor: `${SELECTION_BG} !important`,
     },
     ".cm-selectionLayer .cm-selectionBackground": {
       backgroundColor: `${SELECTION_BG_BLUR} !important`,
-    },
-    "&.cm-focused .cm-selectionLayer .cm-selectionBackground": {
-      backgroundColor: `${SELECTION_BG} !important`,
-    },
-    /* Native selection fallback */
-    ".cm-content ::selection": {
-      backgroundColor: `${SELECTION_BG} !important`,
-      color: "#ffffff !important",
-    },
-    ".cm-content ::-moz-selection": {
-      backgroundColor: `${SELECTION_BG} !important`,
-      color: "#ffffff !important",
     },
     ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "#E54B4B",
@@ -341,7 +336,7 @@ export function LatexSourceEditor({
           height="100%"
           // Force dark; without this, @uiw/react-codemirror defaults to a white light theme.
           theme={ideEditorTheme}
-          className="absolute inset-0 h-full min-h-0 bg-ide-bg [&_.cm-editor]:h-full [&_.cm-editor]:max-h-full [&_.cm-editor]:bg-ide-bg [&_.cm-scroller]:bg-ide-bg [&_.cm-scroller]:overscroll-contain [&_.cm-content]:bg-ide-bg"
+          className="absolute inset-0 h-full min-h-0 bg-ide-bg [&_.cm-editor]:h-full [&_.cm-editor]:max-h-full [&_.cm-editor]:bg-ide-bg [&_.cm-scroller]:bg-ide-bg [&_.cm-scroller]:overscroll-contain [&_.cm-content]:!bg-transparent"
           editable={!disabled}
           basicSetup={EDITOR_BASIC_SETUP}
           extensions={extensions}
