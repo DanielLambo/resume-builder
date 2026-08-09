@@ -97,16 +97,14 @@ function longestSharedSubstringLen(a: string, b: string): number {
   if (!a || !b) return 0;
   const short = a.length <= b.length ? a : b;
   const long = a.length <= b.length ? b : a;
-  let best = 0;
   for (let len = Math.min(short.length, 48); len >= 6; len -= 1) {
     for (let i = 0; i <= short.length - len; i += 1) {
       if (long.includes(short.slice(i, i + len))) {
         return len;
       }
     }
-    if (best > 0) break;
   }
-  return best;
+  return 0;
 }
 
 export type PdfTextItem = {
