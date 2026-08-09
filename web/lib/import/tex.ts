@@ -1,4 +1,4 @@
-import { sanitizeLatex } from "@resumate/one-page-lock";
+import { sanitizeLatex } from "@/lib/sanitize-latex";
 
 import { HOUSE_LATEX_PREAMBLE } from "@/lib/resume-template";
 import { latexValidationError } from "@/lib/import/validate";
