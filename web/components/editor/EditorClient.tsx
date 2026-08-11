@@ -204,10 +204,13 @@ export function EditorClient({
   const savingRef = useRef(false);
   const pendingResaveRef = useRef(false);
   const proposalLockRef = useRef(false);
+  const proposalRef = useRef<PendingProposal | null>(null);
+  const discardProposalRef = useRef<() => void>(() => undefined);
   const didInitialCompile = useRef(false);
   latexRef.current = latex;
   titleRef.current = docTitle;
   templateIdRef.current = templateId;
+  proposalRef.current = proposal;
 
   const orphanCount = useMemo(
     () => (heatmapOn ? analyzeOrphans(latex).orphanCount : 0),
@@ -311,6 +314,28 @@ export function EditorClient({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [flushSave]);
+
+  useEffect(() => {
+    function onEscape(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (!proposalRef.current || aiBusy) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === "TEXTAREA" || target.tagName === "INPUT") &&
+        !target.closest("[data-testid='ai-proposal']")
+      ) {
+        // Don't steal Escape from an active prompt field unless empty
+        if (target instanceof HTMLTextAreaElement && target.value.trim()) {
+          return;
+        }
+      }
+      event.preventDefault();
+      discardProposalRef.current?.();
+    }
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [aiBusy]);
 
   useEffect(() => {
     if (!ghostActive) return;
@@ -591,6 +616,7 @@ export function EditorClient({
     setStatusLines(["Discarded — draft unchanged."]);
     toast.message("Discarded", { description: "Draft unchanged." });
   }
+  discardProposalRef.current = discardProposal;
 
   function restoreVersion(nextIndex: number) {
     const snap = versions.stack[nextIndex];

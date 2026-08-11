@@ -37,6 +37,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# pdf.js worker (copied from pdfjs-dist on postinstall)
+/public/pdf.worker.min.mjs
+/public/pdf.worker.mjs
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
