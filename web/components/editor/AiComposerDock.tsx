@@ -295,6 +295,7 @@ function ProposalCard({
   onDiscard: () => void;
 }) {
   const changed = proposal.diff.changedLineCount;
+  const hunks = proposal.diff.hunks.slice(0, 3);
   return (
     <div
       className="rounded border border-ide-border bg-ide-raised px-2 py-1.5"
@@ -307,6 +308,7 @@ function ProposalCard({
             {changed > 0
               ? ` · ${changed} line${changed === 1 ? "" : "s"} changed`
               : ""}
+            <span className="text-ide-faint"> · Esc discard</span>
           </p>
           <p className="mt-0.5 line-clamp-2 text-[0.75rem] text-ide-ink">
             {proposal.reply}
@@ -331,6 +333,30 @@ function ProposalCard({
           </button>
         </div>
       </div>
+      {hunks.length > 0 ? (
+        <ul
+          className="mt-1.5 max-h-24 space-y-1 overflow-auto border-t border-ide-border/60 pt-1.5"
+          data-testid="ai-proposal-hunks"
+        >
+          {hunks.map((hunk, index) => (
+            <li
+              key={`${index}-${hunk.before.slice(0, 24)}-${hunk.after.slice(0, 24)}`}
+              className="font-mono text-[0.62rem] leading-snug"
+            >
+              {hunk.before ? (
+                <p className="truncate text-red-300/90">
+                  − {hunk.before.length > 100 ? `${hunk.before.slice(0, 97)}…` : hunk.before}
+                </p>
+              ) : null}
+              {hunk.after ? (
+                <p className="truncate text-emerald-300/90">
+                  + {hunk.after.length > 100 ? `${hunk.after.slice(0, 97)}…` : hunk.after}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
