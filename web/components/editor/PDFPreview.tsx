@@ -251,19 +251,31 @@ export function PDFPreview({
         </div>
       )}
 
-      {compiling || ghostActive ? (
+      {compiling ? (
         <div
-          className="pointer-events-none absolute inset-0 bg-ide-bg/30"
+          className="pointer-events-none absolute inset-0 bg-ide-bg/25"
           data-testid="ghost-diff-overlay"
           aria-hidden="true"
         >
-          <div className="absolute inset-x-8 top-8 space-y-3">
-            <div className="h-3 w-1/3 animate-pulse rounded bg-white/20" />
-            <div className="h-3 w-full animate-pulse rounded bg-white/15" />
-            <div className="h-3 w-5/6 animate-pulse rounded bg-white/15" />
-            <div className="h-3 w-2/3 animate-pulse rounded bg-white/10" />
-          </div>
+          {!ready ? (
+            <div className="absolute inset-x-8 top-8 space-y-3">
+              <div className="h-3 w-1/3 animate-pulse rounded bg-white/20" />
+              <div className="h-3 w-full animate-pulse rounded bg-white/15" />
+              <div className="h-3 w-5/6 animate-pulse rounded bg-white/15" />
+              <div className="h-3 w-2/3 animate-pulse rounded bg-white/10" />
+            </div>
+          ) : (
+            <div className="absolute inset-x-0 top-0 h-0.5 overflow-hidden">
+              <div className="h-full w-1/3 animate-pulse bg-ide-accent/80" />
+            </div>
+          )}
         </div>
+      ) : ghostActive ? (
+        <div
+          className="pointer-events-none absolute inset-0 ring-2 ring-inset ring-ide-accent/25"
+          data-testid="ghost-diff-overlay"
+          aria-hidden="true"
+        />
       ) : null}
     </article>
   );

@@ -294,6 +294,7 @@ function ProposalCard({
   onKeep: () => void;
   onDiscard: () => void;
 }) {
+  const changed = proposal.diff.changedLineCount;
   return (
     <div
       className="rounded border border-ide-border bg-ide-raised px-2 py-1.5"
@@ -303,8 +304,11 @@ function ProposalCard({
         <div className="min-w-0 flex-1">
           <p className="font-mono text-[0.55rem] uppercase tracking-[0.1em] text-ide-muted">
             Preview · not saved
+            {changed > 0
+              ? ` · ${changed} line${changed === 1 ? "" : "s"} changed`
+              : ""}
           </p>
-          <p className="mt-0.5 line-clamp-1 text-[0.75rem] text-ide-ink">
+          <p className="mt-0.5 line-clamp-2 text-[0.75rem] text-ide-ink">
             {proposal.reply}
           </p>
         </div>

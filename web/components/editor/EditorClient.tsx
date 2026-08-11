@@ -104,6 +104,9 @@ type PendingProposal = ComposerProposal & {
   priorReply: string | null;
   priorPdf: string | null;
   priorPageCount: number | null;
+  priorOnePageLock: boolean;
+  /** True if pre-proposal draft was flushed before lock. */
+  priorSaved: boolean;
   nextPdf: string | null;
   nextPageCount: number | null;
   lockedToOnePage: boolean | null;
@@ -178,6 +181,7 @@ export function EditorClient({
     useState<WritingProfile>(initialWritingProfile);
   const [profileOpen, setProfileOpen] = useState(false);
   const [selection, setSelection] = useState<SourceSelection | null>(null);
+  const [selectionClearToken, setSelectionClearToken] = useState(0);
   const [proposal, setProposal] = useState<PendingProposal | null>(null);
   const [versions, setVersions] = useState<VersionState>(() => ({
     stack: [
@@ -290,6 +294,23 @@ export function EditorClient({
       window.removeEventListener("pagehide", onHide);
     };
   }, [dirty, flushSave]);
+
+  useEffect(() => {
+    function onKey(event: globalThis.KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      if (event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      if (proposalLockRef.current) {
+        toast.message("Keep or discard the preview first");
+        return;
+      }
+      void flushSave().then(() => {
+        toast.success("Draft saved");
+      });
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [flushSave]);
 
   useEffect(() => {
     if (!ghostActive) return;
@@ -469,7 +490,7 @@ export function EditorClient({
     toast.message("Stopped", { description: "Draft unchanged." });
   }
 
-  function presentProposal(input: {
+  async function presentProposal(input: {
     prompt: string;
     reply: string;
     scope: "selection" | "document";
@@ -480,8 +501,25 @@ export function EditorClient({
     nextPageCount: number | null;
     lockedToOnePage: boolean | null;
   }) {
+    // Flush the pre-proposal draft before locking autosave so Discard can't
+    // silently drop not-yet-persisted edits.
+    let priorSaved = false;
+    try {
+      const saved = await saveResumeLatexAction(
+        resumeId,
+        input.priorLatex,
+        titleRef.current,
+        templateIdRef.current,
+      );
+      priorSaved = saved.ok;
+      if (!saved.ok) {
+        toast.error(saved.error, { id: "autosave-failed" });
+      }
+    } catch {
+      priorSaved = false;
+    }
+
     proposalLockRef.current = true;
-    setDirty(false);
     setReview(null);
     setReply(input.reply);
     setLatex(input.nextLatex);
@@ -504,6 +542,8 @@ export function EditorClient({
       priorReply: input.priorReply,
       priorPdf: pdfBase64,
       priorPageCount: pageCount,
+      priorOnePageLock: onePageLock,
+      priorSaved,
       nextPdf: input.nextPdf,
       nextPageCount: input.nextPageCount,
       lockedToOnePage: input.lockedToOnePage,
@@ -524,6 +564,7 @@ export function EditorClient({
     setProposal(null);
     setDirty(true);
     setSelection(null);
+    setSelectionClearToken((token) => token + 1);
     toast.success("Changes kept", {
       description:
         proposal.scope === "selection"
@@ -534,13 +575,18 @@ export function EditorClient({
 
   function discardProposal() {
     if (!proposal || busy) return;
+    // Invalidate in-flight compiles so a late PDF can't overwrite the restore.
+    compileGen.current += 1;
+    setCompiling(false);
     setLatex(proposal.priorLatex);
+    latexRef.current = proposal.priorLatex;
     setReply(proposal.priorReply);
     setPdfBase64(proposal.priorPdf);
     setPageCount(proposal.priorPageCount);
+    setOnePageLock(proposal.priorOnePageLock);
     proposalLockRef.current = false;
     setProposal(null);
-    setDirty(false);
+    setDirty(!proposal.priorSaved);
     setGhostActive(false);
     setStatusLines(["Discarded — draft unchanged."]);
     toast.message("Discarded", { description: "Draft unchanged." });
@@ -548,7 +594,7 @@ export function EditorClient({
 
   function restoreVersion(nextIndex: number) {
     const snap = versions.stack[nextIndex];
-    if (!snap || busy || compiling) return;
+    if (!snap || busy || compiling || proposal) return;
     setVersions((prev) => ({ ...prev, index: nextIndex }));
     setLatex(snap.latex);
     setReply(snap.reply);
@@ -562,6 +608,10 @@ export function EditorClient({
     const text = (overrides?.prompt ?? prompt).trim();
     if (!text || busy) {
       if (!text) toast.message("Describe an edit or ask for a review");
+      return;
+    }
+    if (proposal) {
+      toast.message("Keep or discard the preview first");
       return;
     }
 
@@ -624,7 +674,7 @@ export function EditorClient({
           applyUsage(result.dailyTokensUsed, result.dailyTokensRemaining);
           setLastPrompt(text);
           if (clearPrompt) setPrompt("");
-          presentProposal({
+          await presentProposal({
             prompt: text,
             reply: result.reply,
             scope: "selection",
@@ -638,11 +688,8 @@ export function EditorClient({
           void compilePdf(result.latex, { quiet: true })
             .then((compiled) => {
               if (!compiled?.pdfBase64) return;
-              setPdfBase64(compiled.pdfBase64);
-              setPageCount(compiled.pageCount ?? null);
-              setOnePageLock(
-                Boolean(compiled.lockedToOnePage ?? compiled.pageCount === 1),
-              );
+              // compilePdf already applied PDF when still current; only
+              // refresh proposal metadata if the preview is still open.
               setProposal((current) =>
                 current
                   ? {
@@ -753,7 +800,7 @@ export function EditorClient({
         }
 
         // Paint latex immediately; compile PDF off the critical path (optimistic).
-        presentProposal({
+        await presentProposal({
           prompt: text,
           reply: result.reply,
           scope: "document",
@@ -769,11 +816,6 @@ export function EditorClient({
           void compilePdf(nextLatex, { quiet: true })
             .then((compiled) => {
               if (!compiled?.pdfBase64) return;
-              setPdfBase64(compiled.pdfBase64);
-              setPageCount(compiled.pageCount ?? null);
-              setOnePageLock(
-                Boolean(compiled.lockedToOnePage ?? compiled.pageCount === 1),
-              );
               setProposal((current) =>
                 current
                   ? {
@@ -815,7 +857,7 @@ export function EditorClient({
   }
 
   async function formatForConsistency() {
-    if (busy || compiling) return;
+    if (busy || compiling || proposal) return;
 
     const current = latexRef.current;
     const polished = polishResumeLatex(current);
@@ -858,6 +900,10 @@ export function EditorClient({
   }
 
   function onCompile() {
+    if (proposal) {
+      toast.message("Keep or discard the preview first");
+      return;
+    }
     void compilePdf(latex).catch(() => {
       /* toast already shown inside compilePdf */
     });
@@ -876,6 +922,10 @@ export function EditorClient({
   }
 
   function applyTemplate(nextId: ResumeTemplateId) {
+    if (proposal) {
+      toast.message("Keep or discard the preview first");
+      return;
+    }
     if (nextId === templateId) {
       setTemplatePickerOpen(false);
       return;
@@ -897,6 +947,7 @@ export function EditorClient({
   }
 
   async function onShortenOrphan(bullet: OrphanBullet) {
+    if (proposal || busy) return;
     setShorteningIndex(bullet.index);
     try {
       const result = await shortenBulletAction({
@@ -971,10 +1022,14 @@ export function EditorClient({
             />
             <span
               className={`shrink-0 font-mono text-[0.6rem] ${
-                dirty ? "text-ide-faint" : "text-ide-accent"
+                proposal
+                  ? "text-amber-400"
+                  : dirty
+                    ? "text-ide-faint"
+                    : "text-ide-accent"
               }`}
             >
-              {dirty ? "unsaved" : "saved"}
+              {proposal ? "preview" : dirty ? "unsaved" : "saved"}
             </span>
           </div>
           {jobLabel ? (
@@ -992,14 +1047,26 @@ export function EditorClient({
             type="button"
             className="min-h-6 rounded-sm px-1.5 transition hover:bg-ide-hover hover:text-ide-ink"
             data-testid="writing-profile-open"
-            onClick={() => setProfileOpen(true)}
+            onClick={() => {
+              if (proposal) {
+                toast.message("Keep or discard the preview first");
+                return;
+              }
+              setProfileOpen(true);
+            }}
           >
             Profile
           </button>
           <button
             type="button"
             className="min-h-6 max-w-[8rem] truncate rounded-sm px-1.5 transition hover:bg-ide-hover hover:text-ide-ink sm:max-w-[11rem]"
-            onClick={() => setTemplatePickerOpen(true)}
+            onClick={() => {
+              if (proposal) {
+                toast.message("Keep or discard the preview first");
+                return;
+              }
+              setTemplatePickerOpen(true);
+            }}
             data-testid="template-switch"
             title={getTemplate(templateId).description}
           >
@@ -1010,7 +1077,7 @@ export function EditorClient({
             className="hidden min-h-6 rounded-sm px-1.5 transition hover:bg-ide-hover hover:text-ide-ink disabled:opacity-50 sm:inline"
             data-testid="format-consistency"
             title="Normalize dates, bullets, and tense. Facts stay put."
-            disabled={compiling || busy}
+            disabled={compiling || busy || Boolean(proposal)}
             onClick={() => {
               void formatForConsistency();
             }}
@@ -1024,6 +1091,7 @@ export function EditorClient({
         value={latex}
         disabled={busy || Boolean(proposal)}
         jumpToLine={jumpToLine}
+        clearSelectionToken={selectionClearToken}
         onJumped={() => setJumpToLine(null)}
         onChange={(next) => {
           setLatex(next);
@@ -1040,7 +1108,7 @@ export function EditorClient({
         <button
           type="button"
           onClick={onCompile}
-          disabled={compiling || busy}
+          disabled={compiling || busy || Boolean(proposal)}
           className="min-h-7 shrink-0 rounded bg-ide-accent px-2.5 text-[0.72rem] font-semibold text-white transition hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:bg-ide-raised disabled:text-ide-faint"
         >
           {compiling ? "Compiling…" : "Recompile"}
@@ -1138,7 +1206,7 @@ export function EditorClient({
               pdfBase64={pdfBase64}
               pageCount={pageCount}
               ghostActive={ghostActive}
-              compiling={compiling || busy}
+              compiling={compiling}
               zoom={zoom}
               onLocateInSource={onLocateInSourceFromPdf}
             />
@@ -1298,7 +1366,10 @@ export function EditorClient({
                 clearPrompt: false,
               })
             }
-            onClearScope={() => setSelection(null)}
+            onClearScope={() => {
+              setSelection(null);
+              setSelectionClearToken((token) => token + 1);
+            }}
             onKeepProposal={keepProposal}
             onDiscardProposal={discardProposal}
             onDismissCompileError={() => {
@@ -1306,7 +1377,7 @@ export function EditorClient({
               setCompileErrorLine(null);
             }}
             onFixCompile={() => {
-              if (!compileError) return;
+              if (!compileError || proposal) return;
               runVibeEdit({
                 prompt: COMPILE_FIX_PROMPT,
                 compilerError: compileError,
