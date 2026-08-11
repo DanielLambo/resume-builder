@@ -3,13 +3,15 @@ import { compileLatexWithPdflatex } from "@resumate/one-page-lock";
 import type { CompileLatexFn } from "@resumate/one-page-lock";
 
 import { formatCompileDiagnostic, parseTexLogErrors } from "@/lib/tex-log";
+import { createSingleFileTar } from "@/lib/ustar";
 
 /** Per-compile hard timeout (remote TeX). Override with LATEX_COMPILE_TIMEOUT_MS. */
 export const COMPILE_TIMEOUT_MS = Number(
   process.env.LATEX_COMPILE_TIMEOUT_MS ?? 8_000,
 );
 
-const LATEX_ONLINE_DEFAULT = "https://latexonline.cc/compile";
+/** Public host — supports `/data` POST uploads (GET `?text=` truncates resumes). */
+const LATEX_ONLINE_DEFAULT_ORIGIN = "https://latexonline.cc";
 
 function isProductionRuntime(): boolean {
   return (
@@ -29,6 +31,18 @@ export function isLatexOnlineAllowed(): boolean {
   if (process.env.ALLOW_LATEX_ONLINE === "1") return true;
   // Fail closed in production — require an owned LATEX_COMPILE_URL instead.
   return !isProductionRuntime();
+}
+
+function latexOnlineOrigin(): string {
+  const configured = process.env.LATEX_ONLINE_URL?.trim();
+  if (configured) {
+    try {
+      return new URL(configured).origin;
+    } catch {
+      /* fall through */
+    }
+  }
+  return LATEX_ONLINE_DEFAULT_ORIGIN;
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -99,8 +113,8 @@ export function sanitizeCompileError(err: unknown): string {
     const afterColon = cleaned.includes(": ")
       ? cleaned.slice(cleaned.indexOf(": ") + 2).trim()
       : "";
-    if (afterColon) {
-      return formatCompileDiagnostic({ error: afterColon }).message;
+    if (afterColon && !/^HTTP \d+$/i.test(afterColon)) {
+      return formatCompileDiagnostic({ error: afterColon, log: afterColon }).message;
     }
     return "PDF compile failed. Check LaTeX near recent edits, then Recompile.";
   }
@@ -165,6 +179,26 @@ async function compileViaFastapi(tex: string, baseUrl: string): Promise<Buffer> 
   return Buffer.from(json.pdf_base64, "base64");
 }
 
+function throwLatexOnlineFailure(status: number, bodyText: string): never {
+  const trimmed = bodyText.trim();
+  // Prefer real TeX log / service error text over opaque "HTTP 400".
+  const diagnostic = formatCompileDiagnostic({
+    error: trimmed.slice(0, 500) || `latexonline compile failed (HTTP ${status})`,
+    log: trimmed.slice(0, 12_000),
+  });
+  const message =
+    diagnostic.message && diagnostic.message !== "PDF compile failed."
+      ? diagnostic.message
+      : trimmed
+        ? trimmed.slice(0, 280)
+        : `latexonline compile failed (HTTP ${status})`;
+  throw new CompileDiagnosticError(message, diagnostic.line);
+}
+
+/**
+ * Compile via latexonline `/data` (multipart tar upload).
+ * Avoids GET `?text=` which breaks on normal resume length (HTTP 400/414).
+ */
 async function compileViaLatexOnline(tex: string): Promise<Buffer> {
   if (!isLatexOnlineAllowed()) {
     throw new Error(
@@ -172,33 +206,38 @@ async function compileViaLatexOnline(tex: string): Promise<Buffer> {
     );
   }
 
-  const endpoint = process.env.LATEX_ONLINE_URL?.trim() || LATEX_ONLINE_DEFAULT;
-  const url = new URL(endpoint);
+  const origin = latexOnlineOrigin();
+  const tar = createSingleFileTar("main.tex", tex);
+  const form = new FormData();
+  form.append(
+    "file",
+    new Blob([new Uint8Array(tar)], { type: "application/x-tar" }),
+    "source.tar",
+  );
+
+  const url = new URL("/data", origin);
+  url.searchParams.set("target", "main.tex");
   url.searchParams.set("command", "pdflatex");
-  url.searchParams.set("text", tex);
+  url.searchParams.set("force", "true");
 
   const res = await fetch(url.toString(), {
-    method: "GET",
+    method: "POST",
+    body: form,
     signal: AbortSignal.timeout(COMPILE_TIMEOUT_MS),
+    redirect: "follow",
   });
 
+  const bytes = Buffer.from(await res.arrayBuffer());
   if (!res.ok) {
-    const bodyText = await res.text().catch(() => "");
-    const diagnostic = formatCompileDiagnostic({
-      error: `latexonline compile failed (HTTP ${res.status})`,
-      log: bodyText.slice(0, 8000),
-    });
-    throw new CompileDiagnosticError(diagnostic.message, diagnostic.line);
+    throwLatexOnlineFailure(res.status, bytes.toString("utf8"));
   }
 
-  const bytes = Buffer.from(await res.arrayBuffer());
   if (bytes.length < 5 || bytes.subarray(0, 4).toString("utf8") !== "%PDF") {
-    const asText = bytes.toString("utf8").slice(0, 8000);
-    const diagnostic = formatCompileDiagnostic({
-      error: "latexonline returned a non-PDF response",
-      log: asText,
-    });
-    throw new CompileDiagnosticError(diagnostic.message, diagnostic.line);
+    throwLatexOnlineFailure(
+      res.status,
+      bytes.toString("utf8").slice(0, 12_000) ||
+        "latexonline returned a non-PDF response",
+    );
   }
   return bytes;
 }
