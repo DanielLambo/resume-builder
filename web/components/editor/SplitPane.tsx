@@ -77,7 +77,7 @@ export function SplitPane({
       const next = ((event.clientX - rect.left) / rect.width) * 100;
       setPercent(Math.min(maxPercent, Math.max(minPercent, next)));
     };
-    const onUp = () => {
+    const endDrag = () => {
       if (!dragging.current) return;
       dragging.current = false;
       document.body.style.cursor = "";
@@ -85,10 +85,12 @@ export function SplitPane({
       persist();
     };
     window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
     return () => {
       window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointerup", endDrag);
+      window.removeEventListener("pointercancel", endDrag);
       if (dragging.current) {
         dragging.current = false;
         document.body.style.cursor = "";
@@ -100,6 +102,7 @@ export function SplitPane({
   function startDrag(event: ReactPointerEvent) {
     event.preventDefault();
     dragging.current = true;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   }
@@ -214,7 +217,7 @@ export function BottomDock({
       );
       setHeight(next);
     };
-    const onUp = () => {
+    const endDrag = () => {
       if (!dragging.current) return;
       dragging.current = false;
       userSized.current = true;
@@ -223,10 +226,12 @@ export function BottomDock({
       persist();
     };
     window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
     return () => {
       window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointerup", endDrag);
+      window.removeEventListener("pointercancel", endDrag);
       if (dragging.current) {
         dragging.current = false;
         document.body.style.cursor = "";
@@ -240,6 +245,7 @@ export function BottomDock({
     dragging.current = true;
     startY.current = event.clientY;
     startH.current = heightRef.current;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     document.body.style.cursor = "row-resize";
     document.body.style.userSelect = "none";
   }
