@@ -182,20 +182,36 @@ const EDITOR_BASIC_SETUP = {
 } as const;
 
 /**
- * Beat CodeMirror's macOS emacs binding (Ctrl-a = line start) and guarantee
- * select-all for both Ctrl and Cmd before any other keymap runs.
+ * Beat CodeMirror's macOS emacs bindings for common Ctrl shortcuts that
+ * surprise external-keyboard users (Ctrl-a line-start, Ctrl-k kill, etc.).
+ * Cmd still uses Mod-* defaults from basicSetup.
  */
-const selectAllDomHandler = Prec.highest(
+const macCtrlEditingHandler = Prec.highest(
   EditorView.domEventHandlers({
     keydown(event, view) {
       if (event.altKey || event.isComposing) return false;
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-      if (key !== "a" && key !== "A") return false;
-      if (!event.ctrlKey && !event.metaKey) return false;
-      event.preventDefault();
-      event.stopPropagation();
-      selectAll(view);
-      return true;
+      if ((event.ctrlKey || event.metaKey) && (key === "a" || key === "A")) {
+        event.preventDefault();
+        event.stopPropagation();
+        selectAll(view);
+        return true;
+      }
+      // Neutralize surprising emacs Ctrl bindings (not Cmd).
+      if (!event.ctrlKey || event.metaKey) return false;
+      if (
+        key === "k" ||
+        key === "e" ||
+        key === "d" ||
+        key === "h" ||
+        key === "o" ||
+        key === "t"
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+      }
+      return false;
     },
   }),
 );
@@ -208,6 +224,8 @@ type LatexSourceEditorProps = {
   disabled?: boolean;
   /** When set, scroll/select that 1-based line (e.g. compile error). */
   jumpToLine?: number | null;
+  /** Bump to collapse the CodeMirror selection (scope chip clear). */
+  clearSelectionToken?: number;
   onJumped?: () => void;
   onChange: (value: string) => void;
   onSelectionChange: (selection: SourceSelection | null) => void;
@@ -217,6 +235,7 @@ export function LatexSourceEditor({
   value,
   disabled = false,
   jumpToLine = null,
+  clearSelectionToken = 0,
   onJumped,
   onChange,
   onSelectionChange,
@@ -241,6 +260,17 @@ export function LatexSourceEditor({
     view.focus();
     onJumped?.();
   }, [jumpToLine, onJumped]);
+
+  useEffect(() => {
+    if (clearSelectionToken <= 0) return;
+    const view = cmRef.current?.view;
+    if (!view) return;
+    const head = view.state.selection.main.head;
+    view.dispatch({
+      selection: { anchor: head, head },
+    });
+    onSelectionChangeRef.current(null);
+  }, [clearSelectionToken]);
 
   const handleChange = useCallback((next: string) => {
     onChangeRef.current(next);
@@ -271,7 +301,7 @@ export function LatexSourceEditor({
       syntaxHighlighting(latexHighlightStyle),
       EditorView.lineWrapping,
       preferSelectOverDrag,
-      selectAllDomHandler,
+      macCtrlEditingHandler,
       selectionListener,
     ],
     [selectionListener],
