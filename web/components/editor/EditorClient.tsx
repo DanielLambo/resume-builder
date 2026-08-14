@@ -1033,7 +1033,7 @@ export function EditorClient({
 
   const sourcePane = (
     <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-r border-ide-border/60 bg-ide-bg">
-      <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-ide-border bg-ide-panel px-2 sm:px-2.5">
+      <div className="material-chrome-ide flex h-8 shrink-0 items-center justify-between gap-2 px-2 sm:px-2.5">
         <div className="min-w-0">
           <div className="flex min-w-0 items-baseline gap-1.5">
             <EditableResumeTitle
@@ -1071,7 +1071,7 @@ export function EditorClient({
         <div className="flex shrink-0 items-center gap-px text-[0.68rem] text-ide-muted">
           <button
             type="button"
-            className="min-h-6 rounded-sm px-1.5 transition hover:bg-ide-hover hover:text-ide-ink"
+            className="pressable min-h-6 rounded-sm px-1.5 hover:bg-ide-hover hover:text-ide-ink"
             data-testid="writing-profile-open"
             onClick={() => {
               if (proposal) {
@@ -1085,7 +1085,7 @@ export function EditorClient({
           </button>
           <button
             type="button"
-            className="min-h-6 max-w-[8rem] truncate rounded-sm px-1.5 transition hover:bg-ide-hover hover:text-ide-ink sm:max-w-[11rem]"
+            className="pressable min-h-6 max-w-[8rem] truncate rounded-sm px-1.5 hover:bg-ide-hover hover:text-ide-ink sm:max-w-[11rem]"
             onClick={() => {
               if (proposal) {
                 toast.message("Keep or discard the preview first");
@@ -1100,7 +1100,7 @@ export function EditorClient({
           </button>
           <button
             type="button"
-            className="hidden min-h-6 rounded-sm px-1.5 transition hover:bg-ide-hover hover:text-ide-ink disabled:opacity-50 sm:inline"
+            className="pressable hidden min-h-6 rounded-sm px-1.5 hover:bg-ide-hover hover:text-ide-ink disabled:opacity-50 sm:inline"
             data-testid="format-consistency"
             title="Normalize dates, bullets, and tense. Facts stay put."
             disabled={compiling || busy || Boolean(proposal)}
@@ -1130,12 +1130,12 @@ export function EditorClient({
 
   const previewPane = (
     <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-ide-gutter">
-      <div className="flex h-9 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-ide-border bg-ide-panel px-2 [scrollbar-width:none] sm:h-8 sm:px-2.5 [&::-webkit-scrollbar]:hidden">
+      <div className="material-chrome-ide flex h-9 shrink-0 items-center gap-1.5 overflow-x-auto px-2 [scrollbar-width:none] sm:h-8 sm:px-2.5 [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
           onClick={onCompile}
           disabled={compiling || busy || Boolean(proposal)}
-          className="min-h-7 shrink-0 rounded bg-ide-accent px-2.5 text-[0.72rem] font-semibold text-white transition hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:bg-ide-raised disabled:text-ide-faint"
+          className="pressable min-h-7 shrink-0 rounded bg-ide-accent px-2.5 text-[0.72rem] font-semibold text-white hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:bg-ide-raised disabled:text-ide-faint"
         >
           {compiling ? "Compiling…" : "Recompile"}
         </button>
