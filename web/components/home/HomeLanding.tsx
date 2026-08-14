@@ -196,13 +196,13 @@ export function HomeLanding() {
           <header className="flex shrink-0 items-center justify-between gap-3">
             <Link
               href="/"
-              className="text-[1.05rem] font-semibold tracking-tight text-studio-ink transition hover:text-studio-ink/80 sm:text-[1.15rem]"
+              className="pressable text-[1.05rem] font-semibold tracking-tight text-studio-ink hover:text-studio-ink/80 sm:text-[1.15rem]"
             >
               Resumate
             </Link>
             <Link
               href="/login"
-              className="min-h-10 rounded-lg px-3 py-2 text-sm font-medium text-studio-muted transition hover:bg-black/[0.04] hover:text-studio-ink"
+              className="pressable min-h-10 rounded-lg px-3 py-2 text-sm font-medium text-studio-muted hover:bg-black/[0.04] hover:text-studio-ink"
             >
               Sign in
             </Link>
@@ -215,23 +215,23 @@ export function HomeLanding() {
             ].join(" ")}
           >
             <div className="max-w-xl">
-              <h1 className="max-w-[16ch] text-[clamp(2.15rem,7.5vw,3.55rem)] font-semibold leading-[1.02] tracking-tight text-studio-ink">
+              <h1 className="type-display max-w-[16ch] text-[clamp(2.15rem,7.5vw,3.55rem)] font-semibold text-studio-ink">
                 A sharper resume for every job you want.
               </h1>
-              <p className="mt-4 max-w-md text-[1rem] leading-relaxed text-studio-muted sm:text-[1.08rem]">
+              <p className="mt-4 max-w-md text-[1rem] leading-relaxed tracking-normal text-studio-muted sm:text-[1.08rem]">
                 Honest AI edits, hiring-manager feedback, and a locked one-page
                 PDF. Apply faster without inventing anything.
               </p>
               <div className="mt-7 flex w-full flex-col gap-2.5 sm:mt-8 sm:flex-row sm:gap-3">
                 <Link
                   href="/signup"
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-studio-ink px-5 py-3 text-sm font-semibold text-white transition hover:bg-studio-ink/90 sm:w-auto"
+                  className="pressable inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-studio-ink px-5 py-3 text-sm font-semibold text-white hover:bg-studio-ink/90 sm:w-auto"
                 >
                   Start free
                 </Link>
                 <Link
                   href="/import"
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-lg border border-studio-ink/15 bg-white/90 px-5 py-3 text-sm font-semibold text-studio-ink transition hover:border-studio-ink/25 hover:bg-white sm:w-auto"
+                  className="pressable inline-flex min-h-12 w-full items-center justify-center rounded-lg border border-studio-ink/15 bg-white/80 px-5 py-3 text-sm font-semibold text-studio-ink backdrop-blur-md hover:border-studio-ink/25 hover:bg-white sm:w-auto"
                 >
                   Import resume
                 </Link>

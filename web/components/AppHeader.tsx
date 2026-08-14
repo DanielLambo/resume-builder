@@ -52,10 +52,8 @@ export function AppHeader({
   return (
     <header
       className={[
-        "sticky top-0 z-40 shrink-0 border-b",
-        ide
-          ? "border-ide-border bg-ide-panel"
-          : "border-studio-border/80 bg-[#fbfbfa]/95 backdrop-blur-sm",
+        "sticky top-0 z-40 shrink-0",
+        ide ? "material-chrome-ide" : "material-chrome",
       ].join(" ")}
     >
       <div
@@ -73,7 +71,7 @@ export function AppHeader({
           <Link
             href="/dashboard"
             className={[
-              "shrink-0 font-semibold tracking-tight",
+              "pressable shrink-0 font-semibold tracking-tight",
               dense ? "text-[0.8rem]" : "text-sm",
               ide ? "text-ide-ink" : "text-[#1a1a1a]",
             ].join(" ")}
@@ -84,9 +82,9 @@ export function AppHeader({
             <nav className="hidden items-center gap-1 text-sm sm:flex">
               <Link
                 href="/dashboard"
-                className={`rounded-full px-3 py-1.5 transition ${
+                className={`pressable rounded-full px-3 py-1.5 ${
                   onResumes && !pathname.startsWith("/import")
-                    ? "bg-white text-[#1a1a1a] shadow-sm"
+                    ? "bg-white/90 text-[#1a1a1a] shadow-sm"
                     : "text-studio-muted hover:text-[#1a1a1a]"
                 }`}
               >
@@ -94,7 +92,7 @@ export function AppHeader({
               </Link>
               <Link
                 href="/dashboard?new=1"
-                className="rounded-full px-3 py-1.5 text-studio-muted transition hover:text-[#1a1a1a]"
+                className="pressable rounded-full px-3 py-1.5 text-studio-muted hover:text-[#1a1a1a]"
               >
                 Templates
               </Link>
@@ -103,7 +101,7 @@ export function AppHeader({
             <Link
               href="/dashboard"
               className={[
-                "hidden text-[0.72rem] transition sm:inline",
+                "pressable hidden text-[0.72rem] sm:inline",
                 ide
                   ? "text-ide-muted hover:text-ide-ink"
                   : "text-studio-muted hover:text-[#1a1a1a]",
@@ -151,7 +149,7 @@ export function AppHeader({
               onClick={onSignOut}
               disabled={pending}
               className={[
-                "shrink-0 font-medium transition disabled:opacity-60",
+                "pressable shrink-0 font-medium disabled:opacity-60",
                 dense ? "min-h-6 px-2 text-[0.65rem]" : "min-h-8 px-2.5 text-xs",
                 ide
                   ? "rounded text-ide-muted hover:bg-ide-hover hover:text-ide-ink"

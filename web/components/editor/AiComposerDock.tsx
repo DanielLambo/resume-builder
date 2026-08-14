@@ -109,7 +109,7 @@ export function AiComposerDock({
 
   return (
     <section
-      className="flex h-full min-h-0 flex-col overflow-hidden border-t border-ide-border bg-ide-raised pb-[max(0.25rem,env(safe-area-inset-bottom))]"
+      className="material-dock-ide flex h-full min-h-0 flex-col overflow-hidden pb-[max(0.25rem,env(safe-area-inset-bottom))]"
       data-testid="ai-composer-dock"
       aria-label="AI editor"
     >
@@ -203,7 +203,7 @@ export function AiComposerDock({
                     type="button"
                     data-testid="vibe-stop"
                     onClick={onStop}
-                    className="min-h-8 rounded border border-ide-border px-2 text-[0.7rem] text-ide-ink hover:bg-ide-hover"
+                    className="pressable min-h-8 rounded border border-ide-border px-2 text-[0.7rem] text-ide-ink hover:bg-ide-hover"
                   >
                     Stop
                   </button>
@@ -213,7 +213,7 @@ export function AiComposerDock({
                     type="button"
                     data-testid="vibe-regenerate"
                     onClick={onRegenerate}
-                    className="min-h-8 rounded border border-ide-border px-2 text-[0.7rem] text-ide-muted hover:bg-ide-hover hover:text-ide-ink"
+                    className="pressable min-h-8 rounded border border-ide-border px-2 text-[0.7rem] text-ide-muted hover:bg-ide-hover hover:text-ide-ink"
                   >
                     Retry
                   </button>
@@ -229,7 +229,7 @@ export function AiComposerDock({
                       ? "Apply (⌘/Ctrl+Enter)"
                       : "Type an edit first"
                   }
-                  className="min-h-8 rounded bg-ide-accent px-3 text-[0.72rem] font-semibold text-white transition hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:bg-ide-raised disabled:text-ide-faint"
+                  className="pressable min-h-8 rounded bg-ide-accent px-3 text-[0.72rem] font-semibold text-white hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:bg-ide-raised disabled:text-ide-faint"
                 >
                   {promptIsReview ? "Review" : "Apply"}
                 </button>
@@ -319,7 +319,7 @@ function ProposalCard({
             type="button"
             data-testid="ai-proposal-keep"
             onClick={onKeep}
-            className="min-h-7 rounded bg-ide-accent px-2 text-[0.7rem] font-semibold text-white hover:bg-ide-accent-hover"
+            className="pressable min-h-7 rounded bg-ide-accent px-2 text-[0.7rem] font-semibold text-white hover:bg-ide-accent-hover"
           >
             Keep
           </button>
@@ -327,7 +327,7 @@ function ProposalCard({
             type="button"
             data-testid="ai-proposal-discard"
             onClick={onDiscard}
-            className="min-h-7 rounded border border-ide-border px-2 text-[0.7rem] text-ide-muted hover:bg-ide-hover hover:text-ide-ink"
+            className="pressable min-h-7 rounded border border-ide-border px-2 text-[0.7rem] text-ide-muted hover:bg-ide-hover hover:text-ide-ink"
           >
             Discard
           </button>

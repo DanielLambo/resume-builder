@@ -4,6 +4,10 @@
 
 :root {
   color-scheme: light;
+  /* Critically damped feel — short settle, no bounce by default */
+  --motion-response: 280ms;
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --press-scale: 0.97;
 }
 
 html,
@@ -17,6 +21,9 @@ body {
   @apply bg-studio-bg text-studio-ink antialiased font-sans;
   /* Avoid iOS zoom on focused inputs under 16px */
   -webkit-text-size-adjust: 100%;
+  font-optical-sizing: auto;
+  line-height: 1.5;
+  letter-spacing: 0;
 }
 
 /* Prevent iOS Safari zooming focused form fields under 16px */
@@ -65,6 +72,100 @@ select {
 
   .studio-panel {
     @apply rounded-xl border border-studio-border bg-studio-paper;
+  }
+
+  /**
+   * Apple materials — translucent chrome with content scrolling underneath.
+   * Heavier surfaces separate regions; lighter ones call attention to controls.
+   */
+  .material-chrome {
+    background: rgba(251, 251, 250, 0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid rgba(231, 228, 220, 0.55);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset;
+  }
+
+  .material-chrome-ide {
+    background: rgba(46, 41, 40, 0.78);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border-bottom: 1px solid rgba(92, 83, 78, 0.65);
+  }
+
+  .material-sheet {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid rgba(231, 228, 220, 0.85);
+    box-shadow:
+      0 24px 60px -20px rgba(26, 23, 22, 0.35),
+      0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  }
+
+  .material-dock-ide {
+    background: rgba(58, 52, 50, 0.88);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    border-top: 1px solid rgba(92, 83, 78, 0.7);
+  }
+
+  /**
+   * Instant press feedback (pointer-down), not click-up.
+   * Keep transitions short — latency kills directness.
+   */
+  .pressable {
+    transition:
+      transform 100ms ease-out,
+      background-color var(--motion-response) var(--motion-ease),
+      border-color var(--motion-response) var(--motion-ease),
+      color var(--motion-response) var(--motion-ease),
+      opacity var(--motion-response) var(--motion-ease);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .pressable:active:not(:disabled) {
+    transform: scale(var(--press-scale));
+  }
+
+  .pressable:focus-visible {
+    outline: 2px solid rgba(229, 75, 75, 0.55);
+    outline-offset: 2px;
+  }
+
+  /* Display type — tighten tracking/leading as size grows (WWDC typography). */
+  .type-display {
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    font-optical-sizing: auto;
+  }
+
+  .type-title {
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    font-optical-sizing: auto;
+  }
+
+  /* Soft edge instead of a hard 1px rule under floating chrome */
+  .scroll-edge-fade {
+    mask-image: linear-gradient(to bottom, transparent, #000 10px);
+  }
+
+  .sheet-scrim {
+    background: rgba(26, 26, 26, 0.34);
+    animation: sheet-scrim-in 220ms var(--motion-ease) both;
+  }
+
+  .sheet-panel {
+    animation: sheet-panel-in 320ms var(--motion-ease) both;
+    transform-origin: bottom center;
+  }
+
+  @media (min-width: 640px) {
+    .sheet-panel {
+      transform-origin: center center;
+    }
   }
 
   /* Editor IDE shell — dark chrome; paper preview stays white. */
@@ -168,6 +269,39 @@ select {
   }
 }
 
+@keyframes sheet-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-panel-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@media (min-width: 640px) {
+  @keyframes sheet-panel-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 8px, 0) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+}
+
 @layer utilities {
   .animate-hero-ken {
     animation: hero-ken 18s ease-in-out infinite alternate;
@@ -175,14 +309,86 @@ select {
   }
 
   .animate-hero-rise {
-    animation: hero-rise 0.65s ease-out both;
+    animation: hero-rise 0.65s var(--motion-ease) both;
   }
 
   .animate-hero-stage {
-    animation: hero-stage 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+    animation: hero-stage 0.85s var(--motion-ease) 0.12s both;
   }
 
   .animate-caret-blink {
     animation: caret-blink 1s steps(1, end) infinite;
+  }
+}
+
+/* §14 Reduced motion — cross-fade, no vestibular slides/ken-burns */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-response: 160ms;
+  }
+
+  .animate-hero-ken,
+  .animate-hero-rise,
+  .animate-hero-stage,
+  .animate-caret-blink {
+    animation: none !important;
+  }
+
+  .sheet-panel {
+    animation: sheet-scrim-in 160ms ease both;
+    transform: none !important;
+  }
+
+  .pressable {
+    transition: background-color 120ms ease, opacity 120ms ease;
+  }
+
+  .pressable:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* Translucent → solid when requested */
+@media (prefers-reduced-transparency: reduce) {
+  .material-chrome {
+    background: #fbfbfa;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .material-chrome-ide {
+    background: #2e2928;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .material-sheet {
+    background: #ffffff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .material-dock-ide {
+    background: #3a3432;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .material-chrome,
+  .material-sheet {
+    background: #ffffff;
+    border-color: #1a1a1a;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .material-chrome-ide,
+  .material-dock-ide {
+    background: #1a1716;
+    border-color: #f3f0ec;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }

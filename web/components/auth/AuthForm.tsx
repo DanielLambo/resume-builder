@@ -233,7 +233,7 @@ function AuthFormInner({ mode }: { mode: AuthMode }) {
           <button
             type="submit"
             disabled={pending}
-            className="mt-1 min-h-11 rounded-xl bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-studio-vermilion-hover disabled:opacity-60"
+            className="pressable mt-1 min-h-11 rounded-xl bg-studio-vermilion px-4 py-2.5 text-sm font-semibold text-white hover:bg-studio-vermilion-hover disabled:opacity-60"
           >
             {pending
               ? isLogin
