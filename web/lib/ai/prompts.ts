@@ -11,6 +11,34 @@ import {
 } from "@/lib/ai/resume-context";
 import { loadLatexResumeCodingSkill } from "@/lib/ai/skills/load-skill";
 
+/**
+ * Recruiter rules (sourced from a real hiring-manager screen):
+ * 1. Tailor to the role — mirror the role's language where evidence already exists.
+ * 2. Outcomes and impact > task descriptions — show what changed, not just what was done.
+ * 3. Technical depth + real-world application — include constraints, architecture choices,
+ *    scale, production context, or testing strategy that prove competence.
+ */
+export const RECRUITER_QUALITY_RULES = `## Recruiter quality bar (3 rules — always enforce)
+
+### 1 · Tailor to the role
+- Surface the candidate's evidence that is most relevant to the target role or JD.
+- Reorder bullets within an entry so the closest role-match floats first.
+- Reflect the role's language only where the resume already supports it — never invent a match.
+- If no job target is known, optimize for the most competitive version of the candidate's apparent track.
+
+### 2 · Outcomes and impact > task descriptions
+- Every bullet must answer: "So what changed / improved / shipped / was prevented?"
+- Task-only bullets are weak: "Built X" → "Built X, cutting [metric] by [Y] / used by [N] / shipped on [date]".
+- If real metrics are missing, use honest qualitative impact: "reduced review cycles", "prevented prod incidents", "enabled the team to ship without a manual step".
+- Do NOT fabricate numbers. If nothing is known, leave a bracket: "[X% reduction — add real number]".
+- Prefer compact, evidence-grounded outcome phrases over inflated percentage theater.
+
+### 3 · Technical depth + real-world application
+- Include specifics that prove hands-on competence: scale, constraints, architecture decisions, tool rationale, testing approach, on-call work, performance work, migrations, or production context.
+- Avoid generic tool dumps ("Used React and TypeScript"). Show *what* you did with them.
+- BAD: "Worked with Python and AWS." GOOD: "Wrote Lambda functions in Python (AWS) to process 40k nightly events; added DLQ + CloudWatch alerts."
+- A bullet with no technical signal beyond the tool name is a weak bullet — add one concrete fact.`;
+
 /** Voice + craft rules that make Typesetter feel sharper than a generic chat model. */
 export const RESUME_VOICE_RULES = `## Voice (non-negotiable)
 - Write like a sharp human who edited by hand for a competitive new-grad / early-career loop.
@@ -21,6 +49,8 @@ export const RESUME_VOICE_RULES = `## Voice (non-negotiable)
 - Education GPA stays factual: "GPA: 3.8/4.00" — never "Maintain a GPA…".
 - Sound human under a 6-second recruiter skim. No LinkedIn-influencer tone.
 
+${RECRUITER_QUALITY_RULES}
+
 ${AI_SLOP_PROMPT_BANLIST}
 
 ## Prefer (human examples)
@@ -28,7 +58,10 @@ BAD: "Leveraged cutting-edge React to deliver robust, scalable solutions, result
 GOOD: "Shipped React dashboard filters used daily by 12 ops teammates."
 BAD: "Spearheaded cross-functional collaboration to drive impactful outcomes."
 GOOD: "Paired with design + PM to cut onboarding ticket volume ~18%."
+BAD: "Worked with Python and AWS to process data."
+GOOD: "Wrote Lambda functions in Python (AWS) to process 40k nightly events; added DLQ + CloudWatch alerts."
 Prefer: "Cut API p99 ~31%" over "resulting in a 31% latency reduction".
+Prefer: "Prevented prod incidents by adding retry logic" over "improved system reliability".
 
 ## Truth first
 - Keep real employers, titles, dates, tools, schools, and numbers.
@@ -68,19 +101,27 @@ function intentPlaybook(intent: EditIntent, prompt?: string): string {
 - Elevate overlapping skills into Skills; do not invent new skills from the JD alone.
 - Tighten weaker bullets rather than padding with generic JD keywords.
 - Never keyword-stuff the JD into every bullet — recruiters clock that as AI.
-- Keep one-page density. Reply must name 2–4 concrete changes you made.`;
+- Keep one-page density. Reply must name 2–4 concrete changes you made.
+- Apply recruiter rule #1 (tailor to role) and #3 (technical depth) when upgrading bullets:
+  surface the candidate's most role-relevant technical evidence, and make it concrete.`;
     case "rewrite_bullets":
       return `## Mode: BULLET REWRITE
 - Rewrite only the bullets that need it; leave strong bullets alone.
 - Keep metrics and tools; upgrade verbs and specificity.
 - Strip AI sludge if present; do not replace it with prettier sludge.
-- Do not add new employers or roles.`;
+- Do not add new employers or roles.
+- Apply recruiter rule #2 (outcomes > tasks): every rewritten bullet must show what changed /
+  shipped / improved / was prevented — not just what was done.
+- Apply recruiter rule #3 (technical depth): add one concrete technical fact (tool, scale,
+  constraint, architecture choice) if the original bullet is purely task-shaped.`;
     case "add_content":
       return `## Mode: ADD CONTENT
 - Insert only what the user explicitly provided or clearly implied from existing text.
 - Match neighboring bullet voice and LaTeX item command shape (\\item vs macros).
 - If a fact is missing, ask in reply — do not invent it in LaTeX.
-- New bullets must pass the anti-slop human test.`;
+- New bullets must pass the anti-slop human test.
+- New bullets must satisfy recruiter rules #2 and #3: show outcome/impact and at least one
+  concrete technical signal (scale, tool-in-use, constraint, production context).`;
     case "rename":
       return `## Mode: RENAME / FIELD UPDATE
 - Change ONLY the requested names/URLs/fields.
@@ -100,7 +141,9 @@ function intentPlaybook(intent: EditIntent, prompt?: string): string {
       return `## Mode: GENERAL VIBE EDIT
 - Interpret the user request precisely; prefer the smallest correct diff.
 - If the request is ambiguous, make the safest high-confidence edit and note assumptions in reply.
-- Never "upgrade" the whole resume into generic AI voice.`;
+- Never "upgrade" the whole resume into generic AI voice.
+- While editing, opportunistically apply recruiter rule #2 (outcomes > tasks) on the specific
+  bullets touched — do not touch unrelated bullets.`;
   }
 }
 
@@ -172,7 +215,7 @@ export function buildVibeUserPayload(input: {
       latex: input.context.latex,
     },
     quality_bar:
-      "Beats generic Claude/ChatGPT resume voice: no sludge, no fake precision, no JD keyword stuffing.",
+      "Beats generic Claude/ChatGPT resume voice: no sludge, no fake precision, no JD keyword stuffing. Every bullet must satisfy recruiter rules: (1) tailored to role, (2) outcomes over tasks, (3) technical depth with real-world specifics.",
   };
 
   if (input.healHint) {
