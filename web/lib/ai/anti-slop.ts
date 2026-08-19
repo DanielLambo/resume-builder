@@ -78,6 +78,15 @@ export const AI_SLOP_PHRASES = [
   "eager to contribute",
   "seek a challenging",
   "opportunity to grow",
+  // Task-only shells with no outcome (recruiter rule #2)
+  "worked on",
+  "was involved in",
+  "contributed to",
+  "helped with",
+  "participated in",
+  "was part of the team",
+  "assisted in the development",
+  "supported the team",
 ] as const;
 
 /**
@@ -99,6 +108,8 @@ export const AI_SLOP_PATTERNS: RegExp[] = [
   /\bactionable\s+insights\b/i,
   /\bdata-driven\s+decisions?\b/i,
   /\bcross-functional\s+(?:team|stakeholders?)\b/i,
+  // Task-only openers with no outcome follow-through (recruiter rule #2)
+  /^\s*\\item\s+(?:Worked|Was involved|Contributed|Helped|Participated|Assisted|Supported)\s+(?:on|in|with)\b/im,
 ];
 
 export type AiSlopHit = {
@@ -157,12 +168,18 @@ embark, elevate, transformative, holistic, paradigm, actionable insights,
 data-driven decisions, end-to-end solutions, streamlined processes, showcasing,
 harnessing, fostering collaboration/culture/innovation, eager to contribute.
 
+Banned task-only openers (recruiter rule #2 — show outcomes, not just tasks):
+- "Worked on / Was involved in / Contributed to / Helped with / Participated in"
+- "Assisted in the development of / Supported the team in / Was part of the team"
+These openers describe a task. Every bullet must follow with what changed/shipped/improved.
+
 Banned cadences:
 - ", resulting in / leading to / which resulted in N%"
 - "improved/increased/reduced X by NN%" when the metric was not already on the resume
 - Starting bullets with Furthermore/Moreover/Additionally/Subsequently
 - Keyword-stuffing JD jargon the candidate never used
 - Making every bullet the same length/rhythm ending in a percentage
+- Generic tool drops with no context ("Used React and TypeScript") — add what was done with it
 
 Human test: if a recruiter would mutter "this is ChatGPT", rewrite it.
 Keep imperfect natural specificity. Prefer concrete nouns over abstract impact theater.`;

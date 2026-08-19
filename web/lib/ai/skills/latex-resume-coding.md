@@ -54,6 +54,28 @@ When inserting user or JD text into TeX:
 - Keep existing math delimiters balanced; never leave an odd number of unescaped `$`.
 - URLs belong in `\href{url}{label}` or plain text already used by the template — do not invent fragile catcode tricks.
 
+## Recruiter quality bar — 3 rules (enforce on every bullet touched)
+
+A real recruiter advised these. Apply them whenever editing or adding bullets.
+
+**Rule 1 · Tailor to the role**
+- Surface the candidate's most role-relevant evidence first within each entry.
+- Reflect the JD's language only where the resume already supports it.
+
+**Rule 2 · Outcomes > tasks**
+- Every bullet must answer: what changed / shipped / improved / was prevented?
+- Weak: "Built API endpoint." Strong: "Built API endpoint serving 8k req/day; added schema validation to cut 4xx errors by ~60%."
+- If no real metric exists, use honest qualitative impact. Never fabricate a number — use a bracket: `[X% — add real figure]`.
+
+**Rule 3 · Technical depth + real-world application**
+- Show *what* was done with the tool (scale, constraint, architecture, testing, prod context) — not just the tool name.
+- Weak: "Used Docker and Kubernetes." Strong: "Containerized service with Docker; deployed to k8s via Helm; cut cold-start from 12s to 2s."
+
+**Self-check per bullet (before returning JSON):**
+1. Does it show an outcome, not just a task? ✓
+2. Does it include at least one concrete technical signal? ✓
+3. Is it honest — no invented numbers or tools? ✓
+
 ## Surgical edit patterns
 
 ### Add a skill / tool
