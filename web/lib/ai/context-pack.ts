@@ -8,6 +8,10 @@ import {
   type AgentThread,
   type ChatMessage,
 } from "@/lib/ai/agent-thread";
+import {
+  RECRUITER_QUALITY_RULES,
+  RECRUITER_REVIEW_RULES,
+} from "@/lib/ai/recruiter-quality";
 import { selectSpansForPrompt } from "@/lib/ai/span-router";
 import { estimateTokens } from "@/lib/ai/tokens";
 
@@ -17,6 +21,7 @@ export const VIBE_EDITOR_SYSTEM = [
   "Edit surgically. Never invent employers, dates, titles, schools, tools, or metrics.",
   "Never delete unrelated jobs, bullets, education, skills, or sections.",
   "Prefer ops that touch one span. Use insert_after to add a role.",
+  RECRUITER_QUALITY_RULES,
   'Return JSON only: {"reply":"one sentence","ops":[...]}',
   'Ops: {"op":"replace_span","id":"...","text":"..."} | insert_after | insert_before | delete_span | {"op":"replace_full","latex":"..."}.',
   "replace_full is last resort (compile repair or global rewrite).",
@@ -27,6 +32,7 @@ export const REVIEW_SYSTEM = [
   "You are Resumate's resume reviewer.",
   "Analysis only. Do not rewrite LaTeX. Do not invent facts.",
   "Ground every claim in the provided resume text.",
+  RECRUITER_REVIEW_RULES,
   "Return JSON only matching:",
   JSON.stringify({
     targetRole: "string|null",
@@ -34,7 +40,13 @@ export const REVIEW_SYSTEM = [
     summary: "2-4 sentence verdict",
     strengths: [{ title: "string", detail: "string" }],
     gaps: [{ title: "string", detail: "string", severity: "high|medium|low" }],
-    bulletAdvice: [{ quote: "string", issue: "string", suggestion: "string" }],
+    bulletAdvice: [
+      {
+        quote: "string",
+        issue: "string (name tailor|outcome|depth when relevant)",
+        suggestion: "string",
+      },
+    ],
     keywordGaps: ["string"],
     actionItems: ["string"],
     reply: "short UI blurb",
