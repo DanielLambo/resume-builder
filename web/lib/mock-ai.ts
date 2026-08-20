@@ -192,17 +192,18 @@ export function mockResumeReview(input: {
       bulletAdvice: [
         {
           quote: "Worked on",
-          issue: "Passive ownership — recruiters cannot tell what you shipped.",
+          issue:
+            "outcome — task-only opener; recruiters cannot tell what changed or shipped.",
           suggestion:
-            "Lead with a verb + object + outcome (e.g. 'Shipped X endpoint; cut p95 latency from A to B').",
+            "Lead with verb + object + outcome (e.g. 'Shipped X endpoint; cut p95 latency from A to B'). Add one technical signal (scale, constraint, or tool-in-use).",
         },
       ],
       keywordGaps,
       actionItems: [
-        `Rewrite your weakest Experience/Projects bullet for ${role} with one honest metric or scope marker.`,
+        `Rewrite your weakest Experience/Projects bullet for ${role} with one honest outcome (recruiter rule: outcomes > tasks).`,
         keywordGaps[0]
-          ? `If true, surface ${keywordGaps[0]} in Skills or a project bullet — do not invent it.`
-          : "Move your strongest role-relevant project above weaker coursework.",
+          ? `If true, surface ${keywordGaps[0]} with real-world context — not just the tool name (recruiter rule: technical depth).`
+          : "Move your strongest role-relevant project above weaker coursework (recruiter rule: tailor).",
         "Trim filler adjectives so each bullet is one crisp claim.",
       ],
       reply: `Mock review for ${role}: fit ${fitScore}/10 — tighten impact and close honest keyword gaps.`,
