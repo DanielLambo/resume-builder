@@ -160,6 +160,25 @@ select {
   .sheet-panel {
     animation: sheet-panel-in 320ms var(--motion-ease) both;
     transform-origin: bottom center;
+    will-change: transform;
+  }
+
+  .sheet-panel[data-dragging="true"] {
+    animation: none;
+  }
+
+  .sheet-drag-handle {
+    cursor: grab;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+  }
+
+  .sheet-drag-handle:active {
+    cursor: grabbing;
+  }
+
+  .sheet-drag-handle:disabled {
+    cursor: default;
   }
 
   @media (min-width: 640px) {
