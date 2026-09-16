@@ -8,7 +8,7 @@ export function createClient() {
 
   if (!url || !anonKey) {
     throw new Error(
-      "Resumate isn’t configured on this URL. Open the production site and try again.",
+      "Resumate isn’t configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (see web/.env.example).",
     );
   }
 

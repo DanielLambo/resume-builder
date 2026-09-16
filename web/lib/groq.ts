@@ -4,7 +4,8 @@ import { parseAgentThread } from "@/lib/ai/agent-thread";
 import { buildEditContextPack, buildReviewContextPack } from "@/lib/ai/context-pack";
 import { indexLatex } from "@/lib/ai/resume-index";
 import { applyResumeOps, ResumeOpSchema, type ResumeOp } from "@/lib/ai/resume-ops";
-import { DEFAULT_GROQ_MODEL, GroqRateLimitError, throwIfGroqFailed } from "@/lib/groq-model";
+import { resolveAiProviderConfig } from "@/lib/ai-provider";
+import { GroqRateLimitError, throwIfGroqFailed } from "@/lib/groq-model";
 import { isMockAiEnabled, mockResumeReview, mockVibeEdit } from "@/lib/mock-ai";
 import {
   extractTargetRole,
@@ -56,15 +57,7 @@ const GroqChatCompletionSchema = z.object({
 });
 
 function groqConfig(): { apiKey: string; baseUrl: string; model: string } {
-  const apiKey = process.env.GROQ_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("Missing GROQ_API_KEY");
-  }
-  return {
-    apiKey,
-    baseUrl: (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai").replace(/\/$/, ""),
-    model: DEFAULT_GROQ_MODEL,
-  };
+  return resolveAiProviderConfig();
 }
 
 function sleep(ms: number): Promise<void> {

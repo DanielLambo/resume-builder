@@ -97,5 +97,5 @@ export async function throwIfGroqFailed(response: Response): Promise<void> {
     throw new GroqRateLimitError(parseRetryAfterMs(response), kind, detail);
   }
 
-  throw new Error(detail || `Groq API error (HTTP ${response.status})`);
+  throw new Error(detail || `AI API error (HTTP ${response.status})`);
 }

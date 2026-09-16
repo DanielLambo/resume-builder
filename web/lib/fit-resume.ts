@@ -5,6 +5,7 @@ import {
   type LaTeXLayoutConfig,
 } from "@resumate/one-page-lock";
 
+import { isAiCondenseDisabled, optionalAiApiKey } from "@/lib/ai-provider";
 import { compileLatexRemote } from "@/lib/compile-latex";
 
 export type FitResumeResult = FitToSinglePageResult & {
@@ -13,13 +14,14 @@ export type FitResumeResult = FitToSinglePageResult & {
   elapsedMs: number;
 };
 
-/** Full 1-page lock budget (binary search + optional Groq condense). */
+/** Full 1-page lock budget (binary search + optional AI condense). */
 export const FIT_TIMEOUT_MS = Number(process.env.ONE_PAGE_LOCK_TIMEOUT_MS ?? 28_000);
 
 export type FitResumeOptions = {
   /**
-   * When true, overflow may send full LaTeX to Groq for bullet condense.
-   * Keep false for preview/compile; enable only for explicit AI flows.
+   * When true, overflow may send full LaTeX to the configured AI provider
+   * for bullet condense. Keep false for preview/compile; enable only for
+   * explicit AI flows.
    */
   allowGroqCondense?: boolean;
   groqApiKey?: string;
@@ -34,17 +36,16 @@ export async function fitResumeToSinglePage(
   options: FitResumeOptions = {},
 ): Promise<FitResumeResult> {
   const started = Date.now();
-  const allowGroq =
-    options.allowGroqCondense === true &&
-    process.env.DISABLE_GROQ_CONDENSE !== "1";
+  const allowAi =
+    options.allowGroqCondense === true && !isAiCondenseDisabled();
 
   const result = await fitToSinglePage(rawTex, {
     compile: compileLatexRemote,
     timeoutMs: FIT_TIMEOUT_MS,
     maxSpacingIterations: 4,
-    // Empty key skips Groq condense inside one-page-lock (no PII egress).
-    groqApiKey: allowGroq
-      ? (options.groqApiKey ?? process.env.GROQ_API_KEY)
+    // Empty key skips AI condense inside one-page-lock (no PII egress).
+    groqApiKey: allowAi
+      ? (options.groqApiKey ?? optionalAiApiKey())
       : "",
   });
 

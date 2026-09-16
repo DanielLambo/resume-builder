@@ -17,12 +17,13 @@ export function PrivacyNotice({ className = "" }: { className?: string }) {
       <ul className="mt-2 list-disc space-y-1.5 pl-4 text-[0.8rem] leading-relaxed">
         <li>Drafts stay in your private account. Only you can open them.</li>
         <li>
-          AI edits and PDF import send resume text to Groq to rewrite or convert.
-          That uses your daily token quota.
+          AI edits and PDF import send resume text to your configured AI
+          provider (OpenAI-compatible) to rewrite or convert. That uses your
+          daily token quota.
         </li>
         <li>
-          PDFs are compiled on our TeX host when configured. We don’t sell your
-          resume content.
+          PDFs are compiled on the TeX host you configure. Operators of this
+          deployment do not sell your resume content.
         </li>
       </ul>
     </details>
