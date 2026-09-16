@@ -10,7 +10,8 @@ import {
   type OrphanBullet,
 } from "@/lib/analyzer/orphanDetector";
 import type { Json } from "@/lib/database.types";
-import { DEFAULT_GROQ_MODEL, isGroqRateLimitError, messageForGroqLimit, throwIfGroqFailed } from "@/lib/groq-model";
+import { resolveAiProviderConfig } from "@/lib/ai-provider";
+import { isGroqRateLimitError, messageForGroqLimit, throwIfGroqFailed } from "@/lib/groq-model";
 import { isMockAiEnabled } from "@/lib/mock-ai";
 import {
   AiRateLimitError,
@@ -74,14 +75,7 @@ async function shortenWithGroq(bullet: string): Promise<{
   text: string;
   tokens: number;
 }> {
-  const apiKey = process.env.GROQ_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("Missing GROQ_API_KEY");
-  }
-  const baseUrl = (
-    process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai"
-  ).replace(/\/$/, "");
-  const model = DEFAULT_GROQ_MODEL;
+  const { apiKey, baseUrl, model } = resolveAiProviderConfig();
 
   const response = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: "POST",

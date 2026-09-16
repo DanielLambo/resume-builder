@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import type { Json } from "@/lib/database.types";
+import { resolveAiProviderConfig } from "@/lib/ai-provider";
 import {
-  DEFAULT_GROQ_MODEL,
   isGroqRateLimitError,
   messageForGroqLimit,
   throwIfGroqFailed,
@@ -117,12 +117,7 @@ async function editSelectionWithGroq(input: {
   prompt: string;
   profileNote: string;
 }): Promise<{ text: string; reply: string; tokens: number }> {
-  const apiKey = process.env.GROQ_API_KEY?.trim();
-  if (!apiKey) throw new Error("Missing GROQ_API_KEY");
-  const baseUrl = (
-    process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai"
-  ).replace(/\/$/, "");
-  const model = DEFAULT_GROQ_MODEL;
+  const { apiKey, baseUrl, model } = resolveAiProviderConfig();
 
   const system = [
     "You edit one selected resume span only.",

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { DEFAULT_GROQ_MODEL, throwIfGroqFailed } from "@/lib/groq-model";
+import { resolveAiProviderConfig } from "@/lib/ai-provider";
+import { throwIfGroqFailed } from "@/lib/groq-model";
 import { IMPORT_SOURCE_TEXT_MAX } from "@/lib/import/constants";
 import { ensureHousePreamble, latexValidationError } from "@/lib/import/validate";
 import { isMockAiEnabled } from "@/lib/mock-ai";
@@ -196,15 +197,7 @@ export async function convertImportedText(input: {
     return mockConvertResume(input.sourceText, input.fallbackTitle);
   }
 
-  const apiKey = process.env.GROQ_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("Missing GROQ_API_KEY");
-  }
-  const baseUrl = (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai").replace(
-    /\/$/,
-    "",
-  );
-  const model = DEFAULT_GROQ_MODEL;
+  const { apiKey, baseUrl, model } = resolveAiProviderConfig();
 
   let healHint: string | undefined;
   let transportAttempt = 0;

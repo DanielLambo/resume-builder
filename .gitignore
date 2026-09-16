@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 storage/
 .env
+.env.*
+!.env.example
 *.db
 *.pdf
 *.log
@@ -18,3 +20,7 @@ web/playwright-report/
 web/test-results/
 .vercel
 .env.local
+*.pem
+*.p12
+credentials.json
+service-account*.json

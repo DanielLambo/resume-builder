@@ -30,7 +30,7 @@ export function TokenMeter({
         title={
           warning
             ? `Quota meter soft-failed: ${warning}`
-            : "Daily Groq token usage (UTC day)"
+            : "Daily AI token usage (UTC day)"
         }
         data-quota-warning={warning ? "true" : "false"}
       >
@@ -86,7 +86,7 @@ export function TokenMeter({
       title={
         warning
           ? `Quota meter soft-failed: ${warning}`
-          : "Daily Groq token usage (UTC day)"
+          : "Daily AI token usage (UTC day)"
       }
       data-quota-warning={warning ? "true" : "false"}
     >

@@ -121,6 +121,7 @@ export async function fitToSinglePage(rawTex, options = {}) {
     const apiKey = options.groqApiKey ??
         process.env.GROQ_API_KEY ??
         process.env.OPENAI_API_KEY ??
+        process.env.AI_API_KEY ??
         "";
     const spacingConfig = (tightAttempt.ok ? tightAttempt.config : null) ??
         state.lastValid?.config ??
@@ -130,7 +131,10 @@ export async function fitToSinglePage(rawTex, options = {}) {
             assertTimeLeft(startedAt, timeoutMs);
             const condensed = await condenseBulletsWithGroq(workingTex, {
                 apiKey,
-                baseUrl: options.groqBaseUrl ?? process.env.GROQ_BASE_URL,
+                baseUrl: options.groqBaseUrl ??
+                    process.env.GROQ_BASE_URL ??
+                    process.env.OPENAI_BASE_URL ??
+                    process.env.AI_BASE_URL,
                 model: options.model ?? "openai/gpt-oss-20b",
                 timeoutMs: Math.min(4_000, remainingMs(startedAt, timeoutMs) || 1),
             });
@@ -145,11 +149,11 @@ export async function fitToSinglePage(rawTex, options = {}) {
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            logger.warn(`[one-page-lock] Groq condense skipped: ${message}`);
+            logger.warn(`[one-page-lock] AI condense skipped: ${message}`);
         }
     }
     else {
-        logger.info("[one-page-lock] GROQ_API_KEY missing; skipped bullet condense");
+        logger.info("[one-page-lock] AI API key missing; skipped bullet condense");
     }
     if (state.lastValid) {
         logger.warn(`[one-page-lock] could not lock to 1 page (last pageCount=${state.lastValid.pageCount}); returning last valid PDF`);

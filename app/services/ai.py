@@ -268,7 +268,8 @@ def _enrich_material_prompt(prompt: str) -> str:
 def _api_key() -> str:
     return (
         os.environ.get("GROQ_API_KEY", "").strip()
-        or os.environ.get("OPENAI_API_KEY", "").strip()  # legacy alias
+        or os.environ.get("OPENAI_API_KEY", "").strip()
+        or os.environ.get("AI_API_KEY", "").strip()
     )
 
 
@@ -616,7 +617,7 @@ def _voice_repair_message(banned: list[str]) -> str:
 
 async def convert_resume(plain_text: str, template_latex: str) -> dict:
     if not _api_key():
-        return {"success": False, "error": "AI not configured. Set GROQ_API_KEY environment variable."}
+        return {"success": False, "error": "AI not configured. Set GROQ_API_KEY, OPENAI_API_KEY, or AI_API_KEY."}
 
     truncated_tpl = template_latex if len(template_latex) < 8000 else template_latex[:8000] + "\n%...[truncated]"
     truncated_txt = plain_text if len(plain_text) < 6000 else plain_text[:6000] + "\n...[truncated]"
@@ -746,7 +747,7 @@ async def ai_assist(latex_content: str, prompt: str, history: list | None = None
     if not _api_key():
         return {
             "success": False,
-            "error": "AI not configured. Set GROQ_API_KEY environment variable.",
+            "error": "AI not configured. Set GROQ_API_KEY, OPENAI_API_KEY, or AI_API_KEY.",
         }
 
     raw_prompt = (prompt or "").strip()

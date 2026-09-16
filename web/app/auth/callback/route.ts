@@ -4,7 +4,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/database.types";
 import { safeNextPath } from "@/lib/auth-next";
-import { PRODUCTION_SITE_ORIGIN } from "@/lib/site-url";
+import { getCanonicalSiteOrigin } from "@/lib/site-url";
 
 function appOrigin(request: NextRequest): string {
   const forwardedHost = request.headers.get("x-forwarded-host");
@@ -42,13 +42,16 @@ export async function GET(request: NextRequest) {
   const origin = appOrigin(request);
 
   // Misconfigured Supabase Site URL often sends confirm links to localhost.
-  // Bounce the query string to production where PKCE cookies live.
+  // Bounce to NEXT_PUBLIC_SITE_URL when set so PKCE cookies match production.
   if (isLocalhostOrigin(origin)) {
-    const target = new URL("/auth/callback", PRODUCTION_SITE_ORIGIN);
-    searchParams.forEach((value, key) => {
-      target.searchParams.set(key, value);
-    });
-    return NextResponse.redirect(target);
+    const canonical = getCanonicalSiteOrigin();
+    if (canonical) {
+      const target = new URL("/auth/callback", canonical);
+      searchParams.forEach((value, key) => {
+        target.searchParams.set(key, value);
+      });
+      return NextResponse.redirect(target);
+    }
   }
 
   const code = searchParams.get("code");

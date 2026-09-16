@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Deploy web/ to Vercel production with env from web/.env.local
+# Optional maintainer helper: push web/.env.local keys to a linked Vercel project.
+# Forks: link your own project first (`npx vercel link`) — do not reuse another deployer's project id.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-WEB="$ROOT/web"
+WEB="$ROOT"
 ENV_FILE="$WEB/.env.local"
+VERCEL_PROJECT="${VERCEL_PROJECT_NAME:-}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing $ENV_FILE" >&2
@@ -14,20 +16,32 @@ cd "$WEB"
 
 # Ensure project is linked (creates .vercel/)
 if [[ ! -f .vercel/project.json ]]; then
-  npx vercel@latest link --yes --project resumate-web || npx vercel@latest link --yes
+  if [[ -n "$VERCEL_PROJECT" ]]; then
+    npx vercel@latest link --yes --project "$VERCEL_PROJECT"
+  else
+    npx vercel@latest link --yes
+  fi
 fi
 
 KEYS=(
   NEXT_PUBLIC_SUPABASE_URL
   NEXT_PUBLIC_SUPABASE_ANON_KEY
+  NEXT_PUBLIC_SITE_URL
   UPSTASH_REDIS_REST_URL
   UPSTASH_REDIS_REST_TOKEN
   GROQ_API_KEY
+  OPENAI_API_KEY
+  AI_API_KEY
+  GROQ_BASE_URL
+  OPENAI_BASE_URL
+  AI_BASE_URL
+  RESUMATE_MODEL
   SUPABASE_SERVICE_ROLE_KEY
   SUPABASE_SECRET_KEY
   SUPABASE_URL
   SUPABASE_PUBLISHABLE_KEY
   SUPABASE_JWKS_URL
+  LATEX_COMPILE_URL
   NEXT_PUBLIC_USE_MOCK_AI
 )
 

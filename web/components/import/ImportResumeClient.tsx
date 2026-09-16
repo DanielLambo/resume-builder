@@ -208,7 +208,7 @@ export function ImportResumeClient({ signedIn }: { signedIn: boolean }) {
         </p>
       ) : (
         <p className="mt-5 text-sm text-studio-muted">
-          PDF import sends extracted text to Groq and counts against today’s token
+          PDF import sends extracted text to your AI provider and counts against today’s token
           quota. Self-contained .tex usually imports without AI.
         </p>
       )}

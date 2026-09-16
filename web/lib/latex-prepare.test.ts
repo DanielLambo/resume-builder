@@ -14,7 +14,7 @@ const MINI_JAKE = String.raw`\documentclass[letterpaper,11pt]{article}
 \newcommand{\resumeItemListEnd}{\end{itemize}}
 \begin{document}
 \begin{center}
-\textbf{\Huge Daniel Lambo} \\
+\textbf{\Huge Alex Rivera} \\
 \href{mailto:a@b.com}{a@b.com}
 \end{center}
 \section{Experience}
@@ -30,7 +30,7 @@ describe("prepareLatexForCompile", () => {
   it("rewrites Jake-style source to house latex", () => {
     const { latex, convertedFromJake } = prepareLatexForCompile(MINI_JAKE);
     assert.equal(convertedFromJake, true);
-    assert.match(latex, /\\headerblock\{Daniel Lambo\}/);
+    assert.match(latex, /\\headerblock\{Alex Rivera\}/);
     assert.match(latex, /\\entry\{Google\}/);
     assert.doesNotMatch(latex, /\\resumeItem/);
     assert.doesNotMatch(latex, /glyphtounicode|fullpage/);
