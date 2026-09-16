@@ -1,10 +1,14 @@
 """Compile pipeline tests (requires pdflatex on PATH / MacTeX)."""
 import pytest
 
+import shutil
 from app.services.latex import compile_latex
 from tests.conftest import SAMPLE_LATEX
 
+has_pdflatex = shutil.which("pdflatex") is not None or False
 
+
+@pytest.mark.skipif(not has_pdflatex, reason="pdflatex not found on system")
 @pytest.mark.asyncio
 async def test_compile_success(_isolate_storage):
     result = await compile_latex("job99", SAMPLE_LATEX)
@@ -16,6 +20,7 @@ async def test_compile_success(_isolate_storage):
     assert leftover == []
 
 
+@pytest.mark.skipif(not has_pdflatex, reason="pdflatex not found on system")
 @pytest.mark.asyncio
 async def test_compile_failure_reports_errors(_isolate_storage):
     bad = SAMPLE_LATEX.replace("\\end{document}", "\\boguscmd\n\\end{document}")
