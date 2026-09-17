@@ -7,6 +7,8 @@ import tempfile
 import re
 from pathlib import Path
 
+from ..paths import MACTEX_BIN_DIR, find_pdflatex
+
 
 def _flatten_multiline_commands(lines: list[str]) -> list[str]:
     """Join commands whose brace-args are spread across multiple lines.
@@ -989,11 +991,7 @@ async def _compile_latex_unlocked(
             "errors": [],
         }
 
-    pdflatex = shutil.which("pdflatex")
-    if not pdflatex:
-        mac_tex = "/Library/TeX/texbin/pdflatex"
-        if Path(mac_tex).exists():
-            pdflatex = mac_tex
+    pdflatex = find_pdflatex()
     if not pdflatex:
         return {
             "success": False,
@@ -1035,7 +1033,7 @@ async def _run_pdflatex(job_id: str | int, latex_content: str, pdflatex: str) ->
 
         log_text = ""
         env = os.environ.copy()
-        env["PATH"] = "/Library/TeX/texbin:" + env.get("PATH", "")
+        env["PATH"] = f"{MACTEX_BIN_DIR}:" + env.get("PATH", "")
         for _ in range(2):
             proc = await asyncio.create_subprocess_exec(
                 pdflatex,

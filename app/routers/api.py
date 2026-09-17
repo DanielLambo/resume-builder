@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import re
 import secrets
 import tempfile
@@ -101,7 +102,7 @@ async def api_ai(
         return JSONResponse({"success": False, "error": "Resume source is too large."}, status_code=413)
 
     try:
-        hist = __import__("json").loads(history or "[]")
+        hist = json.loads(history or "[]")
         if not isinstance(hist, list):
             hist = []
     except Exception:

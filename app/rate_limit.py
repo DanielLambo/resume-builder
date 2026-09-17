@@ -5,11 +5,15 @@ import time
 from collections import defaultdict, deque
 
 
+_SWEEP_EVERY = 1000  # calls between stale-key sweeps, across all limiter instances
+
+
 class RateLimiter:
     def __init__(self, limit: int, window_s: float):
         self.limit = limit
         self.window = window_s
         self._hits: dict[str, deque[float]] = defaultdict(deque)
+        self._calls = 0
 
     def allow(self, key: str) -> bool:
         now = time.monotonic()
@@ -19,7 +23,23 @@ class RateLimiter:
         if len(q) >= self.limit:
             return False
         q.append(now)
+
+        self._calls += 1
+        if self._calls >= _SWEEP_EVERY:
+            self._calls = 0
+            self._sweep(now)
         return True
+
+    def _sweep(self, now: float) -> None:
+        """Drop keys whose queue has fully expired, so IPs that stop
+        hitting the endpoint don't linger in memory for the server's
+        lifetime."""
+        stale = [
+            k for k, q in self._hits.items()
+            if not q or now - q[-1] > self.window
+        ]
+        for k in stale:
+            del self._hits[k]
 
 
 # Generous enough for demos; stops quota burn / pdflatex DoS.

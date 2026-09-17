@@ -5,13 +5,6 @@ _SEED_DIR = Path(__file__).parent / "seed"
 
 JAKE_NAME = "Jake's Resume"
 
-# Personal / legacy template names purged if found in old DBs
-REMOVED_TEMPLATE_NAMES = (
-    "Legacy Backend",
-    "Legacy AI/ML",
-    "Legacy Fullstack",
-)
-
 
 def _load_tex(name: str) -> str:
     return (_SEED_DIR / name).read_text(encoding="utf-8")

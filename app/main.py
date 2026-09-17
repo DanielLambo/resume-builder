@@ -8,14 +8,13 @@ from __future__ import annotations
 import os
 import shutil
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .catalog import default_template_id, list_templates
-from .paths import BASE_DIR
+from .paths import BASE_DIR, find_pdflatex
 from .routers import api
 from .templating import templates
 
@@ -46,9 +45,7 @@ app.include_router(api.router)
 
 @app.get("/health")
 async def health():
-    pdflatex = shutil.which("pdflatex")
-    if not pdflatex and Path("/Library/TeX/texbin/pdflatex").exists():
-        pdflatex = "/Library/TeX/texbin/pdflatex"
+    pdflatex = find_pdflatex()
     return JSONResponse(
         {
             "status": "ok",
@@ -63,7 +60,7 @@ async def health():
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, error: str = None):
+async def dashboard(request: Request, error: str | None = None):
     return templates.TemplateResponse(
         "dashboard.html",
         {
