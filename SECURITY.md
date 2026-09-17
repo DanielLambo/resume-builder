@@ -22,15 +22,19 @@ Copy `.env.example` → `.env` / `web/.env.local`. Those files are gitignored.
 ## Historical note (rotate before going public)
 
 An early commit briefly hardcoded a Groq API key as a default in
-`app/services/ai.py`. It was removed from the working tree, but **git history
-still contains that value**. Before making this repository public:
+`app/services/ai.py`.
 
-1. **Revoke/rotate** that Groq key in the Groq console immediately.
-2. Optionally **rewrite history** (e.g. `git filter-repo`) to purge the string
-   from all commits, then force-push only if you understand the implications
-   for existing clones.
+1. **Revoke/rotate** that Groq key in the Groq console — do this regardless
+   of the history rewrite below; treat any key that ever appeared in git as
+   compromised.
+2. The string has been **purged from git history** on all branches/tags via
+   `git filter-repo`, with a force-push to `origin`. Existing local clones
+   must re-clone or hard-reset onto the rewritten history.
 
-Treat any key that ever appeared in git as compromised.
+Note: GitHub's own PR-review refs (`refs/pull/N/head`) cannot be rewritten by
+a normal push and may still reference old commit objects internally, so key
+rotation is the real mitigation — the history rewrite only prevents new
+clones/checkouts from seeing the string.
 
 ## Auth cookies
 
