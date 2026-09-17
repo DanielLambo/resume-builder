@@ -1,7 +1,8 @@
 """Compile pipeline tests (requires pdflatex on PATH / MacTeX)."""
+import shutil
+
 import pytest
 
-import shutil
 from app.services.latex import compile_latex
 from tests.conftest import SAMPLE_LATEX
 

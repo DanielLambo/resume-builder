@@ -2,9 +2,8 @@ import asyncio
 import gzip
 import json
 import os
-import shutil
-import tempfile
 import re
+import tempfile
 from pathlib import Path
 
 from ..paths import MACTEX_BIN_DIR, find_pdflatex
@@ -492,7 +491,7 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
     has_sub_list = "\\resumeSubHeadingListStart" in orig
 
     sub_multiline = any(
-        re.fullmatch(r"\\resumeSubheading\s*", l.strip()) for l in bl
+        re.fullmatch(r"\\resumeSubheading\s*", line.strip()) for line in bl
     )
 
     blank_before_heading = any(
@@ -532,7 +531,6 @@ def compact_to_latex_block(block: dict, compact_lines: list[str]) -> list[str]:
     if has_resume_item and not has_item_list and not item_env:
         has_item_list = True
 
-    bullet_cmd = "\\resumeItem" if has_resume_item else "\\item"
     resume_item_args = 2 if re.search(r"\\resumeItem\{[^}]*\}\{", orig) else 1
 
     item_indent = "        "

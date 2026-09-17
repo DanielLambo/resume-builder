@@ -5,7 +5,6 @@ import re
 
 from app.services.latex import latex_to_compact
 
-
 _ATS_RISKS = [
     (r"\\begin\{tikzpicture\}", "TikZ graphics may not parse in ATS"),
     (r"\\includegraphics", "Images are invisible to most ATS parsers"),

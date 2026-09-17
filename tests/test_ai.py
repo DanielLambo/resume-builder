@@ -147,7 +147,6 @@ async def test_ai_requires_api_key(monkeypatch):
 @pytest.mark.asyncio
 async def test_ai_endpoint_stateless(app_client, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
-    sections = "SECTION Summary\nEndpoint-level polish applied.\n"
     with patch(
         "app.routers.api.ai_assist",
         new=AsyncMock(

@@ -4,7 +4,6 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 
-
 _SWEEP_EVERY = 1000  # calls between stale-key sweeps, across all limiter instances
 
 

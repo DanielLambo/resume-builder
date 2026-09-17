@@ -1,15 +1,16 @@
 import asyncio
-import httpx
 import os
 import re
 import secrets
 
+import httpx
+
 from app.services.latex import (
     apply_compact_sections,
+    compile_latex,
     extract_custom_commands,
     latex_to_compact,
     split_document,
-    compile_latex,
     tighten_section_spacing,
 )
 

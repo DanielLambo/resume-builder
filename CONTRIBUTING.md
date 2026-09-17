@@ -52,6 +52,7 @@ Default base URL is Groq’s OpenAI-compatible endpoint; override freely.
 ## Checks before a PR
 
 ```bash
+ruff check .
 pytest -q
 cd web && npm run typecheck && npm run lint
 # optional: npm run test:e2e

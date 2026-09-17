@@ -1,5 +1,7 @@
 # Resumate
 
+![CI](https://github.com/DanielLambo/resume-builder/actions/workflows/ci.yml/badge.svg)
+
 Edit a resume cleanly — then tailor a version for each job without starting over.
 
 **Open source / BYOK:** bring your own Supabase, Upstash, TeX host, and any
@@ -16,6 +18,10 @@ See [LICENSE](LICENSE), [SECURITY.md](SECURITY.md), and [CONTRIBUTING.md](CONTRI
 | **Typesetter (Next.js)** | `web/` (Vercel or self-host) | Account-based: resumes in **your private Supabase row** (RLS); AI via your provider; PDF via your `LATEX_COMPILE_URL` |
 
 Do not market the Next.js app as “local-only IndexedDB” — that applies to the FastAPI path only.
+
+Resume templates are defined **independently** in each runtime — FastAPI's live in
+`app/catalog.py` + `app/seed/*.tex`, the Next.js app's in `web/lib/resume-template.ts` —
+with different ids and names. Editing one does not update the other.
 
 ## Bring-your-own AI
 
@@ -101,5 +107,7 @@ python run.py
 
 ```bash
 pytest -q
-cd web && npm run typecheck && npm run test:e2e
+cd web && npm run typecheck && npm run lint && npm run test:e2e
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full pre-PR checklist.
